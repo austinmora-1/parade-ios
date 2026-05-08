@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --marigold: 41 70% 55%;
+    --evergreen: 153 22% 24%;
+    --chalk: 36 38% 94%;
+    --butter: 47 84% 72%;
+    --sage: 102 17% 64%;
+    --ember: 13 60% 56%;
+
+    --background: 36 38% 94%;
+    --foreground: 153 23% 18%;
+    --card: 36 50% 98%;
+    --card-foreground: 153 23% 18%;
+    --popover: 36 38% 94%;
+    --popover-foreground: 153 23% 18%;
+
+    --primary: 41 70% 55%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 47 84% 72%;
+    --secondary: 153 22% 24%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 36 30% 91%;
+    --muted-foreground: 153 12% 38%;
+    --accent: 47 70% 88%;
+    --accent-foreground: 41 70% 30%;
+    --destructive: 13 60% 56%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 36 25% 86%;
+    --input: 36 25% 86%;
+    --ring: 41 70% 55%;
+    --radius: 1rem;
+
+    --activity-food: 47 84% 72%;
+    --activity-coffee: 25 55% 40%;
+    --activity-drinks: 41 70% 55%;
+    --activity-workout: 102 17% 64%;
+    --activity-misc: 203 35% 70%;
+    --activity-me-time: 270 30% 62%;
+
+    --available: 102 17% 64%;
+    --available-light: 102 25% 90%;
+    --partial: 47 84% 72%;
+    --partial-light: 47 70% 92%;
+    --busy: 153 22% 24%;
+    --busy-light: 153 18% 88%;
+    --today: 41 70% 45%;
+    --away: 13 60% 56%;
+    --away-light: 13 50% 92%;
+  }
+}
