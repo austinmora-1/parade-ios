@@ -50,7 +50,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     'expo-secure-store',
     'expo-font',
     'expo-web-browser',
-    '@sentry/react-native',
+    [
+      '@sentry/react-native/expo',
+      {
+        url: 'https://sentry.io/',
+        project: 'react-native',
+        organization: 'parade-t6',
+      },
+    ],
     [
       'expo-tracking-transparency',
       { userTrackingPermission: PERMISSION_COPY.tracking },

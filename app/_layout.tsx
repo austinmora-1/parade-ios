@@ -3,9 +3,6 @@ import 'react-native-gesture-handler';
 import 'react-native-url-polyfill/auto';
 
 import { useEffect } from 'react';
-import { initTelemetry } from '@/integrations/telemetry';
-
-initTelemetry();
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
@@ -24,7 +21,10 @@ import {
   Poppins_500Medium,
   Poppins_600SemiBold,
 } from '@expo-google-fonts/poppins';
+import * as Sentry from '@sentry/react-native';
+import { initTelemetry } from '@/integrations/telemetry';
 
+initTelemetry();
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const queryClient = new QueryClient({
@@ -33,7 +33,7 @@ const queryClient = new QueryClient({
   },
 });
 
-export default function RootLayout() {
+export default Sentry.wrap(function RootLayout() {
   const [fontsLoaded, fontError] = useCormorant({
     CormorantGaramond_500Medium,
     CormorantGaramond_500Medium_Italic,
@@ -64,4 +64,4 @@ export default function RootLayout() {
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
-}
+});
