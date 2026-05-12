@@ -29,6 +29,9 @@ yarn-error.*
 # sentry-wizard binary (106MB; downloaded per setup script)
 sentry-wizard
 
+# Supabase CLI local state (created when running `supabase gen types` from this folder)
+/supabase/
+
 # macOS
 .DS_Store
 *.pem
@@ -43,7 +46,3 @@ sentry-wizard
 # generated native folders
 /ios
 /android
-
-.env.local
-
-.env.local
