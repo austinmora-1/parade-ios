@@ -36,9 +36,10 @@ sentry-wizard
 .DS_Store
 *.pem
 
-# local env files
+# local env files — defensive, catches stray copies like .env.functions.local2
 .env
-.env*.local
+.env.*
+!.env.example
 
 # typescript
 *.tsbuildinfo
