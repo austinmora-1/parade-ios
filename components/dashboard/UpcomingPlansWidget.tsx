@@ -1,41 +1,62 @@
 /**
- * UpcomingPlansWidget — shows the user's own upcoming plans within the next 7
- * days, plus friend plans visible via feed. Read-only for Phase 1.
+ * UpcomingPlansWidget — "Upcoming Plans"
+ * Vertical list of plan cards with left-border activity accent (matches PWA).
+ * Plan title uses Fraunces (font-display) for the key headline.
+ * Read-only Phase 1; tap → plan detail.
  */
 import { View, Text, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import { useMemo } from 'react';
-import {
-  format,
-  addDays,
-  isToday,
-  isTomorrow,
-} from 'date-fns';
+import { format, addDays, isToday, isTomorrow } from 'date-fns';
 import { CalendarCheck, MapPin, Clock, ChevronRight } from 'lucide-react-native';
 import { usePlannerStore } from '@/stores/plannerStore';
-import { ACTIVITY_CONFIG, TIME_SLOT_LABELS } from '@/types/planner';
+import { TIME_SLOT_LABELS } from '@/types/planner';
 import { Skeleton } from '@/components/primitives/Skeleton';
 import type { Plan } from '@/types/planner';
 
-const ACTIVITY_EMOJI: Record<string, string> = {
-  drinks: '🍹', food: '🍽️', coffee: '☕', brunch: '🥞',
-  'happy-hour': '🍻', hike: '🥾', run: '🏃', gym: '🏋️',
-  movie: '🎬', concert: '🎵', sports: '⚽', game: '🎮',
-  travel: '✈️', beach: '🏖️', park: '🌳', meetup: '👋',
+// ─── Activity → left-border accent color (matches PWA category palette) ──────
+
+const ACTIVITY_COLOR: Record<string, string> = {
+  drinks:        '#D46549',
+  food:          '#D46549',
+  coffee:        '#C47030',
+  brunch:        '#D46549',
+  'happy-hour':  '#D46549',
+  hike:          '#9CB094',
+  run:           '#9CB094',
+  gym:           '#9CB094',
+  sports:        '#9CB094',
+  movie:         '#7744BB',
+  concert:       '#6E9BC2',
+  game:          '#7744BB',
+  travel:        '#23744D',
+  beach:         '#23744D',
+  park:          '#23744D',
+  meetup:        '#23744D',
 };
+const DEFAULT_ACTIVITY_COLOR = '#23744D';
+
+function activityAccent(activity: string | undefined): string {
+  if (!activity) return DEFAULT_ACTIVITY_COLOR;
+  return ACTIVITY_COLOR[activity] ?? DEFAULT_ACTIVITY_COLOR;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function planDayLabel(date: Date): string {
-  if (isToday(date)) return 'Today';
+  if (isToday(date))    return 'Today';
   if (isTomorrow(date)) return 'Tomorrow';
   return format(date, 'EEE, MMM d');
 }
 
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export function UpcomingPlansWidget() {
-  const plans = usePlannerStore((s) => s.plans);
+  const plans    = usePlannerStore((s) => s.plans);
   const isLoading = usePlannerStore((s) => s.isLoading);
 
   const { upcoming, totalCount } = useMemo(() => {
-    const now = new Date();
+    const now    = new Date();
     const cutoff = addDays(now, 7);
     const sorted = plans
       .filter((p) => {
@@ -52,14 +73,15 @@ export function UpcomingPlansWidget() {
 
   return (
     <View className="gap-3">
+      {/* Section eyebrow */}
       <View className="flex-row items-center gap-1.5 px-0.5">
-        <CalendarCheck size={13} color="#2F4A3E" strokeWidth={2} />
-        <Text className="font-sans text-xs text-foreground/40 uppercase tracking-widest">
-          Upcoming
+        <CalendarCheck size={12} color="#929298" strokeWidth={2} />
+        <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+          Upcoming Plans
         </Text>
         {!isLoading && totalCount > 0 && (
-          <View className="ml-auto bg-evergreen/10 rounded-full px-2 py-0.5">
-            <Text className="font-sans text-xs text-evergreen font-medium">
+          <View className="ml-auto bg-muted rounded-full px-2 py-0.5">
+            <Text className="font-sans text-xs text-muted-foreground font-medium">
               {totalCount}
             </Text>
           </View>
@@ -67,101 +89,102 @@ export function UpcomingPlansWidget() {
       </View>
 
       {isLoading ? (
+        /* Skeleton — left-border strip shape */
         <View className="gap-2">
           {[0, 1, 2].map((i) => (
             <View
               key={i}
-              className="bg-white rounded-2xl border border-border/30 px-4 py-3.5 flex-row items-center gap-3 shadow-sm"
+              className="bg-white rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm"
             >
-              <Skeleton width={36} height={36} rounded="rounded-xl" />
-              <View className="flex-1 gap-1.5">
-                <Skeleton width="60%" height={12} />
-                <Skeleton width="40%" height={10} />
+              <View style={{ width: 4, backgroundColor: '#DDD8CE' }} />
+              <View className="flex-1 px-4 py-3.5 gap-1.5">
+                <Skeleton width="55%" height={13} />
+                <Skeleton width="35%" height={10} />
               </View>
             </View>
           ))}
         </View>
       ) : upcoming.length === 0 ? (
         <View className="bg-white rounded-2xl border border-dashed border-border/40 px-4 py-6 items-center gap-1">
-          <Text className="text-3xl">📅</Text>
-          <Text className="font-sans text-sm text-foreground/40 mt-1">
+          <Text className="text-2xl">📅</Text>
+          <Text className="font-sans text-sm text-muted-foreground mt-1">
             No plans this week
           </Text>
         </View>
       ) : (
         <View className="gap-2">
           {upcoming.map((plan) => {
-            const planDate = plan.date instanceof Date ? plan.date : new Date(plan.date);
-            const activityCfg = ACTIVITY_CONFIG[plan.activity as string] ?? null;
-            const emoji = ACTIVITY_EMOJI[plan.activity as string] ?? activityCfg?.icon ?? '✨';
-            const slotLabel = TIME_SLOT_LABELS[plan.timeSlot]?.time ?? '';
-            const isLive = isToday(planDate);
+            const planDate   = plan.date instanceof Date ? plan.date : new Date(plan.date);
+            const accentColor = activityAccent(plan.activity as string | undefined);
+            const slotLabel  = TIME_SLOT_LABELS[plan.timeSlot]?.time ?? '';
+            const locationStr =
+              typeof plan.location === 'string'
+                ? plan.location
+                : (plan.location as any)?.name ?? '';
 
             return (
               <Pressable
                 key={plan.id}
                 onPress={() => router.push(`/(app)/plan/${plan.id}`)}
-                className="bg-white rounded-2xl border border-border/30 px-4 py-3.5 flex-row items-center gap-3 shadow-sm"
+                className="bg-white rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm active:opacity-80"
               >
-                {/* Activity emoji */}
-                <View className="w-9 h-9 rounded-xl bg-chalk items-center justify-center">
-                  <Text style={{ fontSize: 18 }}>{emoji}</Text>
-                </View>
+                {/* Activity left-border accent (matches PWA border-l-[3px]) */}
+                <View style={{ width: 4, backgroundColor: accentColor }} />
 
-                {/* Details */}
-                <View className="flex-1 gap-0.5">
-                  <Text
-                    className="font-sans font-medium text-evergreen text-sm"
-                    numberOfLines={1}
-                  >
-                    {plan.title || 'Untitled plan'}
-                  </Text>
-                  <View className="flex-row items-center gap-3">
-                    <View className="flex-row items-center gap-1">
-                      <Clock size={11} color="#9CB094" strokeWidth={1.75} />
-                      <Text className="font-sans text-xs text-foreground/50">
-                        {planDayLabel(planDate)}
-                        {slotLabel ? ` · ${slotLabel}` : ''}
-                      </Text>
-                    </View>
-                    {plan.location ? (
-                      <View className="flex-row items-center gap-1">
-                        <MapPin size={11} color="#9CB094" strokeWidth={1.75} />
-                        <Text
-                          className="font-sans text-xs text-foreground/50"
-                          numberOfLines={1}
-                        >
-                          {typeof plan.location === 'string'
-                            ? plan.location
-                            : (plan.location as any)?.name ?? ''}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
-                </View>
-
-                {/* Live badge */}
-                {isLive && (
-                  <View className="bg-marigold/20 rounded-full px-2 py-0.5">
-                    <Text className="font-sans text-xs text-marigold font-semibold">
-                      Today
+                {/* Card content */}
+                <View className="flex-1 px-4 py-3 gap-1">
+                  {/* Title row + date badge */}
+                  <View className="flex-row items-start justify-between gap-2">
+                    <Text
+                      className="font-display text-sm text-evergreen flex-1"
+                      numberOfLines={1}
+                    >
+                      {plan.title || 'Untitled plan'}
+                    </Text>
+                    <Text className="font-sans text-xs text-muted-foreground whitespace-nowrap">
+                      {planDayLabel(planDate)}
                     </Text>
                   </View>
-                )}
+
+                  {/* Time + location row */}
+                  {(slotLabel || locationStr) ? (
+                    <View className="flex-row items-center gap-3">
+                      {slotLabel ? (
+                        <View className="flex-row items-center gap-1">
+                          <Clock size={11} color="#929298" strokeWidth={1.75} />
+                          <Text className="font-sans text-xs text-muted-foreground">
+                            {slotLabel}
+                          </Text>
+                        </View>
+                      ) : null}
+                      {locationStr ? (
+                        <View className="flex-row items-center gap-1 flex-1">
+                          <MapPin size={11} color="#929298" strokeWidth={1.75} />
+                          <Text
+                            className="font-sans text-xs text-muted-foreground"
+                            numberOfLines={1}
+                          >
+                            {locationStr}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  ) : null}
+                </View>
               </Pressable>
             );
           })}
 
-          {/* See all link when there are more than shown */}
+          {/* See all — only when more than 5 */}
           {totalCount > 5 && (
             <Pressable
               onPress={() => router.push('/(app)/(tabs)/plans')}
               className="flex-row items-center justify-center gap-1 py-2"
             >
-              <Text className="font-sans text-xs text-evergreen/60 font-medium">
+              <Text className="font-sans text-xs text-muted-foreground font-medium">
                 See all {totalCount} plans
               </Text>
-              <ChevronRight size={12} color="#2F4A3E" strokeWidth={2} style={{ opacity: 0.6 }} />
+              <ChevronRight size={12} color="#929298" strokeWidth={2} />
             </Pressable>
           )}
         </View>
