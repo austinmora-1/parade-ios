@@ -16,6 +16,9 @@ import { useAuth } from '@/hooks/useAuth';
 import { Avatar } from '@/components/primitives/Avatar';
 import { formatDisplayName } from '@/lib/utils';
 import { usePlannerStore } from '@/stores/plannerStore';
+import { FriendVibeStrip } from '@/components/dashboard/FriendVibeStrip';
+import { FreeWindowCard } from '@/components/dashboard/FreeWindowCard';
+import { UpcomingPlansWidget } from '@/components/dashboard/UpcomingPlansWidget';
 
 function useProfile(userId: string | undefined) {
   return useQuery({
@@ -117,25 +120,13 @@ export default function HomeTab() {
           </View>
         )}
 
-        {/* Placeholder widgets — fleshed out in Block 3 */}
-        <View className="px-5 gap-4">
-          <PlaceholderCard title="Friend vibes" subtitle="Who's free this weekend" />
-          <PlaceholderCard title="Your free windows" subtitle="Open time this week" />
-          <PlaceholderCard title="Upcoming plans" subtitle="What's on the calendar" />
+        {/* Dashboard widgets */}
+        <View className="px-5 gap-6">
+          <FriendVibeStrip />
+          <FreeWindowCard />
+          <UpcomingPlansWidget />
         </View>
       </ScrollView>
     </SafeAreaView>
-  );
-}
-
-function PlaceholderCard({ title, subtitle }: { title: string; subtitle: string }) {
-  return (
-    <View className="bg-white rounded-3xl p-5 gap-1 border border-border/40">
-      <Text className="font-sans font-medium text-evergreen text-base">{title}</Text>
-      <Text className="font-sans text-sm text-foreground/50">{subtitle}</Text>
-      <View className="mt-3 h-20 bg-chalk rounded-2xl items-center justify-center">
-        <Text className="font-sans text-xs text-foreground/30">Loading…</Text>
-      </View>
-    </View>
   );
 }
