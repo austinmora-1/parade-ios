@@ -273,6 +273,7 @@ export const usePlannerStore = create<PlannerState>((set, get) => {
           const response = await withTimeout(
             Promise.resolve(supabase.rpc('get_dashboard_data' as any, {
               p_user_id: userId,
+              p_plan_cursor: null,
             })),
             8000,
             'Dashboard data request'
