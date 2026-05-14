@@ -9,16 +9,21 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Bell } from 'lucide-react-native';
 import { router } from 'expo-router';
-import { useCallback, useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useCallback, useState, useEffect, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { format, addDays, startOfWeek } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Avatar } from '@/components/primitives/Avatar';
+import { Skeleton } from '@/components/primitives/Skeleton';
 import { formatDisplayName } from '@/lib/utils';
 import { usePlannerStore } from '@/stores/plannerStore';
+import { useFriendDashboardData } from '@/hooks/useFriendDashboardData';
 import { FriendVibeStrip } from '@/components/dashboard/FriendVibeStrip';
 import { FreeWindowCard } from '@/components/dashboard/FreeWindowCard';
 import { UpcomingPlansWidget } from '@/components/dashboard/UpcomingPlansWidget';
+
+// ─── Hooks ────────────────────────────────────────────────────────────────────
 
 function useProfile(userId: string | undefined) {
   return useQuery({
@@ -36,6 +41,25 @@ function useProfile(userId: string | undefined) {
   });
 }
 
+/** Returns count of unread notifications for the current user. */
+function useUnreadCount(userId: string | undefined) {
+  return useQuery({
+    enabled: !!userId,
+    queryKey: ['unread-notifications', userId],
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { count } = await (supabase as any)
+        .from('notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId!)
+        .eq('read', false);
+      return (count ?? 0) as number;
+    },
+  });
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 function greeting(name: string) {
   const hour = new Date().getHours();
   if (hour < 12) return `Good morning, ${name} ☀️`;
@@ -43,11 +67,20 @@ function greeting(name: string) {
   return `Good evening, ${name} 🌙`;
 }
 
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export default function HomeTab() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const setUserId = usePlannerStore((s) => s.setUserId);
   const loadAllData = usePlannerStore((s) => s.loadAllData);
-  const { data: profile, isLoading, refetch } = useProfile(user?.id);
+  const plans = usePlannerStore((s) => s.plans);
+  const storeLoading = usePlannerStore((s) => s.isLoading);
+
+  const { data: profile, isLoading: profileLoading, refetch } = useProfile(user?.id);
+  const { data: unreadCount } = useUnreadCount(user?.id);
+  const { data: friendData } = useFriendDashboardData();
+
   const [refreshing, setRefreshing] = useState(false);
 
   // Bootstrap the planner store on first mount
@@ -60,16 +93,46 @@ export default function HomeTab() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([refetch(), loadAllData(true)]);
+    await Promise.all([
+      refetch(),
+      loadAllData(true),
+      queryClient.invalidateQueries({ queryKey: ['friend-dashboard-data'] }),
+      queryClient.invalidateQueries({ queryKey: ['unread-notifications'] }),
+    ]);
     setRefreshing(false);
-  }, [refetch, loadAllData]);
+  }, [refetch, loadAllData, queryClient]);
+
+  // ── Week-at-a-glance stats ──────────────────────────────────────────────────
+
+  const stats = useMemo(() => {
+    const now = new Date();
+    const cutoff = addDays(now, 7);
+
+    const upcomingCount = plans.filter((p) => {
+      const d = p.date instanceof Date ? p.date : new Date(p.date);
+      return d >= now && d <= cutoff;
+    }).length;
+
+    // Count friends free on Fri / Sat / Sun of this week
+    const weekStart = startOfWeek(now, { weekStartsOn: 1 });
+    const weekendDateStrs = [4, 5, 6].map((i) =>
+      format(addDays(weekStart, i), 'yyyy-MM-dd'),
+    );
+    const friendsFreeWeekend = (friendData ?? []).filter((f) =>
+      weekendDateStrs.some((d) => f.freeDates.includes(d)),
+    ).length;
+
+    return { upcomingCount, friendsFreeWeekend };
+  }, [plans, friendData]);
 
   const firstName = profile
     ? formatDisplayName({
         firstName: profile.first_name,
         displayName: profile.display_name,
-      })
+      }).split(' ')[0]
     : '';
+
+  const hasUnread = (unreadCount ?? 0) > 0;
 
   return (
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
@@ -80,7 +143,7 @@ export default function HomeTab() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#DDA73A" />
         }
       >
-        {/* Header */}
+        {/* ── Header ──────────────────────────────────────────────────────── */}
         <View className="flex-row items-center justify-between px-5 pt-4 pb-3">
           <View className="flex-row items-center gap-3">
             <Avatar
@@ -89,24 +152,35 @@ export default function HomeTab() {
               displayName={profile?.display_name}
               size="sm"
             />
-            <Text style={{ fontFamily: 'CormorantGaramond_500Medium' }} className="text-3xl text-evergreen">
+            <Text
+              style={{ fontFamily: 'CormorantGaramond_500Medium' }}
+              className="text-3xl text-evergreen"
+            >
               Parade<Text className="text-marigold">.</Text>
             </Text>
           </View>
+
+          {/* Bell with unread dot */}
           <Pressable
             onPress={() => router.push('/(app)/notifications')}
             className="w-10 h-10 rounded-full bg-evergreen/8 items-center justify-center"
             hitSlop={8}
           >
             <Bell size={20} color="#2F4A3E" strokeWidth={1.75} />
+            {hasUnread && (
+              <View className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-ember" />
+            )}
           </Pressable>
         </View>
 
-        {/* Greeting */}
-        {isLoading ? (
-          <ActivityIndicator className="mt-6" color="#DDA73A" />
+        {/* ── Greeting ────────────────────────────────────────────────────── */}
+        {profileLoading ? (
+          <View className="px-5 pt-2 pb-4 gap-2">
+            <Skeleton width="55%" height={24} rounded="rounded-lg" />
+            <Skeleton width="35%" height={13} />
+          </View>
         ) : (
-          <View className="px-5 pt-2 pb-5 gap-1">
+          <View className="px-5 pt-2 pb-4 gap-1">
             <Text className="font-sans font-semibold text-evergreen text-2xl">
               {greeting(firstName || 'there')}
             </Text>
@@ -120,7 +194,29 @@ export default function HomeTab() {
           </View>
         )}
 
-        {/* Dashboard widgets */}
+        {/* ── Week-at-a-glance stat pills ─────────────────────────────────── */}
+        {!storeLoading && (stats.upcomingCount > 0 || stats.friendsFreeWeekend > 0) && (
+          <View className="flex-row gap-2 px-5 pb-5">
+            {stats.upcomingCount > 0 && (
+              <View className="flex-row items-center gap-1.5 bg-evergreen/8 rounded-full px-3 py-1.5">
+                <Text style={{ fontSize: 12 }}>📅</Text>
+                <Text className="font-sans text-xs text-evergreen font-medium">
+                  {stats.upcomingCount} {stats.upcomingCount === 1 ? 'plan' : 'plans'} this week
+                </Text>
+              </View>
+            )}
+            {stats.friendsFreeWeekend > 0 && (
+              <View className="flex-row items-center gap-1.5 bg-marigold/10 rounded-full px-3 py-1.5">
+                <Text style={{ fontSize: 12 }}>👥</Text>
+                <Text className="font-sans text-xs text-marigold font-medium">
+                  {stats.friendsFreeWeekend} free this weekend
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* ── Dashboard widgets ────────────────────────────────────────────── */}
         <View className="px-5 gap-6">
           <FriendVibeStrip />
           <FreeWindowCard />

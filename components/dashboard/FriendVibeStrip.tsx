@@ -3,12 +3,13 @@
  * name, current vibe, and which days this week they're free.
  * Read-only for Phase 1; tap → friend profile.
  */
-import { ScrollView, View, Text, Pressable, ActivityIndicator } from 'react-native';
+import { ScrollView, View, Text, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import { format, startOfWeek, addDays } from 'date-fns';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { useFriendDashboardData } from '@/hooks/useFriendDashboardData';
 import { Avatar } from '@/components/primitives/Avatar';
+import { Skeleton } from '@/components/primitives/Skeleton';
 import { formatDisplayName } from '@/lib/utils';
 
 const VIBE_EMOJI: Record<string, string> = {
@@ -45,9 +46,32 @@ export function FriendVibeStrip() {
         <Text className="font-sans text-xs text-foreground/40 uppercase tracking-widest">
           Friends
         </Text>
-        {isLoading && <ActivityIndicator size="small" color="#9CB094" />}
       </View>
 
+      {isLoading ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerClassName="gap-3 px-0.5 pb-1"
+          scrollEnabled={false}
+        >
+          {[0, 1, 2].map((i) => (
+            <View
+              key={i}
+              className="bg-white border border-border/30 rounded-2xl p-3 gap-2 w-28 items-center"
+            >
+              <Skeleton width={48} height={48} rounded="rounded-full" />
+              <Skeleton width={52} height={10} />
+              <Skeleton width={68} height={20} rounded="rounded-full" />
+              <View className="flex-row gap-1.5">
+                {[0, 1, 2].map((j) => (
+                  <Skeleton key={j} width={8} height={8} rounded="rounded-full" />
+                ))}
+              </View>
+            </View>
+          ))}
+        </ScrollView>
+      ) : (
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -110,6 +134,7 @@ export function FriendVibeStrip() {
           );
         })}
       </ScrollView>
+      )}
     </View>
   );
 }

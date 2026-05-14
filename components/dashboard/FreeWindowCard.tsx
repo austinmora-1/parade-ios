@@ -5,7 +5,7 @@
  * Data source: plannerStore.availability (already loaded by loadAllData).
  * Friend overlap: from useFriendDashboardData (batched).
  */
-import { ScrollView, View, Text, Pressable, ActivityIndicator } from 'react-native';
+import { ScrollView, View, Text, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import { useMemo } from 'react';
 import { format, addDays, isToday, isTomorrow } from 'date-fns';
@@ -13,6 +13,7 @@ import { Sparkles, Users } from 'lucide-react-native';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { useFriendDashboardData } from '@/hooks/useFriendDashboardData';
 import { Avatar } from '@/components/primitives/Avatar';
+import { Skeleton } from '@/components/primitives/Skeleton';
 import type { TimeSlot } from '@/types/planner';
 
 const SLOT_LABEL: Record<TimeSlot, { short: string; range: string }> = {
@@ -85,8 +86,6 @@ export function FreeWindowCard() {
     );
   }, [availability, friendData]);
 
-  if (isLoading) return null;
-
   return (
     <View className="gap-3">
       <View className="flex-row items-center gap-1.5 px-0.5">
@@ -96,7 +95,33 @@ export function FreeWindowCard() {
         </Text>
       </View>
 
-      {windows.length === 0 ? (
+      {isLoading ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerClassName="gap-3 px-0.5 pb-1"
+          scrollEnabled={false}
+        >
+          {[0, 1, 2].map((i) => (
+            <View
+              key={i}
+              className="bg-white border border-border/30 rounded-2xl p-4 gap-2 w-44"
+            >
+              <View className="gap-1">
+                <Skeleton width={48} height={10} />
+                <Skeleton width={80} height={18} rounded="rounded-md" />
+                <Skeleton width={56} height={10} />
+              </View>
+              <View className="flex-row items-center gap-1.5 mt-1">
+                {[0, 1, 2].map((j) => (
+                  <Skeleton key={j} width={24} height={24} rounded="rounded-full" />
+                ))}
+                <Skeleton width={40} height={10} className="ml-1" />
+              </View>
+            </View>
+          ))}
+        </ScrollView>
+      ) : windows.length === 0 ? (
         <View className="bg-white rounded-2xl border border-dashed border-border/40 px-4 py-5 items-center gap-1">
           <Text className="font-sans text-sm text-foreground/40">No open time this week</Text>
           <Text className="font-sans text-xs text-foreground/30">
@@ -160,7 +185,7 @@ export function FreeWindowCard() {
             );
           })}
         </ScrollView>
-      )}
+      ) /* end isLoading else */}
     </View>
   );
 }
