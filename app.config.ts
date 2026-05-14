@@ -82,6 +82,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   extra: {
     appleTeamId: APPLE_TEAM_ID,
     associatedDomain: ASSOCIATED_DOMAIN,
-    eas: { projectId: '' },
+    eas: { projectId: '46315e07-f0e8-4119-af99-01b8ae2109b3' },
   },
 });

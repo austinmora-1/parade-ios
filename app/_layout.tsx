@@ -23,6 +23,7 @@ import {
 } from '@expo-google-fonts/poppins';
 import * as Sentry from '@sentry/react-native';
 import { initTelemetry } from '@/integrations/telemetry';
+import { AuthProvider } from '@/hooks/useAuth';
 
 initTelemetry();
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -54,12 +55,14 @@ export default Sentry.wrap(function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
-          <ActionSheetProvider>
-            <BottomSheetModalProvider>
-              <StatusBar style="dark" />
-              <Stack screenOptions={{ headerShown: false }} />
-            </BottomSheetModalProvider>
-          </ActionSheetProvider>
+          <AuthProvider>
+            <ActionSheetProvider>
+              <BottomSheetModalProvider>
+                <StatusBar style="dark" />
+                <Stack screenOptions={{ headerShown: false }} />
+              </BottomSheetModalProvider>
+            </ActionSheetProvider>
+          </AuthProvider>
         </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
