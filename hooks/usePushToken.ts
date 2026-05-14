@@ -4,10 +4,11 @@
  * table migration runs in Phase 2 (current push_subscriptions is web-push only).
  *
  * Call this hook once inside the authenticated shell (app/(app)/_layout.tsx).
+ * expo-device is intentionally NOT used — it requires a new native build.
+ * getExpoPushTokenAsync() throws gracefully on simulator so no guard needed.
  */
 import { useEffect } from 'react';
 import * as Notifications from 'expo-notifications';
-import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import { createMMKV } from 'react-native-mmkv';
 
@@ -24,11 +25,6 @@ Notifications.setNotificationHandler({
 });
 
 export async function registerForPushNotifications(): Promise<string | null> {
-  if (!Device.isDevice) {
-    console.log('[Push] Skipping — not a physical device');
-    return null;
-  }
-
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
 
@@ -56,7 +52,8 @@ export async function registerForPushNotifications(): Promise<string | null> {
     console.log('[Push] Token acquired:', token);
     return token;
   } catch (err) {
-    console.error('[Push] Failed to get token:', err);
+    // Silently fails on simulator — expected behaviour
+    console.log('[Push] Token unavailable (simulator or no entitlement):', err);
     return null;
   }
 }
