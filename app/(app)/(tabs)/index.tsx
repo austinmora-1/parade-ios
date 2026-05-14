@@ -153,10 +153,10 @@ export default function HomeTab() {
               size="sm"
             />
             <Text
-              style={{ fontFamily: 'CormorantGaramond_500Medium' }}
-              className="text-3xl text-evergreen"
+              style={{ fontFamily: 'BungeeShade_400Regular' }}
+              className="text-2xl text-parade-green"
             >
-              Parade<Text className="text-marigold">.</Text>
+              parade
             </Text>
           </View>
 

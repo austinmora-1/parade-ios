@@ -4,53 +4,70 @@
 
 @layer base {
   :root {
-    --marigold: 41 70% 55%;
-    --evergreen: 153 22% 24%;
-    --chalk: 36 38% 94%;
-    --butter: 47 84% 72%;
-    --sage: 102 17% 64%;
-    --ember: 13 60% 56%;
+    /* ── Brand palette ────────────────────────────────────────────────── */
+    --parade-green:   152 54% 30%;   /* #23744D  — primary action (matches PWA) */
+    --mint:           150 33% 55%;   /* #67B28E  — primary glow / faded mint */
+    --evergreen:      150 22% 24%;   /* #2F4F3F  — dark forest text */
+    --chalk:           40 67% 93%;   /* #F8F0E0  — custard background */
+    --sidebar-chalk:   40 60% 95%;   /* #FAF3E6  — tab bar / sidebar surface */
+    --marigold:        42 71% 55%;   /* #DFA53A  — accent / badge highlight */
+    --butter:          43 84% 72%;   /* #F5C96A  — warm accent */
+    --ember:           11 60% 56%;   /* #D46549  — coral secondary */
+    --sage:           102 17% 64%;   /* #9CB094  — soft green muted */
 
-    --background: 36 38% 94%;
-    --foreground: 153 23% 18%;
-    --card: 36 50% 98%;
-    --card-foreground: 153 23% 18%;
-    --popover: 36 38% 94%;
-    --popover-foreground: 153 23% 18%;
+    /* ── Semantic tokens ──────────────────────────────────────────────── */
+    --background:          40 67% 93%;   /* custard #F8F0E0 */
+    --foreground:         150 22% 15%;   /* dark forest */
+    --card:                 0  0% 100%;  /* white */
+    --card-foreground:    150 22% 15%;
+    --popover:             40 67% 93%;
+    --popover-foreground:  150 22% 15%;
 
-    --primary: 41 70% 55%;
-    --primary-foreground: 0 0% 100%;
-    --primary-glow: 47 84% 72%;
-    --secondary: 153 22% 24%;
-    --secondary-foreground: 0 0% 100%;
+    /* Primary = parade green #23744D */
+    --primary:             152 54% 30%;
+    --primary-foreground:    0  0% 100%;
+    --primary-glow:        150 33% 55%;  /* #67B28E mint */
 
-    --muted: 36 30% 91%;
-    --muted-foreground: 153 12% 38%;
-    --accent: 47 70% 88%;
-    --accent-foreground: 41 70% 30%;
-    --destructive: 13 60% 56%;
+    /* Secondary = ember/coral #D46549 */
+    --secondary:            11 60% 56%;
+    --secondary-foreground:  0  0% 100%;
+
+    --muted:               40 50% 89%;   /* #EEE2CB */
+    --muted-foreground:   225  4% 60%;   /* #929298 elephant gray */
+    --accent:              40 60% 92%;   /* #F4ECDA */
+    --accent-foreground:  152 54% 30%;   /* parade green */
+
+    --destructive:         11 65% 35%;   /* dark ember */
     --destructive-foreground: 0 0% 100%;
 
-    --border: 36 25% 86%;
-    --input: 36 25% 86%;
-    --ring: 41 70% 55%;
-    --radius: 1rem;
+    --border:  40 27% 82%;   /* #DED4C3 */
+    --input:   40 27% 82%;
+    --ring:   152 54% 30%;   /* parade green focus ring */
+    --radius:  1rem;
 
-    --activity-food: 47 84% 72%;
-    --activity-coffee: 25 55% 40%;
-    --activity-drinks: 41 70% 55%;
-    --activity-workout: 102 17% 64%;
-    --activity-misc: 203 35% 70%;
-    --activity-me-time: 270 30% 62%;
+    /* ── Sidebar / tab bar ────────────────────────────────────────────── */
+    --sidebar-background:  40 60% 95%;   /* #FAF3E6 */
+    --sidebar-border:      40 27% 82%;   /* #DED4C3 */
+    --sidebar-primary:    152 54% 30%;   /* parade green */
+    --sidebar-accent:      40 60% 92%;   /* #F4ECDA */
 
-    --available: 102 17% 64%;
-    --available-light: 102 25% 90%;
-    --partial: 47 84% 72%;
-    --partial-light: 47 70% 92%;
-    --busy: 153 22% 24%;
-    --busy-light: 153 18% 88%;
-    --today: 41 70% 45%;
-    --away: 13 60% 56%;
-    --away-light: 13 50% 92%;
+    /* ── Activity colors ──────────────────────────────────────────────── */
+    --activity-food:      9 100% 81%;
+    --activity-coffee:   25  70% 45%;
+    --activity-drinks:   41  70% 55%;
+    --activity-workout:  102 17% 64%;
+    --activity-misc:     203 35% 70%;
+    --activity-me-time:  270 30% 62%;
+
+    /* ── Availability states ──────────────────────────────────────────── */
+    --available:       152 39% 39%;
+    --available-light: 152 40% 92%;
+    --partial:          49 100% 67%;
+    --partial-light:    49  80% 93%;
+    --busy:             11  65% 35%;
+    --busy-light:       11  40% 92%;
+    --today:           203  75% 45%;
+    --away:             11  60% 56%;
+    --away-light:       11  50% 92%;
   }
 }

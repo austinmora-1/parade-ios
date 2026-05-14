@@ -58,7 +58,7 @@ export function FriendVibeStrip() {
           {[0, 1, 2].map((i) => (
             <View
               key={i}
-              className="bg-white border border-border/30 rounded-2xl p-3 gap-2 w-28 items-center"
+              className="bg-white border border-border/30 rounded-2xl p-3 gap-2 w-28 items-center shadow-sm"
             >
               <Skeleton width={48} height={48} rounded="rounded-full" />
               <Skeleton width={52} height={10} />
@@ -92,7 +92,7 @@ export function FriendVibeStrip() {
             <Pressable
               key={friend.id}
               onPress={() => router.push(`/(app)/friend/${friend.friendUserId}`)}
-              className="bg-white border border-border/30 rounded-2xl p-3 gap-2 w-28 items-center"
+              className="bg-white border border-border/30 rounded-2xl p-3 gap-2 w-28 items-center shadow-sm"
             >
               <Avatar
                 url={vibeData?.avatarUrl ?? friend.avatar}

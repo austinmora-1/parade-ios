@@ -105,7 +105,7 @@ export function FreeWindowCard() {
           {[0, 1, 2].map((i) => (
             <View
               key={i}
-              className="bg-white border border-border/30 rounded-2xl p-4 gap-2 w-44"
+              className="bg-white border border-border/30 rounded-2xl p-4 gap-2 w-44 shadow-sm"
             >
               <View className="gap-1">
                 <Skeleton width={48} height={10} />
@@ -145,7 +145,7 @@ export function FreeWindowCard() {
               <Pressable
                 key={w.dateStr}
                 onPress={() => router.push(`/(app)/day/${w.dateStr}`)}
-                className="bg-white border border-border/30 rounded-2xl p-4 gap-2 w-44"
+                className="bg-white border border-border/30 rounded-2xl p-4 gap-2 w-44 shadow-sm"
               >
                 {/* Day + date */}
                 <View>

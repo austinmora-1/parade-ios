@@ -11,16 +11,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import {
-  useFonts as useCormorant,
-  CormorantGaramond_500Medium,
-  CormorantGaramond_500Medium_Italic,
-} from '@expo-google-fonts/cormorant-garamond';
-import {
-  Poppins_400Regular,
-  Poppins_500Medium,
-  Poppins_600SemiBold,
-} from '@expo-google-fonts/poppins';
+import { useFonts } from 'expo-font';
+import { Fraunces_900Black } from '@expo-google-fonts/fraunces/900Black';
+import { Inter_400Regular } from '@expo-google-fonts/inter/400Regular';
+import { Inter_500Medium } from '@expo-google-fonts/inter/500Medium';
+import { Inter_600SemiBold } from '@expo-google-fonts/inter/600SemiBold';
+import { BungeeShade_400Regular } from '@expo-google-fonts/bungee-shade/400Regular';
 import * as Sentry from '@sentry/react-native';
 import { initTelemetry } from '@/integrations/telemetry';
 import { AuthProvider } from '@/hooks/useAuth';
@@ -35,12 +31,12 @@ const queryClient = new QueryClient({
 });
 
 export default Sentry.wrap(function RootLayout() {
-  const [fontsLoaded, fontError] = useCormorant({
-    CormorantGaramond_500Medium,
-    CormorantGaramond_500Medium_Italic,
-    Poppins_400Regular,
-    Poppins_500Medium,
-    Poppins_600SemiBold,
+  const [fontsLoaded, fontError] = useFonts({
+    Fraunces_900Black,
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    BungeeShade_400Regular,
   });
 
   useEffect(() => {

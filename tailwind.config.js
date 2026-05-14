@@ -8,12 +8,16 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        marigold: 'hsl(var(--marigold))',
+        /* ── Brand named tokens ───────────────────────────────────────── */
+        'parade-green': '#23744D',   // primary action (exact PWA match)
+        mint:           '#67B28E',   // primary glow / faded mint
+        marigold:  'hsl(var(--marigold))',
         evergreen: 'hsl(var(--evergreen))',
-        chalk: 'hsl(var(--chalk))',
-        butter: 'hsl(var(--butter))',
-        sage: 'hsl(var(--sage))',
-        ember: 'hsl(var(--ember))',
+        chalk:     'hsl(var(--chalk))',
+        'sidebar-chalk': 'hsl(var(--sidebar-chalk))',
+        butter:    'hsl(var(--butter))',
+        sage:      'hsl(var(--sage))',
+        ember:     'hsl(var(--ember))',
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
         card: {
@@ -80,8 +84,17 @@ module.exports = {
         sm: 'calc(var(--radius) - 8px)',
       },
       fontFamily: {
-        display: ['CormorantGaramond_500Medium', 'Georgia', 'serif'],
-        sans: ['Poppins_400Regular', 'system-ui', 'sans-serif'],
+        /* Inter — body, labels, all UI text (matches PWA) */
+        sans:     ['Inter_400Regular', 'system-ui', 'sans-serif'],
+        /* Fraunces 900 Black — display headings, card titles (matches PWA) */
+        display:  ['Fraunces_900Black', 'Georgia', 'serif'],
+        /* Bungee Shade — wordmark only (matches PWA) */
+        wordmark: ['BungeeShade_400Regular', 'system-ui', 'sans-serif'],
+      },
+      boxShadow: {
+        /* Matches PWA --shadow-soft */
+        soft: '0 8px 24px -8px rgba(4, 10, 42, 0.10)',
+        xs:   '0 2px 8px -2px rgba(4, 10, 42, 0.07)',
       },
     },
   },

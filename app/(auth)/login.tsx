@@ -130,8 +130,8 @@ export default function LoginScreen() {
           >
             {/* Wordmark */}
             <View className="gap-1">
-              <Text style={{ fontFamily: 'CormorantGaramond_500Medium' }} className="text-6xl text-chalk">
-                Parade<Text className="text-marigold">.</Text>
+              <Text style={{ fontFamily: 'BungeeShade_400Regular' }} className="text-5xl text-chalk">
+                parade
               </Text>
               <Text className="font-sans text-sage text-base">Plans worth keeping.</Text>
             </View>

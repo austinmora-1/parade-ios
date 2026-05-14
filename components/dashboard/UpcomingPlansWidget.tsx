@@ -71,7 +71,7 @@ export function UpcomingPlansWidget() {
           {[0, 1, 2].map((i) => (
             <View
               key={i}
-              className="bg-white rounded-2xl border border-border/30 px-4 py-3.5 flex-row items-center gap-3"
+              className="bg-white rounded-2xl border border-border/30 px-4 py-3.5 flex-row items-center gap-3 shadow-sm"
             >
               <Skeleton width={36} height={36} rounded="rounded-xl" />
               <View className="flex-1 gap-1.5">
@@ -101,7 +101,7 @@ export function UpcomingPlansWidget() {
               <Pressable
                 key={plan.id}
                 onPress={() => router.push(`/(app)/plan/${plan.id}`)}
-                className="bg-white rounded-2xl border border-border/30 px-4 py-3.5 flex-row items-center gap-3"
+                className="bg-white rounded-2xl border border-border/30 px-4 py-3.5 flex-row items-center gap-3 shadow-sm"
               >
                 {/* Activity emoji */}
                 <View className="w-9 h-9 rounded-xl bg-chalk items-center justify-center">

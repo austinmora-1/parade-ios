@@ -1,8 +1,16 @@
+/**
+ * Button — matches PWA button system.
+ *   filled    → bg-primary (#23744D parade green), white text
+ *   soft      → bg-primary/10, parade-green text (PWA "soft" variant)
+ *   outline   → border-2 border-primary, transparent bg
+ *   secondary → bg-secondary (#D46549 ember/coral), white text
+ *   ghost     → transparent, evergreen text
+ */
 import { Pressable, Text, ActivityIndicator, type PressableProps } from 'react-native';
 import { cn } from '@/lib/utils';
 
-type Variant = 'filled' | 'outline' | 'ghost';
-type Size = 'sm' | 'md' | 'lg';
+type Variant = 'filled' | 'soft' | 'outline' | 'secondary' | 'ghost';
+type Size = 'sm' | 'md' | 'lg' | 'xl';
 
 interface ButtonProps extends PressableProps {
   variant?: Variant;
@@ -13,25 +21,39 @@ interface ButtonProps extends PressableProps {
   labelClassName?: string;
 }
 
-const variantStyles: Record<Variant, { container: string; label: string }> = {
+const variantStyles: Record<Variant, { container: string; label: string; spinnerColor: string }> = {
   filled: {
-    container: 'bg-marigold active:opacity-80',
-    label: 'text-evergreen font-semibold',
+    container:    'bg-primary active:opacity-80',
+    label:        'text-white font-semibold',
+    spinnerColor: '#FFFFFF',
+  },
+  soft: {
+    container:    'bg-primary/10 active:opacity-70',
+    label:        'text-primary font-semibold',
+    spinnerColor: '#23744D',
   },
   outline: {
-    container: 'border border-evergreen bg-transparent active:opacity-70',
-    label: 'text-evergreen font-medium',
+    container:    'border-2 border-primary bg-transparent active:opacity-70',
+    label:        'text-primary font-medium',
+    spinnerColor: '#23744D',
+  },
+  secondary: {
+    container:    'bg-secondary active:opacity-80',
+    label:        'text-white font-semibold',
+    spinnerColor: '#FFFFFF',
   },
   ghost: {
-    container: 'bg-transparent active:opacity-60',
-    label: 'text-evergreen font-medium',
+    container:    'bg-transparent active:opacity-60',
+    label:        'text-evergreen font-medium',
+    spinnerColor: '#2F4F3F',
   },
 };
 
 const sizeStyles: Record<Size, { container: string; label: string }> = {
-  sm: { container: 'px-4 py-2 rounded-xl', label: 'text-sm' },
-  md: { container: 'px-5 py-3 rounded-2xl', label: 'text-base' },
-  lg: { container: 'px-6 py-4 rounded-2xl', label: 'text-lg' },
+  sm: { container: 'h-9  px-4  rounded-xl',  label: 'text-xs' },
+  md: { container: 'h-11 px-5  rounded-xl',  label: 'text-sm' },
+  lg: { container: 'h-12 px-8  rounded-xl',  label: 'text-base' },
+  xl: { container: 'h-14 px-10 rounded-2xl', label: 'text-lg' },
 };
 
 export function Button({
@@ -45,31 +67,29 @@ export function Button({
   ...rest
 }: ButtonProps) {
   const isDisabled = disabled || loading;
+  const styles = variantStyles[variant];
 
   return (
     <Pressable
       disabled={isDisabled}
       className={cn(
         'flex-row items-center justify-center',
-        variantStyles[variant].container,
+        styles.container,
         sizeStyles[size].container,
         isDisabled && 'opacity-50',
-        className
+        className,
       )}
       {...rest}
     >
       {loading ? (
-        <ActivityIndicator
-          size="small"
-          color={variant === 'filled' ? '#2F4A3E' : '#DDA73A'}
-        />
+        <ActivityIndicator size="small" color={styles.spinnerColor} />
       ) : (
         <Text
           className={cn(
             'font-sans text-center',
-            variantStyles[variant].label,
+            styles.label,
             sizeStyles[size].label,
-            labelClassName
+            labelClassName,
           )}
         >
           {label}
