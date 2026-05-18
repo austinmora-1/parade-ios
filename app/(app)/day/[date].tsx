@@ -13,11 +13,15 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ChevronLeft, Clock, MapPin } from 'lucide-react-native';
-import { useQuery } from '@tanstack/react-query';
+import { ChevronLeft, Clock, MapPin, Check } from 'lucide-react-native';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO, isToday } from 'date-fns';
+import { useState, useCallback, useEffect } from 'react';
+import * as Haptics from 'expo-haptics';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { usePlannerStore } from '@/stores/plannerStore';
+import type { TimeSlot } from '@/types/planner';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -50,18 +54,14 @@ function activityAccent(activity?: string): string {
   return ACTIVITY_COLOR[activity ?? ''] ?? '#23744D';
 }
 
-/** Status → pill styling for free / busy / maybe */
-function statusPillStyle(status: string | null | undefined) {
-  switch (status) {
-    case 'free':
-      return { bg: 'rgba(35,116,77,0.12)', fg: '#23744D', label: 'Free' };
-    case 'busy':
-      return { bg: 'rgba(212,101,73,0.12)', fg: '#D46549', label: 'Busy' };
-    case 'maybe':
-      return { bg: 'rgba(180,83,9,0.12)', fg: '#92400E', label: 'Maybe' };
-    default:
-      return null;
-  }
+/** DB column underscore_case → TimeSlot kebab-case */
+function colToTimeSlot(col: string): TimeSlot {
+  return col.replace(/_/g, '-') as TimeSlot;
+}
+
+/** Treat truthy values (true OR legacy 'free' string) as free */
+function isFree(v: unknown): boolean {
+  return v === true || v === 'free';
 }
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
@@ -94,6 +94,10 @@ function useDayData(userId: string | undefined, date: string) {
 export default function DayDetailScreen() {
   const { date } = useLocalSearchParams<{ date: string }>();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const setAvailability = usePlannerStore((s) => s.setAvailability);
+  const setUserId       = usePlannerStore((s) => s.setUserId);
+
   const { data, isLoading } = useDayData(user?.id, date);
   const avail: any = data?.avail;
   const plans = (data?.plans ?? []) as any[];
@@ -101,6 +105,85 @@ export default function DayDetailScreen() {
   const parsedDate = date ? parseISO(date) : new Date();
   const today = isToday(parsedDate);
   const slots = Object.entries(SLOT_LABELS);
+
+  // Optimistic overrides keyed by underscore_case column name
+  const [optimistic, setOptimistic] = useState<Record<string, boolean>>({});
+  const [saving, setSaving] = useState<Set<string>>(new Set());
+
+  // Reset optimistic state when day changes
+  useEffect(() => {
+    setOptimistic({});
+  }, [date]);
+
+  // Ensure planner store has the userId set
+  useEffect(() => {
+    if (user?.id) setUserId(user.id);
+  }, [user?.id]);
+
+  /** True if this slot is marked free (optimistic > server) */
+  const slotIsFree = (slotCol: string): boolean => {
+    if (slotCol in optimistic) return optimistic[slotCol];
+    return isFree(avail?.[slotCol]);
+  };
+
+  const toggleSlot = useCallback(
+    async (slotCol: string) => {
+      const current  = slotIsFree(slotCol);
+      const newValue = !current;
+
+      // Optimistic + haptic
+      Haptics.selectionAsync();
+      setOptimistic((prev) => ({ ...prev, [slotCol]: newValue }));
+      setSaving((prev) => new Set(prev).add(slotCol));
+
+      try {
+        await setAvailability(parsedDate, colToTimeSlot(slotCol), newValue);
+        // Sync this screen's query with the new server state
+        await queryClient.invalidateQueries({ queryKey: ['day', user?.id, date] });
+      } catch (err) {
+        console.error('toggleSlot failed', err);
+        // Roll back optimistic update
+        setOptimistic((prev) => {
+          const next = { ...prev };
+          delete next[slotCol];
+          return next;
+        });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      } finally {
+        setSaving((prev) => {
+          const next = new Set(prev);
+          next.delete(slotCol);
+          return next;
+        });
+      }
+    },
+    [setAvailability, parsedDate, queryClient, user?.id, date, avail, optimistic],
+  );
+
+  /** Mark all six slots free (or all busy if all currently free) */
+  const toggleAllSlots = useCallback(async () => {
+    const allFree = slots.every(([col]) => slotIsFree(col));
+    const newValue = !allFree;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    // Optimistic all
+    const updates: Record<string, boolean> = {};
+    slots.forEach(([col]) => { updates[col] = newValue; });
+    setOptimistic((prev) => ({ ...prev, ...updates }));
+
+    try {
+      await Promise.all(
+        slots.map(([col]) =>
+          setAvailability(parsedDate, colToTimeSlot(col), newValue),
+        ),
+      );
+      await queryClient.invalidateQueries({ queryKey: ['day', user?.id, date] });
+    } catch (err) {
+      console.error('toggleAllSlots failed', err);
+      setOptimistic({});
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+  }, [slots, setAvailability, parsedDate, queryClient, user?.id, date, avail, optimistic]);
 
   return (
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
@@ -129,29 +212,59 @@ export default function DayDetailScreen() {
         <ScrollView contentContainerClassName="px-5 pb-10 gap-5 pt-2">
           {/* ── Availability ─────────────────────────────────────────── */}
           <View className="gap-2">
-            <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground px-1">
-              Availability
-            </Text>
+            <View className="flex-row items-center justify-between px-1">
+              <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                Availability
+              </Text>
+              <Pressable onPress={toggleAllSlots} hitSlop={6} className="active:opacity-60">
+                <Text className="font-sans text-xs font-semibold text-primary">
+                  {slots.every(([col]) => slotIsFree(col)) ? 'Clear all' : 'Mark all free'}
+                </Text>
+              </Pressable>
+            </View>
 
             <View className="bg-white rounded-2xl border border-border/30 shadow-sm overflow-hidden">
-              {slots.map(([slot, label], i) => {
-                const status = avail?.[slot] as string | null;
-                const pill = statusPillStyle(status);
+              {slots.map(([slotCol, label], i) => {
+                const free = slotIsFree(slotCol);
+                const isSaving = saving.has(slotCol);
                 return (
-                  <View key={slot}>
-                    <View className="flex-row items-center px-4 py-3 gap-3">
+                  <View key={slotCol}>
+                    <Pressable
+                      onPress={() => toggleSlot(slotCol)}
+                      disabled={isSaving}
+                      className="flex-row items-center px-4 py-3.5 gap-3 active:bg-muted/30"
+                    >
+                      {/* Checkbox-style indicator */}
+                      <View
+                        style={{
+                          width: 22,
+                          height: 22,
+                          borderRadius: 6,
+                          borderWidth: 1.5,
+                          borderColor: free ? '#23744D' : 'rgba(146,146,152,0.4)',
+                          backgroundColor: free ? '#23744D' : 'transparent',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          opacity: isSaving ? 0.5 : 1,
+                        }}
+                      >
+                        {free && <Check size={14} color="#FFFFFF" strokeWidth={2.5} />}
+                      </View>
+
                       <View className="flex-1">
                         <Text className="font-sans text-sm text-foreground font-medium">
                           {label}
                         </Text>
                         <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">
-                          {SLOT_TIME[slot]}
+                          {SLOT_TIME[slotCol]}
                         </Text>
                       </View>
-                      {pill ? (
+
+                      {/* Status pill */}
+                      {free ? (
                         <View
                           style={{
-                            backgroundColor: pill.bg,
+                            backgroundColor: 'rgba(35,116,77,0.12)',
                             borderRadius: 999,
                             paddingHorizontal: 10,
                             paddingVertical: 3,
@@ -161,18 +274,18 @@ export default function DayDetailScreen() {
                             style={{
                               fontFamily: 'Inter_600SemiBold',
                               fontSize: 11,
-                              color: pill.fg,
+                              color: '#23744D',
                             }}
                           >
-                            {pill.label}
+                            Free
                           </Text>
                         </View>
                       ) : (
                         <Text className="font-sans text-xs text-muted-foreground/40">
-                          —
+                          Tap to mark free
                         </Text>
                       )}
-                    </View>
+                    </Pressable>
                     {i < slots.length - 1 && (
                       <View className="h-px bg-border/30 mx-4" />
                     )}
@@ -231,18 +344,8 @@ export default function DayDetailScreen() {
             </View>
           )}
 
-          {/* ── Empty state ──────────────────────────────────────────── */}
-          {!avail && plans.length === 0 && (
-            <View className="bg-white rounded-2xl border border-dashed border-border/40 px-4 py-8 items-center gap-2">
-              <Text style={{ fontSize: 28 }}>📅</Text>
-              <Text className="font-sans text-sm text-muted-foreground">
-                Nothing logged for this day
-              </Text>
-              <Text className="font-sans text-xs text-muted-foreground/60">
-                Mark your availability or add a plan
-              </Text>
-            </View>
-          )}
+          {/* No "nothing logged" state any more — availability is always
+              actionable, and plans are optional. */}
         </ScrollView>
       )}
     </SafeAreaView>
