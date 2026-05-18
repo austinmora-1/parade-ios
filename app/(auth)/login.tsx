@@ -114,10 +114,17 @@ export default function LoginScreen() {
 
   /* ── Render helpers ── */
   const title = mode === 'signup' ? 'Create account' : mode === 'forgot' ? 'Reset password' : 'Welcome back';
+  const subtitle =
+    mode === 'signup'
+      ? 'Sign up to join your friends on Parade'
+      : mode === 'forgot'
+      ? "Enter your email and we'll send a reset link."
+      : 'Sign in to your Parade account';
 
   return (
-    <View className="flex-1 bg-evergreen">
-      <SafeAreaView className="flex-1" edges={['top']}>
+    /* Dark forest background (matches PWA gradient base color #0F1A14) */
+    <View className="flex-1" style={{ backgroundColor: '#0F1A14' }}>
+      <SafeAreaView className="flex-1" edges={['top', 'bottom']}>
         <KeyboardAvoidingView
           className="flex-1"
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -125,30 +132,59 @@ export default function LoginScreen() {
         >
           <ScrollView
             className="flex-1"
-            contentContainerClassName="px-6 pt-12 pb-16 gap-8"
+            contentContainerClassName="flex-grow items-center justify-center px-6 py-8 gap-6"
             keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
           >
-            {/* Wordmark */}
-            <View className="gap-1">
-              <Text style={{ fontFamily: 'BungeeShade_400Regular' }} className="text-5xl text-chalk">
+            {/* ── Wordmark ─────────────────────────────────────────────── */}
+            <View className="items-center gap-1">
+              <Text
+                style={{
+                  fontFamily: 'BungeeShade_400Regular',
+                  fontSize: 36,
+                  color: '#23744D',                 // parade green (matches PWA)
+                  textShadowColor: 'rgba(0,0,0,0.4)',
+                  textShadowOffset: { width: 0, height: 4 },
+                  textShadowRadius: 10,
+                  letterSpacing: 1,
+                }}
+              >
                 parade
               </Text>
-              <Text className="font-sans text-sage text-base">Plans worth keeping.</Text>
+              <Text className="font-sans text-base" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                Plans worth keeping.
+              </Text>
             </View>
 
-            {/* Form card */}
-            <View className="bg-chalk/10 rounded-3xl p-6 gap-5">
-              <Text className="font-sans font-semibold text-chalk text-xl">{title}</Text>
+            {/* ── Form card (white on dark bg) ─────────────────────────── */}
+            <View
+              className="w-full rounded-2xl bg-white p-6 gap-5"
+              style={{
+                maxWidth: 384,
+                shadowColor: '#000000',
+                shadowOpacity: 0.35,
+                shadowRadius: 28,
+                shadowOffset: { width: 0, height: 12 },
+                elevation: 12,
+              }}
+            >
+              {/* Title + subtitle */}
+              <View className="gap-1">
+                <Text className="font-display text-xl text-foreground">{title}</Text>
+                <Text className="font-sans text-sm text-muted-foreground">{subtitle}</Text>
+              </View>
 
               {/* Forgot-password success */}
               {mode === 'forgot' && resetSent ? (
                 <View className="gap-4">
-                  <Text className="font-sans text-chalk/80 text-sm leading-relaxed">
+                  <Text className="font-sans text-sm text-foreground leading-relaxed">
                     Check your inbox — we sent a reset link to{' '}
-                    <Text className="text-marigold">{email.trim()}</Text>.
+                    <Text className="text-primary font-semibold">{email.trim()}</Text>.
                   </Text>
-                  <Pressable onPress={() => { setMode('signin'); setResetSent(false); }}>
-                    <Text className="font-sans text-marigold text-sm">← Back to sign in</Text>
+                  <Pressable onPress={() => { setMode('signin'); setResetSent(false); }} hitSlop={6}>
+                    <Text className="font-sans text-sm text-primary font-semibold">
+                      ← Back to sign in
+                    </Text>
                   </Pressable>
                 </View>
               ) : (
@@ -163,7 +199,6 @@ export default function LoginScreen() {
                         autoCorrect={false}
                         value={displayName}
                         onChangeText={(t) => { setDisplayName(t); clearError(); }}
-                        className="bg-chalk/10 border-chalk/20 text-chalk"
                       />
                     )}
                     <Input
@@ -174,7 +209,6 @@ export default function LoginScreen() {
                       autoComplete="email"
                       value={email}
                       onChangeText={(t) => { setEmail(t); clearError(); }}
-                      className="bg-chalk/10 border-chalk/20 text-chalk"
                     />
                     {mode !== 'forgot' && (
                       <Input
@@ -184,14 +218,26 @@ export default function LoginScreen() {
                         autoCapitalize="none"
                         value={password}
                         onChangeText={(t) => { setPassword(t); clearError(); }}
-                        className="bg-chalk/10 border-chalk/20 text-chalk"
                       />
                     )}
                   </View>
 
+                  {/* Forgot password link (sign-in only) */}
+                  {mode === 'signin' && (
+                    <Pressable
+                      onPress={() => { setMode('forgot'); clearError(); }}
+                      hitSlop={6}
+                      style={{ marginTop: -4, alignSelf: 'flex-end' }}
+                    >
+                      <Text className="font-sans text-xs text-primary font-medium">
+                        Forgot password?
+                      </Text>
+                    </Pressable>
+                  )}
+
                   {/* Error */}
                   {error ? (
-                    <Text className="font-sans text-sm text-ember">{error}</Text>
+                    <Text className="font-sans text-sm text-destructive">{error}</Text>
                   ) : null}
 
                   {/* Primary CTA */}
@@ -226,64 +272,88 @@ export default function LoginScreen() {
                     />
                   )}
 
-                  {/* Divider + Apple Sign-In (sign-in / sign-up only) */}
+                  {/* Apple Sign-In with divider (sign-in / sign-up only) */}
                   {mode !== 'forgot' && (
                     <>
                       <View className="flex-row items-center gap-3">
-                        <View className="flex-1 h-px bg-chalk/20" />
-                        <Text className="font-sans text-chalk/40 text-xs">or</Text>
-                        <View className="flex-1 h-px bg-chalk/20" />
+                        <View className="flex-1 h-px bg-border" />
+                        <Text className="font-sans text-muted-foreground text-xs">or</Text>
+                        <View className="flex-1 h-px bg-border" />
                       </View>
                       <AppleAuthentication.AppleAuthenticationButton
                         buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-                        buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
-                        cornerRadius={16}
-                        style={{ height: 52 }}
+                        buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                        cornerRadius={12}
+                        style={{ height: 48 }}
                         onPress={handleAppleSignIn}
                       />
                     </>
-                  )}
-
-                  {/* Forgot password link */}
-                  {mode === 'signin' && (
-                    <Pressable
-                      onPress={() => { setMode('forgot'); clearError(); }}
-                      className="items-center"
-                    >
-                      <Text className="font-sans text-sm text-chalk/50">Forgot password?</Text>
-                    </Pressable>
                   )}
 
                   {/* Back link for forgot */}
                   {mode === 'forgot' && (
                     <Pressable
                       onPress={() => { setMode('signin'); clearError(); }}
+                      hitSlop={6}
                       className="items-center"
                     >
-                      <Text className="font-sans text-sm text-chalk/50">← Back to sign in</Text>
+                      <Text className="font-sans text-sm text-primary font-medium">
+                        ← Back to sign in
+                      </Text>
+                    </Pressable>
+                  )}
+
+                  {/* In-card sign-up toggle (matches PWA pattern) */}
+                  {mode === 'signup' && (
+                    <Pressable
+                      onPress={() => { setMode('signin'); clearError(); }}
+                      hitSlop={6}
+                      className="items-center"
+                    >
+                      <Text className="font-sans text-xs text-muted-foreground text-center">
+                        Already have an account?{' '}
+                        <Text className="text-primary font-semibold">Sign in</Text>
+                      </Text>
                     </Pressable>
                   )}
                 </>
               )}
             </View>
 
-            {/* Toggle sign-in / sign-up */}
-            {mode !== 'forgot' && (
+            {/* ── Below-card sign-up toggle (sign-in mode only) ────────── */}
+            {mode === 'signin' && (
               <Pressable
-                onPress={() => {
-                  setMode(mode === 'signin' ? 'signup' : 'signin');
-                  clearError();
-                }}
-                className="items-center"
+                onPress={() => { setMode('signup'); clearError(); }}
+                hitSlop={6}
               >
-                <Text className="font-sans text-chalk/60 text-sm">
-                  {mode === 'signin' ? "Don't have an account? " : 'Already have an account? '}
-                  <Text className="text-marigold font-medium">
-                    {mode === 'signin' ? 'Sign up' : 'Sign in'}
-                  </Text>
+                <Text
+                  className="font-sans text-sm text-center"
+                  style={{ color: 'rgba(255,255,255,0.6)' }}
+                >
+                  Don't have an account?{' '}
+                  <Text className="text-primary font-medium">Sign up</Text>
                 </Text>
               </Pressable>
             )}
+
+            {/* ── Footer legal links ─────────────────────────────────── */}
+            <View className="flex-row items-center justify-center gap-3 mt-2">
+              <Text
+                className="font-sans text-xs underline"
+                style={{ color: 'rgba(255,255,255,0.5)' }}
+              >
+                Privacy Policy
+              </Text>
+              <Text className="font-sans text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                ·
+              </Text>
+              <Text
+                className="font-sans text-xs underline"
+                style={{ color: 'rgba(255,255,255,0.5)' }}
+              >
+                Terms of Service
+              </Text>
+            </View>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
