@@ -1,28 +1,219 @@
+/**
+ * Friends tab — matches PWA Friends page layout.
+ *
+ * Structure:
+ *  1. Header: "Friends" (Fraunces) + labeled "Invite" button (native Share)
+ *  2. Search bar (mobile-only; PWA omits but we keep for usability)
+ *  3. Pending section (if any) — amber numeric badge
+ *  4. Connected (N) — Users icon + count
+ *  5. Invited section (if any) — muted numeric badge
+ *  6. Empty state card with Invite CTA
+ *
+ * Friend row: avatar (vibe ring + green dot if free today) + name +
+ *             subtitle (vibe label or "Tap to connect") + ChevronRight
+ */
 import {
   ScrollView,
   View,
   Text,
   Pressable,
-  ActivityIndicator,
   RefreshControl,
   TextInput,
+  Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useCallback, useState, useEffect, useMemo } from 'react';
-import { Search, UserPlus } from 'lucide-react-native';
+import { format } from 'date-fns';
+import { Search, UserPlus, Users, ChevronRight } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlannerStore } from '@/stores/plannerStore';
+import { useFriendDashboardData } from '@/hooks/useFriendDashboardData';
 import { Avatar } from '@/components/primitives/Avatar';
+import { Skeleton } from '@/components/primitives/Skeleton';
+
+// ─── Vibe emoji map (matches dashboard) ──────────────────────────────────────
+
+const VIBE_EMOJI: Record<string, string> = {
+  social: '🎉',
+  chill: '🛋️',
+  athletic: '🏃',
+  productive: '💼',
+  custom: '✨',
+};
+
+// ─── Sub-components ──────────────────────────────────────────────────────────
+
+/** Numeric badge bubble (matches PWA section header bubbles) */
+function NumericBubble({
+  count,
+  tone,
+}: {
+  count: number;
+  tone: 'green' | 'amber' | 'muted';
+}) {
+  const colors = {
+    green: { bg: 'rgba(35,116,77,0.12)',  fg: '#23744D' },
+    amber: { bg: 'rgba(180,83,9,0.12)',   fg: '#92400E' },
+    muted: { bg: 'rgba(146,146,152,0.18)', fg: '#929298' },
+  }[tone];
+
+  return (
+    <View
+      style={{
+        backgroundColor: colors.bg,
+        width: 20, height: 20, borderRadius: 999,
+        alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 10, color: colors.fg }}>
+        {count}
+      </Text>
+    </View>
+  );
+}
+
+/** Friend row — avatar with vibe ring + name + subtitle + chevron */
+function FriendRow({
+  friend,
+  vibe,
+  freeToday,
+  onPress,
+}: {
+  friend: any;
+  vibe?: string | null;
+  freeToday?: boolean;
+  onPress: () => void;
+}) {
+  // Subtitle precedence: vibe label > "Tap to connect"
+  let subtitle: string;
+  if (vibe) {
+    subtitle = `${VIBE_EMOJI[vibe] ?? '✨'} ${vibe}`;
+  } else if (freeToday) {
+    subtitle = 'Free today';
+  } else {
+    subtitle = 'Tap to connect';
+  }
+
+  return (
+    <Pressable
+      onPress={onPress}
+      className="flex-row items-center bg-white rounded-xl px-3 py-2.5 border border-border/20 gap-3 active:opacity-80 shadow-sm"
+    >
+      {/* Avatar with vibe ring + free-today dot */}
+      <View style={{ position: 'relative' }}>
+        <View
+          style={
+            vibe
+              ? {
+                  borderWidth: 2,
+                  borderColor: '#23744D',
+                  borderRadius: 999,
+                  padding: 1,
+                }
+              : freeToday
+              ? {
+                  borderWidth: 2,
+                  borderColor: 'rgba(61,140,100,0.5)',
+                  borderRadius: 999,
+                  padding: 1,
+                }
+              : { padding: 3 }
+          }
+        >
+          <Avatar
+            url={friend.avatar}
+            displayName={friend.name}
+            size="md"
+          />
+        </View>
+
+        {/* Green pulsing dot if free today */}
+        {freeToday && (
+          <View
+            style={{
+              position: 'absolute',
+              bottom: -2, right: -2,
+              width: 14, height: 14,
+              borderRadius: 999,
+              backgroundColor: '#3D8C64',
+              borderWidth: 2,
+              borderColor: '#FFFFFF',
+            }}
+          />
+        )}
+      </View>
+
+      {/* Name + subtitle */}
+      <View className="flex-1 min-w-0">
+        <Text className="font-sans font-medium text-foreground text-sm" numberOfLines={1}>
+          {friend.name}
+        </Text>
+        <Text className="font-sans text-xs text-muted-foreground" numberOfLines={1}>
+          {subtitle}
+        </Text>
+      </View>
+
+      <ChevronRight size={16} color="rgba(146,146,152,0.4)" strokeWidth={2} />
+    </Pressable>
+  );
+}
+
+/** Section header — icon/bubble + label */
+function SectionHeader({
+  label,
+  bubble,
+  icon,
+}: {
+  label: string;
+  bubble?: React.ReactNode;
+  icon?: React.ReactNode;
+}) {
+  return (
+    <View className="flex-row items-center gap-1.5 px-1 mb-2">
+      {bubble ?? icon}
+      <Text className="font-sans text-sm font-semibold text-foreground">{label}</Text>
+    </View>
+  );
+}
+
+/** Empty state card — matches PWA */
+function EmptyState({ onInvite }: { onInvite: () => void }) {
+  return (
+    <View className="mx-5 bg-white rounded-2xl border border-border/30 px-6 py-8 items-center gap-3 shadow-sm">
+      <Text style={{ fontSize: 32 }}>👥</Text>
+      <Text className="font-sans text-sm font-semibold text-foreground text-center">
+        Your friends will appear here
+      </Text>
+      <Text className="font-sans text-xs text-muted-foreground text-center">
+        When you connect with friends, you'll see their availability, vibes, and be
+        able to plan together.
+      </Text>
+      <Pressable
+        onPress={onInvite}
+        className="flex-row items-center gap-1.5 bg-primary rounded-xl px-4 py-2.5 mt-2 active:opacity-80"
+      >
+        <UserPlus size={14} color="#FFFFFF" strokeWidth={2} />
+        <Text className="font-sans text-sm font-semibold text-white">
+          Find or Invite Friends
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
+// ─── Main tab ────────────────────────────────────────────────────────────────
 
 export default function FriendsTab() {
   const { user } = useAuth();
-  const setUserId = usePlannerStore((s) => s.setUserId);
+  const setUserId   = usePlannerStore((s) => s.setUserId);
   const loadAllData = usePlannerStore((s) => s.loadAllData);
-  const friends = usePlannerStore((s) => s.friends);
-  const loading = usePlannerStore((s) => s.isLoading);
+  const friends     = usePlannerStore((s) => s.friends);
+  const isLoading   = usePlannerStore((s) => s.isLoading);
+  const { data: friendData } = useFriendDashboardData();
+
+  const [search, setSearch]         = useState('');
   const [refreshing, setRefreshing] = useState(false);
-  const [search, setSearch] = useState('');
 
   useEffect(() => {
     if (user?.id) {
@@ -37,11 +228,41 @@ export default function FriendsTab() {
     setRefreshing(false);
   }, [loadAllData]);
 
+  const onInvite = useCallback(async () => {
+    try {
+      await Share.share({
+        message:
+          "Join me on Parade — let's hang out IRL more often. https://helloparade.app",
+      });
+    } catch {
+      /* user cancelled — silent */
+    }
+  }, []);
+
+  // ── Filter + group ─────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     if (!search.trim()) return friends;
     const q = search.toLowerCase();
     return friends.filter((f) => f.name.toLowerCase().includes(q));
   }, [friends, search]);
+
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+
+  /** Lookup vibe + free-today by friend.friendUserId */
+  function enrich(friendUserId: string | undefined) {
+    if (!friendUserId) return { vibe: null, freeToday: false };
+    const v = friendData?.find((d) => d.userId === friendUserId);
+    return {
+      vibe: v?.currentVibe ?? null,
+      freeToday: v?.freeDates.includes(todayStr) ?? false,
+    };
+  }
+
+  const connected = filtered.filter((f) => f.status === 'connected');
+  const pending   = filtered.filter((f) => f.status === 'pending');
+  const invited   = filtered.filter((f) => f.status === 'invited');
+
+  const showEmpty = !isLoading && friends.length === 0;
 
   return (
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
@@ -50,72 +271,147 @@ export default function FriendsTab() {
         contentContainerClassName="pb-8"
         keyboardShouldPersistTaps="handled"
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#DDA73A" />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#23744D"
+          />
         }
       >
-        {/* Header */}
+        {/* ── Header ──────────────────────────────────────────────────── */}
         <View className="flex-row items-center justify-between px-5 pt-4 pb-3">
-          <Text className="font-sans font-semibold text-evergreen text-2xl">Friends</Text>
+          <Text className="font-display text-2xl text-foreground">Friends</Text>
+
           <Pressable
-            className="w-10 h-10 rounded-full bg-evergreen/8 items-center justify-center"
-            hitSlop={8}
+            onPress={onInvite}
+            className="flex-row items-center gap-1.5 bg-primary rounded-xl px-3 py-2 active:opacity-80"
+            hitSlop={4}
           >
-            <UserPlus size={20} color="#2F4A3E" strokeWidth={1.75} />
+            <UserPlus size={14} color="#FFFFFF" strokeWidth={2.2} />
+            <Text className="font-sans text-sm font-semibold text-white">Invite</Text>
           </Pressable>
         </View>
 
-        {/* Search */}
-        <View className="px-5 pb-3">
-          <View className="flex-row items-center bg-white rounded-2xl border border-border/40 px-4 gap-3">
-            <Search size={16} color="#9CB094" strokeWidth={1.75} />
-            <TextInput
-              value={search}
-              onChangeText={setSearch}
-              placeholder="Search friends"
-              placeholderTextColor="#9CB094"
-              className="flex-1 font-sans text-base text-foreground py-3"
-              autoCapitalize="none"
-              autoCorrect={false}
-              clearButtonMode="while-editing"
-            />
+        {/* ── Search ──────────────────────────────────────────────────── */}
+        {friends.length > 0 && (
+          <View className="px-5 pb-3">
+            <View className="flex-row items-center bg-white rounded-xl border border-border/30 px-3 gap-2 shadow-sm">
+              <Search size={15} color="#929298" strokeWidth={1.75} />
+              <TextInput
+                value={search}
+                onChangeText={setSearch}
+                placeholder="Search friends"
+                placeholderTextColor="#929298"
+                className="flex-1 font-sans text-sm text-foreground py-2.5"
+                autoCapitalize="none"
+                autoCorrect={false}
+                clearButtonMode="while-editing"
+              />
+            </View>
           </View>
-        </View>
+        )}
 
-        {loading && !refreshing ? (
-          <ActivityIndicator className="mt-12" color="#DDA73A" />
-        ) : filtered.length === 0 ? (
-          <View className="items-center justify-center py-20 px-8">
-            <Text className="font-sans text-foreground/40 text-center text-base">
-              {search.trim() ? 'No friends match that search.' : "You haven't added any friends yet."}
+        {/* ── Loading skeleton ─────────────────────────────────────────── */}
+        {isLoading && friends.length === 0 && (
+          <View className="px-5 gap-2">
+            {[0, 1, 2, 3].map((i) => (
+              <View
+                key={i}
+                className="flex-row items-center bg-white rounded-xl px-3 py-2.5 border border-border/20 gap-3 shadow-sm"
+              >
+                <Skeleton width={40} height={40} rounded="rounded-full" />
+                <View className="flex-1 gap-1.5">
+                  <Skeleton width="50%" height={12} />
+                  <Skeleton width="30%" height={10} />
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* ── Empty state ─────────────────────────────────────────────── */}
+        {showEmpty && <EmptyState onInvite={onInvite} />}
+
+        {/* ── Search returned nothing ─────────────────────────────────── */}
+        {!isLoading && friends.length > 0 && filtered.length === 0 && (
+          <View className="items-center py-12 px-8">
+            <Text className="font-sans text-sm text-muted-foreground text-center">
+              No friends match "{search}"
             </Text>
           </View>
-        ) : (
-          <View className="px-5 gap-2">
-            {filtered.map((friend) => (
-              <Pressable
-                key={friend.id}
-                onPress={() =>
-                  router.push(`/(app)/friend/${friend.friendUserId ?? friend.id}`)
-                }
-                className="flex-row items-center bg-white rounded-2xl px-4 py-3 border border-border/30 gap-4"
-              >
-                <Avatar
-                  url={friend.avatar}
-                  displayName={friend.name}
-                  size="md"
+        )}
+
+        {/* ── Sections ────────────────────────────────────────────────── */}
+        {!showEmpty && filtered.length > 0 && (
+          <View className="px-5 gap-5">
+            {/* Pending */}
+            {pending.length > 0 && (
+              <View className="gap-2">
+                <SectionHeader
+                  label="Pending"
+                  bubble={<NumericBubble count={pending.length} tone="amber" />}
                 />
-                <View className="flex-1 gap-0.5">
-                  <Text className="font-sans font-medium text-evergreen text-base">
-                    {friend.name}
-                  </Text>
-                  {friend.status === 'pending' && (
-                    <Text className="font-sans text-xs text-marigold">Pending</Text>
-                  )}
-                </View>
-                {/* Vibe dot — filled in Block 3 */}
-                <View className="w-2.5 h-2.5 rounded-full bg-sage/40" />
-              </Pressable>
-            ))}
+                {pending.map((friend) => {
+                  const { vibe, freeToday } = enrich(friend.friendUserId);
+                  return (
+                    <FriendRow
+                      key={friend.id}
+                      friend={friend}
+                      vibe={vibe}
+                      freeToday={freeToday}
+                      onPress={() =>
+                        router.push(
+                          `/(app)/friend/${friend.friendUserId ?? friend.id}`,
+                        )
+                      }
+                    />
+                  );
+                })}
+              </View>
+            )}
+
+            {/* Connected */}
+            {connected.length > 0 && (
+              <View className="gap-2">
+                <SectionHeader
+                  label={`Connected (${connected.length})`}
+                  icon={<Users size={14} color="#23744D" strokeWidth={2.2} />}
+                />
+                {connected.map((friend) => {
+                  const { vibe, freeToday } = enrich(friend.friendUserId);
+                  return (
+                    <FriendRow
+                      key={friend.id}
+                      friend={friend}
+                      vibe={vibe}
+                      freeToday={freeToday}
+                      onPress={() =>
+                        router.push(`/(app)/friend/${friend.friendUserId}`)
+                      }
+                    />
+                  );
+                })}
+              </View>
+            )}
+
+            {/* Invited */}
+            {invited.length > 0 && (
+              <View className="gap-2">
+                <SectionHeader
+                  label={`Invited (${invited.length})`}
+                  bubble={<NumericBubble count={invited.length} tone="muted" />}
+                />
+                {invited.map((friend) => (
+                  <FriendRow
+                    key={friend.id}
+                    friend={friend}
+                    onPress={() =>
+                      router.push(`/(app)/friend/${friend.id}`)
+                    }
+                  />
+                ))}
+              </View>
+            )}
           </View>
         )}
       </ScrollView>
