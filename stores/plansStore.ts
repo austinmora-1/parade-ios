@@ -382,8 +382,8 @@ export const usePlansStore = create<PlansState & PlansActions>((set, get) => ({
 
     if (error) {
       console.error('proposePlan error:', error);
-      const { toast } = await import('sonner');
-      toast.error('Could not send proposal. Try again.');
+      const { Alert } = await import('react-native');
+      Alert.alert('Could not send proposal', 'Please try again.');
       return;
     }
 
