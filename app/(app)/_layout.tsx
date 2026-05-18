@@ -19,6 +19,7 @@ function AppLayoutInner() {
       <Stack.Screen name="friend/[userId]" options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="day/[date]" options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="notifications" options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
     </Stack>
   );
 }
@@ -29,7 +30,7 @@ export default function AppLayout() {
   if (loading) {
     return (
       <View className="flex-1 items-center justify-center bg-chalk">
-        <ActivityIndicator size="large" color="#DDA73A" />
+        <ActivityIndicator size="large" color="#23744D" />
       </View>
     );
   }
