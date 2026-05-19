@@ -7,7 +7,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Bell } from 'lucide-react-native';
+import { Bell, Plus } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useCallback, useState, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -138,9 +138,9 @@ export default function HomeTab() {
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
       <ScrollView
         className="flex-1"
-        contentContainerClassName="pb-8"
+        contentContainerClassName="pb-24"
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#DDA73A" />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#23744D" />
         }
       >
         {/* ── Header ──────────────────────────────────────────────────────── */}
@@ -223,6 +223,27 @@ export default function HomeTab() {
           <UpcomingPlansWidget />
         </View>
       </ScrollView>
+
+      {/* ── Floating Action Button: new plan ────────────────────────────── */}
+      <Pressable
+        onPress={() => router.push('/(app)/new-plan')}
+        className="absolute right-5 bottom-6 active:opacity-80"
+        style={{
+          width: 56,
+          height: 56,
+          borderRadius: 28,
+          backgroundColor: '#23744D',
+          alignItems: 'center',
+          justifyContent: 'center',
+          shadowColor: '#040A2A',
+          shadowOpacity: 0.25,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 6 },
+          elevation: 8,
+        }}
+      >
+        <Plus size={26} color="#FFFFFF" strokeWidth={2.5} />
+      </Pressable>
     </SafeAreaView>
   );
 }

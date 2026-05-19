@@ -20,6 +20,10 @@ function AppLayoutInner() {
       <Stack.Screen name="day/[date]" options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="notifications" options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen
+        name="new-plan"
+        options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+      />
     </Stack>
   );
 }

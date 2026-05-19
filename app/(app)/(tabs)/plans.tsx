@@ -186,12 +186,19 @@ function WeekendHeroCard({
                 </View>
               ))}
 
-              {/* "Add plan" placeholder */}
+              {/* "Add plan" — taps through to plan creation with date pre-set */}
               {dayPlans.length === 0 && (
-                <View className="flex-row items-center gap-1 mt-0.5">
+                <Pressable
+                  onPress={(e) => {
+                    e.stopPropagation?.();
+                    router.push(`/(app)/new-plan?date=${dateStr}`);
+                  }}
+                  className="flex-row items-center gap-1 mt-0.5 active:opacity-60"
+                  hitSlop={4}
+                >
                   <Plus size={11} color="#929298" strokeWidth={2} />
                   <Text className="font-sans text-[11px] text-muted-foreground">Add plan</Text>
-                </View>
+                </Pressable>
               )}
             </Pressable>
           );
@@ -275,7 +282,10 @@ function WeekdayRow({
 
       {/* "+" button — dark circle (matches PWA inverted bg-foreground button) */}
       <Pressable
-        onPress={() => router.push(`/(app)/day/${dateStr}`)}
+        onPress={(e) => {
+          e.stopPropagation?.();
+          router.push(`/(app)/new-plan?date=${dateStr}`);
+        }}
         hitSlop={4}
         className="w-9 h-9 rounded-full items-center justify-center"
         style={{ backgroundColor: '#2F4F3F' }}

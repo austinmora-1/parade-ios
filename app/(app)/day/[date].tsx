@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ChevronLeft, Clock, MapPin, Check } from 'lucide-react-native';
+import { ChevronLeft, Clock, MapPin, Check, Plus } from 'lucide-react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO, isToday } from 'date-fns';
 import { useState, useCallback, useEffect } from 'react';
@@ -344,8 +344,16 @@ export default function DayDetailScreen() {
             </View>
           )}
 
-          {/* No "nothing logged" state any more — availability is always
-              actionable, and plans are optional. */}
+          {/* ── Create plan CTA ──────────────────────────────────────── */}
+          <Pressable
+            onPress={() => router.push(`/(app)/new-plan?date=${date}`)}
+            className="bg-primary rounded-2xl flex-row items-center justify-center gap-2 px-4 py-3.5 active:opacity-80 shadow-sm"
+          >
+            <Plus size={16} color="#FFFFFF" strokeWidth={2.5} />
+            <Text className="font-sans text-sm font-semibold text-white">
+              Create a plan for this day
+            </Text>
+          </Pressable>
         </ScrollView>
       )}
     </SafeAreaView>
