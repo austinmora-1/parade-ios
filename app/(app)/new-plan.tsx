@@ -25,15 +25,18 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { format, addDays, parseISO, isToday, isTomorrow, isSameDay } from 'date-fns';
 import * as Haptics from 'expo-haptics';
 import { X, Check } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlannerStore } from '@/stores/plannerStore';
+import { supabase } from '@/integrations/supabase/client';
 import { Avatar } from '@/components/primitives/Avatar';
 import type { TimeSlot } from '@/types/planner';
 
@@ -109,19 +112,44 @@ function Chip({
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function NewPlanScreen() {
-  const { date: dateParam, slot: slotParam } = useLocalSearchParams<{
-    date?: string;
-    slot?: string;
+  const {
+    date: dateParam,
+    slot: slotParam,
+    planId: planIdParam,
+  } = useLocalSearchParams<{
+    date?:   string;
+    slot?:   string;
+    planId?: string;
   }>();
   const { user } = useAuth();
-  const addPlan = usePlannerStore((s) => s.addPlan);
-  const friends = usePlannerStore((s) => s.friends);
-  const setUserId = usePlannerStore((s) => s.setUserId);
+  const addPlan    = usePlannerStore((s) => s.addPlan);
+  const updatePlan = usePlannerStore((s) => s.updatePlan);
+  const friends    = usePlannerStore((s) => s.friends);
+  const setUserId  = usePlannerStore((s) => s.setUserId);
+
+  const isEditMode = !!planIdParam;
 
   // Ensure planner store is bootstrapped
   useMemo(() => {
     if (user?.id) setUserId(user.id);
   }, [user?.id]);
+
+  // ── Load existing plan in edit mode ────────────────────────────────────────
+  const { data: existingPlan, isLoading: planLoading } = useQuery({
+    enabled: isEditMode,
+    queryKey: ['plan', planIdParam, 'edit-load'],
+    queryFn: async () => {
+      const [{ data: plan, error }, { data: participants }] = await Promise.all([
+        supabase.from('plans').select('*').eq('id', planIdParam!).single(),
+        supabase
+          .from('plan_participants')
+          .select('friend_id')
+          .eq('plan_id', planIdParam!),
+      ]);
+      if (error) throw error;
+      return { plan, participants: participants ?? [] };
+    },
+  });
 
   // ── Form state ─────────────────────────────────────────────────────────────
   const initialDate = dateParam ? parseISO(dateParam) : new Date();
@@ -134,6 +162,22 @@ export default function NewPlanScreen() {
   const [location, setLocation] = useState('');
   const [notes,    setNotes]    = useState('');
   const [invitedIds, setInvitedIds] = useState<Set<string>>(new Set());
+
+  // Hydrate form state when editing existing plan
+  useEffect(() => {
+    if (!existingPlan?.plan) return;
+    const p: any = existingPlan.plan;
+    setTitle(p.title ?? '');
+    setActivity(p.activity ?? 'drinks');
+    if (p.date) setDate(new Date(p.date));
+    if (p.time_slot) setTimeSlot(p.time_slot as TimeSlot);
+    setLocation(typeof p.location === 'string' ? p.location : p.location?.name ?? '');
+    setNotes(p.notes ?? '');
+    const friendIds = new Set(
+      (existingPlan.participants ?? []).map((row: any) => row.friend_id).filter(Boolean),
+    );
+    setInvitedIds(friendIds);
+  }, [existingPlan]);
 
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState<string | null>(null);
@@ -160,7 +204,7 @@ export default function NewPlanScreen() {
   }, []);
 
   // ── Submit ─────────────────────────────────────────────────────────────────
-  const handleCreate = useCallback(async () => {
+  const handleSubmit = useCallback(async () => {
     if (!title.trim()) {
       setError('Plan name is required');
       return;
@@ -181,7 +225,7 @@ export default function NewPlanScreen() {
           role: 'participant',
         }));
 
-      await addPlan({
+      const payload: any = {
         title:    title.trim(),
         activity: activity as any,
         date,
@@ -191,22 +235,34 @@ export default function NewPlanScreen() {
           ? { id: '', name: location.trim(), address: '' }
           : undefined,
         notes:    notes.trim() || undefined,
-        participants: participants as any,
+        participants,
         status:   participants.length > 0 ? 'proposed' : 'confirmed',
         feedVisibility: 'private',
         blocksAvailability: true,
-      } as any);
+      };
+
+      if (isEditMode && planIdParam) {
+        await updatePlan(planIdParam, payload);
+      } else {
+        await addPlan(payload);
+      }
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
     } catch (err: any) {
-      console.error('addPlan failed:', err);
+      console.error(isEditMode ? 'updatePlan failed:' : 'addPlan failed:', err);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert('Could not create plan', err?.message ?? 'Please try again.');
+      Alert.alert(
+        isEditMode ? 'Could not save changes' : 'Could not create plan',
+        err?.message ?? 'Please try again.',
+      );
     } finally {
       setSaving(false);
     }
-  }, [title, activity, date, timeSlot, location, notes, invitedIds, connectedFriends, addPlan]);
+  }, [
+    title, activity, date, timeSlot, location, notes, invitedIds,
+    connectedFriends, addPlan, updatePlan, isEditMode, planIdParam,
+  ]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
   const canSubmit = title.trim().length > 0 && !saving;
@@ -222,9 +278,11 @@ export default function NewPlanScreen() {
         >
           <X size={20} color="#2F4F3F" strokeWidth={2} />
         </Pressable>
-        <Text className="font-display text-base text-foreground">New plan</Text>
+        <Text className="font-display text-base text-foreground">
+          {isEditMode ? 'Edit plan' : 'New plan'}
+        </Text>
         <Pressable
-          onPress={handleCreate}
+          onPress={handleSubmit}
           disabled={!canSubmit}
           hitSlop={6}
           className={`rounded-xl px-3 py-1.5 ${canSubmit ? 'bg-primary' : 'bg-muted'}`}
@@ -234,7 +292,7 @@ export default function NewPlanScreen() {
               canSubmit ? 'text-white' : 'text-muted-foreground'
             }`}
           >
-            {saving ? 'Saving…' : 'Create'}
+            {saving ? 'Saving…' : isEditMode ? 'Save' : 'Create'}
           </Text>
         </Pressable>
       </View>
@@ -243,6 +301,9 @@ export default function NewPlanScreen() {
         className="flex-1"
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
+        {isEditMode && planLoading ? (
+          <ActivityIndicator className="mt-16" color="#23744D" />
+        ) : (
         <ScrollView
           className="flex-1"
           contentContainerClassName="px-5 py-5 gap-5"
@@ -460,6 +521,7 @@ export default function NewPlanScreen() {
             </View>
           )}
         </ScrollView>
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

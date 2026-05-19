@@ -13,7 +13,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ChevronLeft, Calendar, Clock, MapPin, Users, Check, X } from 'lucide-react-native';
+import { ChevronLeft, Calendar, Clock, MapPin, Users, Check, X, MoreHorizontal } from 'lucide-react-native';
+import { useActionSheet } from '@expo/react-native-action-sheet';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { useState, useCallback } from 'react';
@@ -93,6 +94,8 @@ export default function PlanDetailScreen() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const respondToProposal = usePlannerStore((s) => s.respondToProposal);
+  const deletePlan        = usePlannerStore((s) => s.deletePlan);
+  const { showActionSheetWithOptions } = useActionSheet();
 
   const { data, isLoading, error } = usePlan(planId);
   const plan = data?.plan as any;
@@ -108,6 +111,51 @@ export default function PlanDetailScreen() {
     | 'accepted'
     | 'declined'
     | undefined;
+
+  // ── Delete + Edit menu (owner only) ───────────────────────────────────────
+  const handleDelete = useCallback(() => {
+    Alert.alert(
+      'Delete plan?',
+      'This will remove the plan for everyone invited. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            try {
+              await deletePlan(planId);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              router.back();
+            } catch (err) {
+              console.error('Delete failed', err);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+              Alert.alert('Could not delete plan', 'Please try again.');
+            }
+          },
+        },
+      ],
+    );
+  }, [deletePlan, planId]);
+
+  const openOwnerMenu = useCallback(() => {
+    Haptics.selectionAsync();
+    const options = ['Edit plan', 'Delete plan', 'Cancel'];
+    const destructiveButtonIndex = 1;
+    const cancelButtonIndex = 2;
+
+    showActionSheetWithOptions(
+      { options, destructiveButtonIndex, cancelButtonIndex },
+      (selectedIndex) => {
+        if (selectedIndex === 0) {
+          router.push(`/(app)/new-plan?planId=${planId}`);
+        } else if (selectedIndex === 1) {
+          handleDelete();
+        }
+      },
+    );
+  }, [showActionSheetWithOptions, planId, handleDelete]);
 
   const handleRsvp = useCallback(
     async (response: 'accepted' | 'declined') => {
@@ -146,6 +194,15 @@ export default function PlanDetailScreen() {
         >
           {plan?.title ?? 'Plan'}
         </Text>
+        {isOwner && (
+          <Pressable
+            onPress={openOwnerMenu}
+            hitSlop={8}
+            className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
+          >
+            <MoreHorizontal size={20} color="#2F4F3F" strokeWidth={2} />
+          </Pressable>
+        )}
       </View>
 
       {isLoading ? (
