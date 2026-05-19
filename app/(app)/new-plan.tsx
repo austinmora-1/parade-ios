@@ -38,6 +38,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar } from '@/components/primitives/Avatar';
+import { LocationAutocomplete } from '@/components/primitives/LocationAutocomplete';
 import type { TimeSlot } from '@/types/planner';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -434,13 +435,11 @@ export default function NewPlanScreen() {
           {/* ── Location ─────────────────────────────────────────────── */}
           <View>
             <FieldLabel>Where (optional)</FieldLabel>
-            <TextInput
+            <LocationAutocomplete
               value={location}
-              onChangeText={setLocation}
-              placeholder="Address, place name, or neighborhood"
-              placeholderTextColor="#929298"
-              className="bg-white rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
-              maxLength={200}
+              onChange={setLocation}
+              placeholder="Bar, restaurant, neighborhood…"
+              types="establishment"
             />
           </View>
 

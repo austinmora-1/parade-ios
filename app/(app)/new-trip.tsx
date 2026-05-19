@@ -30,6 +30,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { setTripAvailability } from '@/lib/tripBusy';
+import { LocationAutocomplete } from '@/components/primitives/LocationAutocomplete';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -212,13 +213,11 @@ export default function NewTripScreen() {
           {/* Destination */}
           <View>
             <FieldLabel>Destination (optional)</FieldLabel>
-            <TextInput
+            <LocationAutocomplete
               value={location}
-              onChangeText={setLocation}
+              onChange={setLocation}
               placeholder="City, country, or region"
-              placeholderTextColor="#929298"
-              className="bg-white rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
-              maxLength={120}
+              types="(cities)"
             />
           </View>
 
