@@ -129,7 +129,7 @@ export const useFriendsStore = create<FriendsState & FriendsActions>((set, get) 
       }
     }
 
-    const { error } = await supabase.from('friendships').update(dbUpdates).eq('id', targetId);
+    const { error } = await supabase.from('friendships').update(dbUpdates as any).eq('id', targetId);
     if (error) {
       console.error('Error updating friend:', error);
       return;

@@ -43,7 +43,10 @@ export const useAvailabilityStore = create<AvailabilityState & AvailabilityActio
 
     const { error } = await supabase
       .from('availability')
-      .upsert({ user_id: userId, date: dateStr, [slotColumn]: available }, { onConflict: 'user_id,date' });
+      .upsert(
+        { user_id: userId, date: dateStr, [slotColumn]: available } as any,
+        { onConflict: 'user_id,date' },
+      );
 
     if (error) {
       console.error('Error setting availability:', error);

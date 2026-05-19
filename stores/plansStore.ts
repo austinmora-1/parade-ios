@@ -227,7 +227,7 @@ export const usePlansStore = create<PlansState & PlansActions>((set, get) => ({
 
     const { error } = await supabase
       .from('plans')
-      .update(dbUpdates)
+      .update(dbUpdates as any)
       .eq('id', id);
 
     if (error) {
