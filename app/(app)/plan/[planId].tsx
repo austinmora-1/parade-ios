@@ -9,13 +9,18 @@ import {
   Text,
   Pressable,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ChevronLeft, Calendar, Clock, MapPin, Users } from 'lucide-react-native';
-import { useQuery } from '@tanstack/react-query';
+import { ChevronLeft, Calendar, Clock, MapPin, Users, Check, X } from 'lucide-react-native';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
+import { useState, useCallback } from 'react';
+import * as Haptics from 'expo-haptics';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import { usePlannerStore } from '@/stores/plannerStore';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -48,7 +53,7 @@ function usePlan(planId: string) {
         supabase.from('plans').select('*').eq('id', planId).single(),
         supabase
           .from('plan_participants')
-          .select('friend_id, status, role')
+          .select('id, friend_id, status, role, responded_at')
           .eq('plan_id', planId),
       ]);
       if (error) throw error;
@@ -85,11 +90,44 @@ function DetailRow({
 
 export default function PlanDetailScreen() {
   const { planId } = useLocalSearchParams<{ planId: string }>();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const respondToProposal = usePlannerStore((s) => s.respondToProposal);
+
   const { data, isLoading, error } = usePlan(planId);
   const plan = data?.plan as any;
-  const participants = data?.participants ?? [];
+  const participants = (data?.participants ?? []) as any[];
+
+  const [rsvpLoading, setRsvpLoading] = useState<'accepted' | 'declined' | null>(null);
 
   const accentColor = activityAccent(plan?.activity);
+  const isOwner = plan?.user_id === user?.id;
+  const myParticipant = participants.find((p) => p.friend_id === user?.id);
+  const myRsvp = myParticipant?.status as
+    | 'invited'
+    | 'accepted'
+    | 'declined'
+    | undefined;
+
+  const handleRsvp = useCallback(
+    async (response: 'accepted' | 'declined') => {
+      if (!myParticipant?.id) return;
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setRsvpLoading(response);
+      try {
+        await respondToProposal(planId, myParticipant.id, response);
+        await queryClient.invalidateQueries({ queryKey: ['plan', planId] });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch (err) {
+        console.error('RSVP failed', err);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        Alert.alert('Could not save RSVP', 'Please try again.');
+      } finally {
+        setRsvpLoading(null);
+      }
+    },
+    [myParticipant?.id, planId, respondToProposal, queryClient],
+  );
 
   return (
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
@@ -176,6 +214,103 @@ export default function PlanDetailScreen() {
               </Text>
             </View>
           ) : null}
+
+          {/* ── RSVP block (non-owner participants only) ─────────────────── */}
+          {!isOwner && myParticipant && (
+            <View className="gap-2">
+              <Text className="font-sans text-[11px] font-semibold text-muted-foreground uppercase tracking-widest px-1">
+                Your RSVP
+              </Text>
+
+              {myRsvp === 'accepted' && (
+                <View
+                  className="flex-row items-center gap-2 rounded-2xl px-4 py-3.5 shadow-sm"
+                  style={{ backgroundColor: 'rgba(35,116,77,0.10)', borderWidth: 1, borderColor: 'rgba(35,116,77,0.25)' }}
+                >
+                  <Check size={18} color="#23744D" strokeWidth={2.5} />
+                  <Text className="flex-1 font-sans text-sm font-semibold text-primary">
+                    You're going
+                  </Text>
+                  <Pressable
+                    onPress={() => handleRsvp('declined')}
+                    disabled={rsvpLoading !== null}
+                    hitSlop={4}
+                  >
+                    <Text className="font-sans text-xs font-semibold text-muted-foreground underline">
+                      Change to no
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
+
+              {myRsvp === 'declined' && (
+                <View
+                  className="flex-row items-center gap-2 rounded-2xl px-4 py-3.5 shadow-sm"
+                  style={{ backgroundColor: 'rgba(212,101,73,0.08)', borderWidth: 1, borderColor: 'rgba(212,101,73,0.20)' }}
+                >
+                  <X size={18} color="#D46549" strokeWidth={2.5} />
+                  <Text className="flex-1 font-sans text-sm font-semibold text-secondary">
+                    You declined
+                  </Text>
+                  <Pressable
+                    onPress={() => handleRsvp('accepted')}
+                    disabled={rsvpLoading !== null}
+                    hitSlop={4}
+                  >
+                    <Text className="font-sans text-xs font-semibold text-muted-foreground underline">
+                      Change to yes
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
+
+              {(!myRsvp || myRsvp === 'invited') && (
+                <View className="flex-row gap-2">
+                  <Pressable
+                    onPress={() => handleRsvp('declined')}
+                    disabled={rsvpLoading !== null}
+                    className="flex-1 flex-row items-center justify-center gap-1.5 bg-white border border-border/40 rounded-2xl py-3.5 active:opacity-70 shadow-sm"
+                  >
+                    {rsvpLoading === 'declined' ? (
+                      <ActivityIndicator size="small" color="#D46549" />
+                    ) : (
+                      <>
+                        <X size={16} color="#D46549" strokeWidth={2.2} />
+                        <Text className="font-sans text-sm font-semibold text-secondary">
+                          Can't make it
+                        </Text>
+                      </>
+                    )}
+                  </Pressable>
+                  <Pressable
+                    onPress={() => handleRsvp('accepted')}
+                    disabled={rsvpLoading !== null}
+                    className="flex-1 flex-row items-center justify-center gap-1.5 bg-primary rounded-2xl py-3.5 active:opacity-80 shadow-sm"
+                  >
+                    {rsvpLoading === 'accepted' ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <>
+                        <Check size={16} color="#FFFFFF" strokeWidth={2.5} />
+                        <Text className="font-sans text-sm font-semibold text-white">
+                          I'm in
+                        </Text>
+                      </>
+                    )}
+                  </Pressable>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Owner sees a small "You proposed this plan" hint instead */}
+          {isOwner && participants.length > 0 && (
+            <View className="bg-primary/5 rounded-2xl px-4 py-3 border border-primary/15">
+              <Text className="font-sans text-xs text-primary text-center">
+                You proposed this plan · {participants.filter(p => p.status === 'accepted').length} of {participants.length} accepted
+              </Text>
+            </View>
+          )}
         </ScrollView>
       )}
     </SafeAreaView>
