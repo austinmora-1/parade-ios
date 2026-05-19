@@ -119,13 +119,16 @@ function AvailPill({ count, hasData }: AvailInfo) {
   );
 }
 
-/** Weekend hero — white card with Fraunces day numbers + plan pills */
+/** Weekend hero — white card with Fraunces day numbers + plan pills,
+ *  with an inline trip banner when a trip overlaps Sat/Sun. */
 function WeekendHeroCard({
   days,
   plans,
+  trip,
 }: {
   days: Date[];
   plans: Plan[];
+  trip?: any | null;
 }) {
   return (
     <View
@@ -141,6 +144,23 @@ function WeekendHeroCard({
           {format(days[0], 'MMM d')} – {format(days[1], 'd')}
         </Text>
       </View>
+
+      {/* Trip overlay — appears above the day grid when a trip spans the weekend */}
+      {trip && (
+        <Pressable
+          onPress={() => router.push(`/(app)/trip/${trip.id}`)}
+          className="flex-row items-center gap-2 bg-primary/8 rounded-xl px-3 py-2 active:opacity-70"
+        >
+          <Plane size={13} color="#23744D" strokeWidth={2} />
+          <Text
+            className="flex-1 font-sans text-xs font-medium text-primary"
+            numberOfLines={1}
+          >
+            {trip.location ? `Trip to ${trip.location}` : trip.name || 'Trip in progress'}
+          </Text>
+          <ChevronRight size={12} color="#23744D" strokeWidth={2} />
+        </Pressable>
+      )}
 
       {/* Sat / Sun grid */}
       <View className="flex-row gap-2.5">
@@ -216,10 +236,12 @@ function WeekdayRow({
   day,
   dayPlans,
   availInfo,
+  trip,
 }: {
   day: Date;
   dayPlans: Plan[];
   availInfo: AvailInfo;
+  trip?: any | null;
 }) {
   const today = isToday(day);
   const dateStr = format(day, 'yyyy-MM-dd');
@@ -256,6 +278,16 @@ function WeekdayRow({
           )}
         </View>
 
+        {/* Trip badge for days the user is away */}
+        {trip && (
+          <View className="flex-row items-center gap-1.5">
+            <Plane size={11} color="#23744D" strokeWidth={2} />
+            <Text className="font-sans text-xs font-medium text-primary flex-1" numberOfLines={1}>
+              {trip.location ? `In ${trip.location}` : 'Traveling'}
+            </Text>
+          </View>
+        )}
+
         {/* Plan items */}
         {dayPlans.length > 0 ? (
           dayPlans.slice(0, 2).map((p) => (
@@ -278,9 +310,9 @@ function WeekdayRow({
               </Text>
             </View>
           ))
-        ) : (
+        ) : !trip ? (
           <Text className="font-sans text-sm italic text-muted-foreground/60">Nothing yet</Text>
-        )}
+        ) : null}
       </View>
 
       {/* "+" button — dark circle (matches PWA inverted bg-foreground button) */}
@@ -313,8 +345,34 @@ function useUpcomingTrips(userId: string | undefined) {
         .gte('end_date', todayStr)
         .order('start_date', { ascending: true });
       if (error) throw error;
-      return (data ?? []) as any[];
+
+      // Sort: in-progress first, then upcoming by soonest start
+      const now = Date.now();
+      const sorted = ((data ?? []) as any[]).sort((a, b) => {
+        const aStart = new Date(a.start_date).getTime();
+        const aEnd   = new Date(a.end_date).getTime();
+        const bStart = new Date(b.start_date).getTime();
+        const bEnd   = new Date(b.end_date).getTime();
+        const aLive  = aStart <= now && now <= aEnd;
+        const bLive  = bStart <= now && now <= bEnd;
+        if (aLive && !bLive) return -1;
+        if (bLive && !aLive) return 1;
+        return aStart - bStart;
+      });
+      return sorted;
     },
+  });
+}
+
+/** Helper: does this trip cover any of the given days? */
+function tripOverlapsDays(trip: any, days: Date[]): boolean {
+  if (!trip?.start_date || !trip?.end_date) return false;
+  const tripStart = new Date(trip.start_date).getTime();
+  const tripEnd   = new Date(trip.end_date).getTime();
+  return days.some((d) => {
+    const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const dayEnd   = dayStart + 24 * 60 * 60 * 1000 - 1;
+    return tripStart <= dayEnd && tripEnd >= dayStart;
   });
 }
 
@@ -538,7 +596,11 @@ export default function PlansTab() {
 
         <View className="gap-4 mt-2">
           {/* ── Weekend hero ──────────────────────────────────────────── */}
-          <WeekendHeroCard days={weekend} plans={plans} />
+          <WeekendHeroCard
+            days={weekend}
+            plans={plans}
+            trip={(trips ?? []).find((t) => tripOverlapsDays(t, weekend))}
+          />
 
           {/* ── Weekdays section ──────────────────────────────────────── */}
           <View className="px-5 gap-2">
@@ -559,11 +621,15 @@ export default function PlansTab() {
                 isSameDay(p.date instanceof Date ? p.date : new Date(p.date), day),
               );
               const availInfo = getAvailInfo(day, availability);
+              const dayTrip   = (trips ?? []).find((t) =>
+                tripOverlapsDays(t, [day]),
+              );
 
               return (
                 <WeekdayRow
                   key={dateStr}
                   day={day}
+                  trip={dayTrip}
                   dayPlans={dayPlans}
                   availInfo={availInfo}
                 />
