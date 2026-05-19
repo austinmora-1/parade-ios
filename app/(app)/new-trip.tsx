@@ -28,6 +28,8 @@ import * as Haptics from 'expo-haptics';
 import { X, Plane } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { usePlannerStore } from '@/stores/plannerStore';
+import { setTripAvailability } from '@/lib/tripBusy';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -75,7 +77,14 @@ function Chip({
 
 export default function NewTripScreen() {
   const { user } = useAuth();
-  const queryClient = useQueryClient();
+  const queryClient     = useQueryClient();
+  const setAvailability = usePlannerStore((s) => s.setAvailability);
+  const setUserId       = usePlannerStore((s) => s.setUserId);
+
+  // Ensure planner store has userId for the block-availability writes
+  useMemo(() => {
+    if (user?.id) setUserId(user.id);
+  }, [user?.id]);
 
   const [name,     setName]     = useState('');
   const [location, setLocation] = useState('');
@@ -115,6 +124,9 @@ export default function NewTripScreen() {
         needs_return_date: false,
       } as any);
       if (insertErr) throw insertErr;
+
+      // Block all 6 slots on every day of the trip so friends see "away"
+      await setTripAvailability(setAvailability, startDate, endDate, false);
 
       // Refresh anything that lists trips
       await queryClient.invalidateQueries({ queryKey: ['trips'] });

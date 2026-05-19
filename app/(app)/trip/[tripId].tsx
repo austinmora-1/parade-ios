@@ -26,6 +26,10 @@ import * as Haptics from 'expo-haptics';
 import { format, differenceInDays, isAfter } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { usePlannerStore } from '@/stores/plannerStore';
+import { setTripAvailability } from '@/lib/tripBusy';
+import { resetCalendarSyncCache, syncCalendarBusyTimes } from '@/lib/calendarSync';
+import * as ExpoCalendar from 'expo-calendar';
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
@@ -74,6 +78,7 @@ export default function TripDetailScreen() {
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
   const { user } = useAuth();
   const { data: trip, isLoading, error, refetch } = useTrip(tripId);
+  const setAvailability = usePlannerStore((s) => s.setAvailability);
   const { showActionSheetWithOptions } = useActionSheet();
   const [deleting, setDeleting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -104,6 +109,29 @@ export default function TripDetailScreen() {
                 .delete()
                 .eq('id', tripId);
               if (delErr) throw delErr;
+
+              // Release slots that were blocked when this trip was created
+              if (trip?.start_date && trip?.end_date) {
+                await setTripAvailability(
+                  setAvailability,
+                  new Date(trip.start_date),
+                  new Date(trip.end_date),
+                  true, // mark free
+                );
+
+                // Re-mark any underlying calendar event slots as busy. Reset
+                // the sync cache so reconciliation re-discovers every event.
+                try {
+                  const { status } = await ExpoCalendar.getCalendarPermissionsAsync();
+                  if (status === 'granted') {
+                    resetCalendarSyncCache();
+                    await syncCalendarBusyTimes(setAvailability, 14);
+                  }
+                } catch {
+                  /* best-effort */
+                }
+              }
+
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
               router.back();
             } catch (err: any) {
