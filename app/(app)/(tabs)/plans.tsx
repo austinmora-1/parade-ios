@@ -35,9 +35,12 @@ import {
   Plus,
   Clock,
   MapPin,
+  Plane,
 } from 'lucide-react-native';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlannerStore } from '@/stores/plannerStore';
+import { supabase } from '@/integrations/supabase/client';
 import { TIME_SLOT_LABELS } from '@/types/planner';
 import type { Plan, DayAvailability, TimeSlot } from '@/types/planner';
 
@@ -296,6 +299,78 @@ function WeekdayRow({
   );
 }
 
+/** Upcoming trips query — anything ending today or later */
+function useUpcomingTrips(userId: string | undefined) {
+  return useQuery({
+    enabled: !!userId,
+    queryKey: ['trips', 'upcoming', userId],
+    queryFn: async () => {
+      const todayStr = format(new Date(), 'yyyy-MM-dd');
+      const { data, error } = await supabase
+        .from('trips')
+        .select('id, name, location, start_date, end_date')
+        .eq('user_id', userId!)
+        .gte('end_date', todayStr)
+        .order('start_date', { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as any[];
+    },
+  });
+}
+
+/** Trip card row */
+function TripCard({ trip }: { trip: any }) {
+  const start = new Date(trip.start_date);
+  const end   = new Date(trip.end_date);
+  const sameMonth = format(start, 'MMM') === format(end, 'MMM');
+  const range = sameMonth
+    ? `${format(start, 'MMM d')} – ${format(end, 'd')}`
+    : `${format(start, 'MMM d')} – ${format(end, 'MMM d')}`;
+  const inProgress =
+    start.getTime() <= Date.now() && Date.now() <= end.getTime();
+
+  return (
+    <Pressable
+      onPress={() => router.push(`/(app)/trip/${trip.id}`)}
+      className="bg-white rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm active:opacity-80"
+    >
+      <View style={{ width: 4, backgroundColor: '#23744D' }} />
+      <View className="flex-1 px-4 py-3 gap-0.5">
+        <View className="flex-row items-start justify-between gap-2">
+          <View className="flex-row items-center gap-1.5 flex-1">
+            <Plane size={12} color="#23744D" strokeWidth={2} />
+            <Text
+              className="font-display text-sm text-foreground flex-1"
+              numberOfLines={1}
+            >
+              {trip.name || 'Untitled trip'}
+            </Text>
+          </View>
+          <Text className="font-sans text-xs text-muted-foreground">{range}</Text>
+        </View>
+        {trip.location && (
+          <View className="flex-row items-center gap-1 mt-0.5">
+            <MapPin size={11} color="#929298" strokeWidth={1.75} />
+            <Text
+              className="font-sans text-xs text-muted-foreground"
+              numberOfLines={1}
+            >
+              {trip.location}
+            </Text>
+          </View>
+        )}
+        {inProgress && (
+          <View className="bg-primary/15 rounded-full px-2 py-0.5 self-start mt-1">
+            <Text className="font-sans text-[10px] font-semibold text-primary uppercase tracking-wider">
+              In progress
+            </Text>
+          </View>
+        )}
+      </View>
+    </Pressable>
+  );
+}
+
 /** Plan card for "All Upcoming" section — left-border accent strip */
 function UpcomingPlanCard({ plan }: { plan: Plan }) {
   const planDate = plan.date instanceof Date ? plan.date : new Date(plan.date);
@@ -360,6 +435,7 @@ export default function PlansTab() {
   const plans        = usePlannerStore((s) => s.plans);
   const availability = usePlannerStore((s) => s.availability);
   const isLoading    = usePlannerStore((s) => s.isLoading);
+  const { data: trips, refetch: refetchTrips } = useUpcomingTrips(user?.id);
 
   const [weekOffset, setWeekOffset] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -373,9 +449,9 @@ export default function PlansTab() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadAllData(true);
+    await Promise.all([loadAllData(true), refetchTrips()]);
     setRefreshing(false);
-  }, [loadAllData]);
+  }, [loadAllData, refetchTrips]);
 
   // ── Derived date ranges ─────────────────────────────────────────────────────
   const today     = new Date();
@@ -506,6 +582,41 @@ export default function PlansTab() {
               ))}
             </View>
           )}
+
+          {/* ── Trips section ─────────────────────────────────────────── */}
+          <View className="px-5 gap-2">
+            <View className="flex-row items-center justify-between px-1">
+              <View className="flex-row items-center gap-1.5">
+                <Plane size={12} color="#23744D" strokeWidth={2} />
+                <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                  Trips
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => router.push('/(app)/new-trip')}
+                hitSlop={6}
+                className="flex-row items-center gap-1 active:opacity-60"
+              >
+                <Plus size={12} color="#23744D" strokeWidth={2.5} />
+                <Text className="font-sans text-xs font-semibold text-primary">
+                  New trip
+                </Text>
+              </Pressable>
+            </View>
+
+            {(trips ?? []).length > 0 ? (
+              (trips ?? []).map((trip) => <TripCard key={trip.id} trip={trip} />)
+            ) : (
+              <View className="bg-white rounded-2xl border border-dashed border-border/40 px-4 py-5 items-center gap-1">
+                <Text className="font-sans text-sm text-muted-foreground">
+                  No upcoming trips
+                </Text>
+                <Text className="font-sans text-xs text-muted-foreground/60">
+                  Add one when you're traveling so friends know
+                </Text>
+              </View>
+            )}
+          </View>
 
           {/* Empty state */}
           {!isLoading && upcomingPlans.length === 0 && (
