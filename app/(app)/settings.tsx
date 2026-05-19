@@ -1,8 +1,14 @@
 /**
- * Settings page — accessed via gear icon on Profile tab.
+ * Settings page — Phase 2 Block 7 wired toggles.
  *
- * Phase 1 (read-only) stub: just sign-out + footer links.
- * Phase 2 will flesh out notifications/privacy/calendar accordions to match PWA.
+ * Sections:
+ *   - Notifications: Plan Reminders / Friend Requests / Plan Invitations
+ *     → live-binds to profiles.{plan_reminders, friend_requests_notifications,
+ *       plan_invitations_notifications}
+ *   - Sharing & Privacy: Show Availability → profiles.show_availability
+ *   - Calendar: connects iPhone Calendar via expo-calendar (EventKit) permission
+ *   - Account: destructive Sign Out button
+ *   - Footer: Privacy Policy / Terms of Service / signed-in email
  */
 import {
   ScrollView,
@@ -11,18 +17,45 @@ import {
   Pressable,
   Alert,
   Linking,
+  Switch,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { useState, useEffect, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import * as Calendar from 'expo-calendar';
+import * as Haptics from 'expo-haptics';
 import {
   ChevronLeft,
   LogOut,
   Bell,
   Sparkles,
-  Calendar,
-  Send,
+  Calendar as CalendarIcon,
+  Check,
 } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
+
+// ─── Profile settings query ──────────────────────────────────────────────────
+
+function useProfileSettings(userId: string | undefined) {
+  return useQuery({
+    enabled: !!userId,
+    queryKey: ['profile-settings', userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select(
+          'plan_reminders, friend_requests_notifications, plan_invitations_notifications, show_availability',
+        )
+        .eq('user_id', userId!)
+        .single();
+      if (error) throw error;
+      return data as any;
+    },
+  });
+}
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -59,26 +92,43 @@ function SectionHeader({
   );
 }
 
-function PlaceholderRow({
+function ToggleRow({
   title,
   subtitle,
+  value,
+  onValueChange,
+  disabled,
+  isLast,
 }: {
   title: string;
   subtitle?: string;
+  value: boolean;
+  onValueChange: (v: boolean) => void;
+  disabled?: boolean;
+  isLast?: boolean;
 }) {
   return (
-    <View className="px-4 py-3 border-b border-border/20">
-      <Text className="font-sans text-sm font-medium text-foreground">{title}</Text>
-      {subtitle && (
-        <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">
-          {subtitle}
-        </Text>
-      )}
-      <Text
-        className="font-sans text-[10px] text-muted-foreground/60 mt-1.5 italic"
-      >
-        Coming soon
-      </Text>
+    <View
+      className={`px-4 py-3 flex-row items-center justify-between gap-3 ${
+        isLast ? '' : 'border-b border-border/20'
+      }`}
+    >
+      <View className="flex-1">
+        <Text className="font-sans text-sm font-medium text-foreground">{title}</Text>
+        {subtitle && (
+          <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">
+            {subtitle}
+          </Text>
+        )}
+      </View>
+      <Switch
+        value={value}
+        onValueChange={onValueChange}
+        disabled={disabled}
+        trackColor={{ false: '#DED4C3', true: '#23744D' }}
+        thumbColor="#FFFFFF"
+        ios_backgroundColor="#DED4C3"
+      />
     </View>
   );
 }
@@ -87,7 +137,88 @@ function PlaceholderRow({
 
 export default function SettingsPage() {
   const { signOut, user } = useAuth();
+  const { data: settings, isLoading, refetch } = useProfileSettings(user?.id);
 
+  // Local optimistic state (server-backed)
+  const [reminders,     setReminders]     = useState(true);
+  const [friendReq,     setFriendReq]     = useState(true);
+  const [planInvites,   setPlanInvites]   = useState(true);
+  const [showAvail,     setShowAvail]     = useState(true);
+  const [savingKey,     setSavingKey]     = useState<string | null>(null);
+  const [calendarState, setCalendarState] = useState<
+    'unknown' | 'granted' | 'denied'
+  >('unknown');
+
+  // Hydrate from server (default true if column is null)
+  useEffect(() => {
+    if (!settings) return;
+    setReminders(settings.plan_reminders ?? true);
+    setFriendReq(settings.friend_requests_notifications ?? true);
+    setPlanInvites(settings.plan_invitations_notifications ?? true);
+    setShowAvail(settings.show_availability ?? true);
+  }, [settings]);
+
+  // Check calendar permission status on mount
+  useEffect(() => {
+    Calendar.getCalendarPermissionsAsync().then(({ status }) => {
+      setCalendarState(status === 'granted' ? 'granted' : status === 'denied' ? 'denied' : 'unknown');
+    }).catch(() => {});
+  }, []);
+
+  // ── Save a single setting ─────────────────────────────────────────────────
+  const persist = useCallback(
+    async (
+      column:
+        | 'plan_reminders'
+        | 'friend_requests_notifications'
+        | 'plan_invitations_notifications'
+        | 'show_availability',
+      value: boolean,
+      onRollback: () => void,
+    ) => {
+      if (!user?.id) return;
+      setSavingKey(column);
+      Haptics.selectionAsync();
+      try {
+        const { error } = await supabase
+          .from('profiles')
+          .update({ [column]: value } as any)
+          .eq('user_id', user.id);
+        if (error) throw error;
+      } catch (err) {
+        console.error(`Save ${column} failed`, err);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        onRollback();
+        Alert.alert('Could not save', 'Please try again.');
+      } finally {
+        setSavingKey(null);
+      }
+    },
+    [user?.id],
+  );
+
+  // ── Calendar permission flow ───────────────────────────────────────────────
+  const handleConnectCalendar = useCallback(async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (calendarState === 'denied') {
+      Alert.alert(
+        'Calendar access denied',
+        'To enable, open Settings → Parade and allow Calendar access.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => Linking.openSettings() },
+        ],
+      );
+      return;
+    }
+    const { status } = await Calendar.requestCalendarPermissionsAsync();
+    setCalendarState(status === 'granted' ? 'granted' : 'denied');
+    if (status === 'granted') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  }, [calendarState]);
+
+  // ── Sign out ──────────────────────────────────────────────────────────────
   const handleSignOut = () => {
     Alert.alert('Sign out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
@@ -99,9 +230,27 @@ export default function SettingsPage() {
     ]);
   };
 
+  // ── Toggle handlers (optimistic) ──────────────────────────────────────────
+  const onTogglePlanReminders = (v: boolean) => {
+    setReminders(v);
+    persist('plan_reminders', v, () => setReminders(!v));
+  };
+  const onToggleFriendReq = (v: boolean) => {
+    setFriendReq(v);
+    persist('friend_requests_notifications', v, () => setFriendReq(!v));
+  };
+  const onTogglePlanInvites = (v: boolean) => {
+    setPlanInvites(v);
+    persist('plan_invitations_notifications', v, () => setPlanInvites(!v));
+  };
+  const onToggleShowAvail = (v: boolean) => {
+    setShowAvail(v);
+    persist('show_availability', v, () => setShowAvail(!v));
+  };
+
   return (
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
-      {/* ── Header ─────────────────────────────────────────────────────── */}
+      {/* Header */}
       <View className="flex-row items-center px-3 pt-2 pb-3 gap-1">
         <Pressable
           onPress={() => router.back()}
@@ -123,106 +272,150 @@ export default function SettingsPage() {
         contentContainerClassName="pb-10 gap-3"
         keyboardShouldPersistTaps="handled"
       >
-        {/* ── Notifications stub ──────────────────────────────────────── */}
-        <SectionCard>
-          <SectionHeader
-            icon={<Bell size={14} color="#23744D" strokeWidth={2} />}
-            label="Notifications"
-          />
-          <PlaceholderRow
-            title="Plan Reminders"
-            subtitle="Get notified before your plans"
-          />
-          <PlaceholderRow
-            title="Friend Requests"
-            subtitle="When someone connects with you"
-          />
-          <PlaceholderRow
-            title="Plan Invitations"
-            subtitle="When you're invited to a plan"
-          />
-        </SectionCard>
+        {isLoading ? (
+          <ActivityIndicator className="mt-12" color="#23744D" />
+        ) : (
+          <>
+            {/* ── Notifications ───────────────────────────────────────── */}
+            <SectionCard>
+              <SectionHeader
+                icon={<Bell size={14} color="#23744D" strokeWidth={2} />}
+                label="Notifications"
+              />
+              <ToggleRow
+                title="Plan Reminders"
+                subtitle="Get notified before your plans"
+                value={reminders}
+                onValueChange={onTogglePlanReminders}
+                disabled={savingKey === 'plan_reminders'}
+              />
+              <ToggleRow
+                title="Friend Requests"
+                subtitle="When someone connects with you"
+                value={friendReq}
+                onValueChange={onToggleFriendReq}
+                disabled={savingKey === 'friend_requests_notifications'}
+              />
+              <ToggleRow
+                title="Plan Invitations"
+                subtitle="When you're invited to a plan"
+                value={planInvites}
+                onValueChange={onTogglePlanInvites}
+                disabled={savingKey === 'plan_invitations_notifications'}
+                isLast
+              />
+            </SectionCard>
 
-        {/* ── Privacy stub ────────────────────────────────────────────── */}
-        <SectionCard>
-          <SectionHeader
-            icon={<Sparkles size={14} color="#23744D" strokeWidth={2} />}
-            label="Sharing & Privacy"
-          />
-          <PlaceholderRow
-            title="Show Availability"
-            subtitle="Friends can see your free slots"
-          />
-          <PlaceholderRow
-            title="Show Vibe"
-            subtitle="Friends can see your current vibe"
-          />
-        </SectionCard>
+            {/* ── Privacy ─────────────────────────────────────────────── */}
+            <SectionCard>
+              <SectionHeader
+                icon={<Sparkles size={14} color="#23744D" strokeWidth={2} />}
+                label="Sharing & Privacy"
+              />
+              <ToggleRow
+                title="Show Availability"
+                subtitle="Friends can see your free slots"
+                value={showAvail}
+                onValueChange={onToggleShowAvail}
+                disabled={savingKey === 'show_availability'}
+                isLast
+              />
+            </SectionCard>
 
-        {/* ── Calendar stub ───────────────────────────────────────────── */}
-        <SectionCard>
-          <SectionHeader
-            icon={<Calendar size={14} color="#23744D" strokeWidth={2} />}
-            label="Calendar"
-          />
-          <PlaceholderRow
-            title="Connect Calendar"
-            subtitle="Import busy times from your iPhone calendar"
-          />
-        </SectionCard>
+            {/* ── Calendar ────────────────────────────────────────────── */}
+            <SectionCard>
+              <SectionHeader
+                icon={<CalendarIcon size={14} color="#23744D" strokeWidth={2} />}
+                label="Calendar"
+              />
+              <View className="px-4 py-3 flex-row items-center justify-between gap-3">
+                <View className="flex-1">
+                  <Text className="font-sans text-sm font-medium text-foreground">
+                    Connect Calendar
+                  </Text>
+                  <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">
+                    Import busy times from your iPhone calendar so friends know
+                    when you're booked.
+                  </Text>
+                </View>
+                {calendarState === 'granted' ? (
+                  <View
+                    className="flex-row items-center gap-1 px-2.5 py-1 rounded-full"
+                    style={{ backgroundColor: 'rgba(35,116,77,0.12)' }}
+                  >
+                    <Check size={12} color="#23744D" strokeWidth={2.5} />
+                    <Text className="font-sans text-xs font-semibold text-primary">
+                      Connected
+                    </Text>
+                  </View>
+                ) : (
+                  <Pressable
+                    onPress={handleConnectCalendar}
+                    className="bg-primary rounded-xl px-3 py-1.5 active:opacity-80"
+                    hitSlop={4}
+                  >
+                    <Text className="font-sans text-xs font-semibold text-white">
+                      {calendarState === 'denied' ? 'Open Settings' : 'Connect'}
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+            </SectionCard>
 
-        {/* ── Account (sign out) ─────────────────────────────────────── */}
-        <SectionCard destructive>
-          <SectionHeader
-            icon={<LogOut size={14} color="#D46549" strokeWidth={2} />}
-            label="Account"
-          />
-          <View className="px-4 py-3 flex-row items-center justify-between">
-            <View className="flex-1">
-              <Text className="font-sans text-sm font-medium text-foreground">
-                Sign Out
-              </Text>
-              <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">
-                Log out of your Parade account
-              </Text>
+            {/* ── Account ─────────────────────────────────────────────── */}
+            <SectionCard destructive>
+              <SectionHeader
+                icon={<LogOut size={14} color="#D46549" strokeWidth={2} />}
+                label="Account"
+              />
+              <View className="px-4 py-3 flex-row items-center justify-between">
+                <View className="flex-1">
+                  <Text className="font-sans text-sm font-medium text-foreground">
+                    Sign Out
+                  </Text>
+                  <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">
+                    Log out of your Parade account
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={handleSignOut}
+                  className="bg-destructive rounded-xl px-3 py-2 active:opacity-80"
+                  hitSlop={4}
+                >
+                  <Text className="font-sans text-xs font-semibold text-white">
+                    Sign Out
+                  </Text>
+                </Pressable>
+              </View>
+            </SectionCard>
+
+            {/* ── Footer ─────────────────────────────────────────────── */}
+            <View className="items-center gap-2 pt-3">
+              <View className="flex-row gap-3">
+                <Pressable
+                  onPress={() => Linking.openURL('https://helloparade.app/privacy')}
+                >
+                  <Text className="font-sans text-xs text-muted-foreground">
+                    Privacy Policy
+                  </Text>
+                </Pressable>
+                <Text className="font-sans text-xs text-muted-foreground/40">·</Text>
+                <Pressable
+                  onPress={() => Linking.openURL('https://helloparade.app/terms')}
+                >
+                  <Text className="font-sans text-xs text-muted-foreground">
+                    Terms of Service
+                  </Text>
+                </Pressable>
+              </View>
+              {user?.email && (
+                <Text className="font-sans text-[11px] text-muted-foreground/60 mt-1">
+                  Signed in as {user.email}
+                </Text>
+              )}
             </View>
-            <Pressable
-              onPress={handleSignOut}
-              className="bg-destructive rounded-xl px-3 py-2 active:opacity-80"
-              hitSlop={4}
-            >
-              <Text className="font-sans text-xs font-semibold text-white">
-                Sign Out
-              </Text>
-            </Pressable>
-          </View>
-        </SectionCard>
-
-        {/* ── Footer ─────────────────────────────────────────────────── */}
-        <View className="items-center gap-2 pt-3">
-          <View className="flex-row gap-3">
-            <Pressable
-              onPress={() => Linking.openURL('https://helloparade.app/privacy')}
-            >
-              <Text className="font-sans text-xs text-muted-foreground">
-                Privacy Policy
-              </Text>
-            </Pressable>
-            <Text className="font-sans text-xs text-muted-foreground/40">·</Text>
-            <Pressable
-              onPress={() => Linking.openURL('https://helloparade.app/terms')}
-            >
-              <Text className="font-sans text-xs text-muted-foreground">
-                Terms of Service
-              </Text>
-            </Pressable>
-          </View>
-          {user?.email && (
-            <Text className="font-sans text-[11px] text-muted-foreground/60 mt-1">
-              Signed in as {user.email}
-            </Text>
-          )}
-        </View>
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
