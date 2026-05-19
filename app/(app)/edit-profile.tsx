@@ -28,7 +28,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as Haptics from 'expo-haptics';
-import { X, Camera } from 'lucide-react-native';
+import { X, Camera, Check, AlertCircle } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar } from '@/components/primitives/Avatar';
@@ -91,16 +91,62 @@ export default function EditProfileScreen() {
   const [uploading, setUploading] = useState(false);
   const [error, setError]   = useState<string | null>(null);
 
+  /** Tracks the result of the latest debounced username availability check */
+  const [usernameState, setUsernameState] = useState<
+    'idle' | 'checking' | 'available' | 'taken' | 'invalid'
+  >('idle');
+  const [initialDisplayName, setInitialDisplayName] = useState('');
+
   // Initialize form when profile loads
   useEffect(() => {
     if (!profile) return;
     setDisplayName(profile.display_name ?? '');
+    setInitialDisplayName(profile.display_name ?? '');
     setFirstName(profile.first_name ?? '');
     setLastName(profile.last_name ?? '');
     setBio(profile.bio ?? '');
     setVibe(profile.current_vibe ?? null);
     setAvatarUrl(profile.avatar_url ?? null);
   }, [profile]);
+
+  // ── Debounced username availability check ─────────────────────────────────
+  useEffect(() => {
+    const trimmed = displayName.trim();
+
+    // If unchanged from server value → idle (no check needed)
+    if (trimmed === initialDisplayName) {
+      setUsernameState('idle');
+      return;
+    }
+    if (trimmed.length < 2) {
+      setUsernameState('invalid');
+      return;
+    }
+    // Lowercase letters/numbers/underscores only
+    if (!/^[a-z0-9_]+$/i.test(trimmed)) {
+      setUsernameState('invalid');
+      return;
+    }
+
+    setUsernameState('checking');
+    const handle = setTimeout(async () => {
+      try {
+        const { data: available, error: rpcErr } = await supabase.rpc(
+          'check_username_available',
+          { p_username: trimmed },
+        );
+        if (rpcErr) {
+          setUsernameState('idle'); // fall back to no badge if RPC fails
+          return;
+        }
+        setUsernameState(available ? 'available' : 'taken');
+      } catch {
+        setUsernameState('idle');
+      }
+    }, 400);
+
+    return () => clearTimeout(handle);
+  }, [displayName, initialDisplayName]);
 
   // ── Avatar upload ─────────────────────────────────────────────────────────
   const handlePickAvatar = useCallback(async () => {
@@ -180,6 +226,18 @@ export default function EditProfileScreen() {
       setError('Display name is required.');
       return;
     }
+    if (usernameState === 'taken') {
+      setError('That username is taken — try another.');
+      return;
+    }
+    if (usernameState === 'invalid') {
+      setError('Letters, numbers, and underscores only (2+ chars).');
+      return;
+    }
+    if (usernameState === 'checking') {
+      setError('Hold on, checking that username…');
+      return;
+    }
     setError(null);
     setSaving(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -217,7 +275,13 @@ export default function EditProfileScreen() {
     }
   }, [user?.id, displayName, firstName, lastName, bio, vibe, avatarUrl, queryClient]);
 
-  const canSubmit = displayName.trim().length > 0 && !saving && !uploading;
+  const canSubmit =
+    displayName.trim().length > 0 &&
+    !saving &&
+    !uploading &&
+    usernameState !== 'taken' &&
+    usernameState !== 'invalid' &&
+    usernameState !== 'checking';
 
   return (
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
@@ -321,17 +385,66 @@ export default function EditProfileScreen() {
               {/* ── Display name ────────────────────────────────────────── */}
               <View>
                 <FieldLabel>Display name</FieldLabel>
-                <TextInput
-                  value={displayName}
-                  onChangeText={(t) => { setDisplayName(t); setError(null); }}
-                  placeholder="e.g. austin"
-                  placeholderTextColor="#929298"
-                  className="bg-white rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
-                  maxLength={40}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-                {error && (
+                <View className="relative">
+                  <TextInput
+                    value={displayName}
+                    onChangeText={(t) => { setDisplayName(t); setError(null); }}
+                    placeholder="e.g. austin"
+                    placeholderTextColor="#929298"
+                    className="bg-white rounded-xl border border-border/40 px-4 py-3 pr-10 font-sans text-sm text-foreground shadow-sm"
+                    maxLength={40}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  {/* Inline availability badge */}
+                  <View
+                    style={{
+                      position: 'absolute',
+                      right: 12,
+                      top: 0,
+                      bottom: 0,
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {usernameState === 'checking' && (
+                      <ActivityIndicator size="small" color="#929298" />
+                    )}
+                    {usernameState === 'available' && (
+                      <View
+                        className="w-5 h-5 rounded-full items-center justify-center"
+                        style={{ backgroundColor: 'rgba(35,116,77,0.15)' }}
+                      >
+                        <Check size={12} color="#23744D" strokeWidth={2.5} />
+                      </View>
+                    )}
+                    {(usernameState === 'taken' || usernameState === 'invalid') && (
+                      <View
+                        className="w-5 h-5 rounded-full items-center justify-center"
+                        style={{ backgroundColor: 'rgba(212,101,73,0.15)' }}
+                      >
+                        <AlertCircle size={12} color="#D46549" strokeWidth={2.5} />
+                      </View>
+                    )}
+                  </View>
+                </View>
+
+                {/* Status hint text below input */}
+                {usernameState === 'taken' && (
+                  <Text className="font-sans text-xs text-destructive mt-1.5 px-0.5">
+                    "{displayName.trim()}" is taken — try another.
+                  </Text>
+                )}
+                {usernameState === 'invalid' && displayName.trim().length > 0 && (
+                  <Text className="font-sans text-xs text-destructive mt-1.5 px-0.5">
+                    Letters, numbers, and underscores only (2+ chars).
+                  </Text>
+                )}
+                {usernameState === 'available' && (
+                  <Text className="font-sans text-xs text-primary mt-1.5 px-0.5 font-medium">
+                    Available — looks good!
+                  </Text>
+                )}
+                {error && !['taken', 'invalid', 'available'].includes(usernameState) && (
                   <Text className="font-sans text-xs text-destructive mt-1.5 px-0.5">
                     {error}
                   </Text>
