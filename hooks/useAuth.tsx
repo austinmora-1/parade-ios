@@ -101,6 +101,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { error } = await supabase.auth.signOut({ scope: 'local' });
     setSession(null);
     setUser(null);
+    // Clear per-user caches so the next sign-in starts fresh
+    try {
+      const { resetCalendarSyncCache } = await import('@/lib/calendarSync');
+      resetCalendarSyncCache();
+    } catch {}
     return { error };
   }, []);
 

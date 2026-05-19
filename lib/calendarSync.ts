@@ -1,53 +1,77 @@
 /**
- * Calendar sync — pulls events from the iOS Calendar (via expo-calendar /
- * EventKit) for the next 14 days, maps them to Parade time slots, and marks
- * those slots as busy in the user's availability.
+ * Calendar sync — pulls events from iOS Calendar (via expo-calendar /
+ * EventKit) for the next 14 days, maps them to Parade time slots, and
+ * marks those slots as busy in the user's availability.
  *
- * Phase 3 Block 1 v1:
- *   - Manual sync only (triggered from Settings → Calendar → "Sync now")
- *   - Marks overlapping slots as busy (false). Does NOT auto-clear slots
- *     that no longer have events — user needs to manually mark free if they
- *     removed a meeting from their calendar.
- *   - Returns a summary { eventsCount, slotsMarked } for the caller to show.
+ * Phase 4 reconciliation:
+ *   - Cache the set of "yyyy-MM-dd:slot" keys we wrote last sync in MMKV
+ *   - On next sync, compute the new set
+ *   - Keys present last sync but missing this sync → mark FREE (event removed)
+ *   - Keys present this sync but missing last sync → mark BUSY (new event)
+ *   - Keys present both → no-op (idempotent)
+ *
+ * This means removing a meeting from Calendar releases the slot
+ * automatically on the next sync. User's manual free/busy edits to
+ * slots NOT touched by the calendar are preserved.
  */
 import * as Calendar from 'expo-calendar';
 import { addDays, format, parseISO } from 'date-fns';
+import { createMMKV } from 'react-native-mmkv';
 import type { TimeSlot } from '@/types/planner';
 
 // ─── Slot definitions ────────────────────────────────────────────────────────
 
-/** Hour ranges (24h, local time) for each Parade time slot */
 const SLOT_HOURS: Record<TimeSlot, [number, number]> = {
   'early-morning':   [6, 9],
   'late-morning':    [9, 12],
   'early-afternoon': [12, 15],
   'late-afternoon':  [15, 18],
   'evening':         [18, 22],
-  'late-night':      [22, 24], // clamp at midnight for sync purposes
+  'late-night':      [22, 24],
 };
 const ALL_SLOTS = Object.keys(SLOT_HOURS) as TimeSlot[];
 
-// ─── Internal helpers ────────────────────────────────────────────────────────
+// ─── MMKV cache for reconciliation ───────────────────────────────────────────
 
-/** Float hour-of-day with fractional minutes (e.g. 14:30 → 14.5) */
+const cache = createMMKV({ id: 'parade-calendar-sync' });
+const LAST_KEYS_KEY = 'lastSyncedSlotKeys'; // JSON-encoded array
+const LAST_SYNC_AT  = 'lastSyncAt';         // ISO timestamp
+
+function loadLastKeys(): Set<string> {
+  const raw = cache.getString(LAST_KEYS_KEY);
+  if (!raw) return new Set();
+  try {
+    return new Set(JSON.parse(raw) as string[]);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveLastKeys(keys: Set<string>) {
+  cache.set(LAST_KEYS_KEY, JSON.stringify([...keys]));
+  cache.set(LAST_SYNC_AT, new Date().toISOString());
+}
+
+export function getLastSyncTime(): Date | null {
+  const iso = cache.getString(LAST_SYNC_AT);
+  return iso ? new Date(iso) : null;
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
 function hourFloat(d: Date): number {
   return d.getHours() + d.getMinutes() / 60;
 }
 
-/** Given a date range fully within a single day, return overlapping slots. */
 function slotsForRange(startHour: number, endHour: number): TimeSlot[] {
   const result: TimeSlot[] = [];
   for (const slot of ALL_SLOTS) {
-    const [slotStart, slotEnd] = SLOT_HOURS[slot];
-    // Half-open intervals: event [start, end) overlaps slot [slotStart, slotEnd)
-    if (startHour < slotEnd && endHour > slotStart) {
-      result.push(slot);
-    }
+    const [s, e] = SLOT_HOURS[slot];
+    if (startHour < e && endHour > s) result.push(slot);
   }
   return result;
 }
 
-/** Iterate every yyyy-MM-dd from start (inclusive) to end (inclusive) */
 function eachDay(start: Date, end: Date): string[] {
   const dates: string[] = [];
   const cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate());
@@ -59,15 +83,10 @@ function eachDay(start: Date, end: Date): string[] {
   return dates;
 }
 
-/**
- * Compute the set of "yyyy-MM-dd:slot" keys an event covers, accounting for
- * all-day events and multi-day events.
- */
 function eventToSlotKeys(event: Calendar.Event): string[] {
   const start = new Date(event.startDate);
   const end   = new Date(event.endDate);
 
-  // All-day events block every slot on every day they cover
   if (event.allDay) {
     const days = eachDay(start, end);
     return days.flatMap((d) => ALL_SLOTS.map((s) => `${d}:${s}`));
@@ -76,14 +95,11 @@ function eventToSlotKeys(event: Calendar.Event): string[] {
   const startDate = format(start, 'yyyy-MM-dd');
   const endDate   = format(end,   'yyyy-MM-dd');
 
-  // Same-day event: simple overlap computation
   if (startDate === endDate) {
-    const slots = slotsForRange(hourFloat(start), hourFloat(end));
-    return slots.map((s) => `${startDate}:${s}`);
+    return slotsForRange(hourFloat(start), hourFloat(end)).map((s) => `${startDate}:${s}`);
   }
 
-  // Multi-day event: first day from event start to midnight, middle days all
-  // slots, last day from midnight to event end
+  // Multi-day timed event
   const keys: string[] = [];
   const days = eachDay(start, end);
   days.forEach((dateStr, idx) => {
@@ -101,25 +117,30 @@ function eventToSlotKeys(event: Calendar.Event): string[] {
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 export interface SyncResult {
+  /** Total events fetched from calendar */
   eventsCount:  number;
-  slotsMarked:  number;
+  /** Net new slot keys marked busy this sync */
+  slotsAdded:   number;
+  /** Slot keys cleared because their source event disappeared */
+  slotsRemoved: number;
+  /** Distinct days touched (added OR removed) */
   daysAffected: number;
 }
 
 /**
- * Pull events from device calendar(s) for the next 14 days and mark
- * overlapping Parade slots as busy.
- *
- * @param setAvailability — usually `usePlannerStore.getState().setAvailability`
+ * Pull events from device calendars for the next `daysAhead` days, mark
+ * overlapping Parade slots as busy, and reconcile against the previous
+ * sync's slot key set so removed events release their slots.
  */
 export async function syncCalendarBusyTimes(
   setAvailability: (date: Date, slot: TimeSlot, available: boolean) => Promise<void>,
   daysAhead: number = 14,
 ): Promise<SyncResult> {
-  // 1. Get user's calendars
+  // 1. Calendars
   const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
   if (calendars.length === 0) {
-    return { eventsCount: 0, slotsMarked: 0, daysAffected: 0 };
+    saveLastKeys(new Set());
+    return { eventsCount: 0, slotsAdded: 0, slotsRemoved: 0, daysAffected: 0 };
   }
   const calendarIds = calendars.map((c) => c.id);
 
@@ -130,31 +151,53 @@ export async function syncCalendarBusyTimes(
 
   const events = await Calendar.getEventsAsync(calendarIds, startWindow, endWindow);
 
-  // 3. Build dedup'd set of slot keys
-  const slotKeys = new Set<string>();
+  // 3. Compute new slot keys
+  const newKeys = new Set<string>();
   for (const ev of events) {
-    eventToSlotKeys(ev).forEach((k) => slotKeys.add(k));
+    eventToSlotKeys(ev).forEach((k) => newKeys.add(k));
   }
 
-  if (slotKeys.size === 0) {
-    return { eventsCount: events.length, slotsMarked: 0, daysAffected: 0 };
+  // 4. Diff against last sync
+  const lastKeys = loadLastKeys();
+  const toMarkBusy: string[] = [];
+  const toMarkFree: string[] = [];
+  for (const k of newKeys) {
+    if (!lastKeys.has(k)) toMarkBusy.push(k);
+  }
+  for (const k of lastKeys) {
+    if (!newKeys.has(k)) toMarkFree.push(k);
   }
 
-  // 4. Persist each unique (date, slot) pair as busy
-  const writes: Promise<void>[] = [];
+  // 5. Persist writes in parallel
   const daysAffected = new Set<string>();
-  for (const key of slotKeys) {
+  const writes: Promise<void>[] = [];
+
+  for (const key of toMarkBusy) {
     const [dateStr, slot] = key.split(':');
     daysAffected.add(dateStr);
     writes.push(setAvailability(parseISO(dateStr), slot as TimeSlot, false));
   }
+  for (const key of toMarkFree) {
+    const [dateStr, slot] = key.split(':');
+    daysAffected.add(dateStr);
+    writes.push(setAvailability(parseISO(dateStr), slot as TimeSlot, true));
+  }
 
-  // Parallel writes — store's upsert handles concurrency per (user_id, date)
   await Promise.all(writes);
+
+  // 6. Save the new set for next reconciliation
+  saveLastKeys(newKeys);
 
   return {
     eventsCount:  events.length,
-    slotsMarked:  slotKeys.size,
+    slotsAdded:   toMarkBusy.length,
+    slotsRemoved: toMarkFree.length,
     daysAffected: daysAffected.size,
   };
+}
+
+/** Clear cached sync state — call on sign-out so a new user starts fresh */
+export function resetCalendarSyncCache() {
+  cache.remove(LAST_KEYS_KEY);
+  cache.remove(LAST_SYNC_AT);
 }

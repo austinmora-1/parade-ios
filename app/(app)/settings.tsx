@@ -38,7 +38,8 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlannerStore } from '@/stores/plannerStore';
-import { syncCalendarBusyTimes } from '@/lib/calendarSync';
+import { syncCalendarBusyTimes, getLastSyncTime } from '@/lib/calendarSync';
+import { formatDistanceToNow } from 'date-fns';
 
 // ─── Profile settings query ──────────────────────────────────────────────────
 
@@ -153,7 +154,8 @@ export default function SettingsPage() {
   const [calendarState, setCalendarState] = useState<
     'unknown' | 'granted' | 'denied'
   >('unknown');
-  const [syncing, setSyncing] = useState(false);
+  const [syncing,     setSyncing]     = useState(false);
+  const [lastSyncAt,  setLastSyncAt]  = useState<Date | null>(getLastSyncTime());
 
   // Ensure planner store has userId for setAvailability calls
   useEffect(() => {
@@ -237,11 +239,22 @@ export default function SettingsPage() {
     try {
       const result = await syncCalendarBusyTimes(setAvailability, 14);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setLastSyncAt(getLastSyncTime());
+
+      const noChange = result.slotsAdded === 0 && result.slotsRemoved === 0;
+      const parts: string[] = [];
+      if (result.slotsAdded > 0) {
+        parts.push(`${result.slotsAdded} new busy slot${result.slotsAdded === 1 ? '' : 's'}`);
+      }
+      if (result.slotsRemoved > 0) {
+        parts.push(`${result.slotsRemoved} slot${result.slotsRemoved === 1 ? '' : 's'} freed up`);
+      }
+
       Alert.alert(
         'Calendar synced',
-        result.slotsMarked === 0
-          ? 'No upcoming events found in your calendar.'
-          : `Marked ${result.slotsMarked} slot${result.slotsMarked === 1 ? '' : 's'} as busy across ${result.daysAffected} day${result.daysAffected === 1 ? '' : 's'} from ${result.eventsCount} event${result.eventsCount === 1 ? '' : 's'}.`,
+        noChange
+          ? `No changes — you have ${result.eventsCount} event${result.eventsCount === 1 ? '' : 's'} in the next 14 days.`
+          : `${parts.join(' · ')} across ${result.daysAffected} day${result.daysAffected === 1 ? '' : 's'}.`,
       );
     } catch (err: any) {
       console.error('Calendar sync failed', err);
@@ -407,8 +420,12 @@ export default function SettingsPage() {
                       Sync now
                     </Text>
                     <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">
-                      Pull events from the next 14 days and mark those slots
-                      busy in your availability.
+                      {lastSyncAt
+                        ? `Last synced ${formatDistanceToNow(lastSyncAt, { addSuffix: true })}`
+                        : 'Pull events from the next 14 days and mark those slots busy.'}
+                    </Text>
+                    <Text className="font-sans text-[10px] text-muted-foreground/60 mt-0.5">
+                      Also syncs automatically when you open the app.
                     </Text>
                   </View>
                   {syncing ? (

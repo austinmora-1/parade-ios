@@ -2,6 +2,7 @@ import { Redirect, Stack } from 'expo-router';
 import { ActivityIndicator, View } from 'react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { usePushToken } from '@/hooks/usePushToken';
+import { useCalendarAutoSync } from '@/hooks/useCalendarAutoSync';
 
 /**
  * Authenticated app shell — stack that contains the tab navigator + all
@@ -9,7 +10,8 @@ import { usePushToken } from '@/hooks/usePushToken';
  * Redirects to login if the session is missing.
  */
 function AppLayoutInner() {
-  usePushToken(); // registers push token after sign-in
+  usePushToken();         // registers push token after sign-in
+  useCalendarAutoSync();  // auto-syncs calendar busy times on foreground
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
