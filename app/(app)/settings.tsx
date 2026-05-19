@@ -33,9 +33,12 @@ import {
   Sparkles,
   Calendar as CalendarIcon,
   Check,
+  RefreshCw,
 } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { usePlannerStore } from '@/stores/plannerStore';
+import { syncCalendarBusyTimes } from '@/lib/calendarSync';
 
 // ─── Profile settings query ──────────────────────────────────────────────────
 
@@ -138,6 +141,8 @@ function ToggleRow({
 export default function SettingsPage() {
   const { signOut, user } = useAuth();
   const { data: settings, isLoading, refetch } = useProfileSettings(user?.id);
+  const setAvailability = usePlannerStore((s) => s.setAvailability);
+  const setUserId       = usePlannerStore((s) => s.setUserId);
 
   // Local optimistic state (server-backed)
   const [reminders,     setReminders]     = useState(true);
@@ -148,6 +153,12 @@ export default function SettingsPage() {
   const [calendarState, setCalendarState] = useState<
     'unknown' | 'granted' | 'denied'
   >('unknown');
+  const [syncing, setSyncing] = useState(false);
+
+  // Ensure planner store has userId for setAvailability calls
+  useEffect(() => {
+    if (user?.id) setUserId(user.id);
+  }, [user?.id]);
 
   // Hydrate from server (default true if column is null)
   useEffect(() => {
@@ -217,6 +228,29 @@ export default function SettingsPage() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
   }, [calendarState]);
+
+  // ── Sync calendar busy times ──────────────────────────────────────────────
+  const handleSyncCalendar = useCallback(async () => {
+    if (calendarState !== 'granted') return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSyncing(true);
+    try {
+      const result = await syncCalendarBusyTimes(setAvailability, 14);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert(
+        'Calendar synced',
+        result.slotsMarked === 0
+          ? 'No upcoming events found in your calendar.'
+          : `Marked ${result.slotsMarked} slot${result.slotsMarked === 1 ? '' : 's'} as busy across ${result.daysAffected} day${result.daysAffected === 1 ? '' : 's'} from ${result.eventsCount} event${result.eventsCount === 1 ? '' : 's'}.`,
+      );
+    } catch (err: any) {
+      console.error('Calendar sync failed', err);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert('Sync failed', err?.message ?? 'Please try again.');
+    } finally {
+      setSyncing(false);
+    }
+  }, [calendarState, setAvailability]);
 
   // ── Sign out ──────────────────────────────────────────────────────────────
   const handleSignOut = () => {
@@ -360,6 +394,37 @@ export default function SettingsPage() {
                   </Pressable>
                 )}
               </View>
+
+              {/* Sync Now row — shown only when calendar is connected */}
+              {calendarState === 'granted' && (
+                <Pressable
+                  onPress={handleSyncCalendar}
+                  disabled={syncing}
+                  className="px-4 py-3 flex-row items-center justify-between gap-3 border-t border-border/20 active:bg-muted/30"
+                >
+                  <View className="flex-1">
+                    <Text className="font-sans text-sm font-medium text-foreground">
+                      Sync now
+                    </Text>
+                    <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">
+                      Pull events from the next 14 days and mark those slots
+                      busy in your availability.
+                    </Text>
+                  </View>
+                  {syncing ? (
+                    <ActivityIndicator size="small" color="#23744D" />
+                  ) : (
+                    <View
+                      className="flex-row items-center gap-1.5 bg-primary/10 rounded-xl px-3 py-1.5"
+                    >
+                      <RefreshCw size={12} color="#23744D" strokeWidth={2.2} />
+                      <Text className="font-sans text-xs font-semibold text-primary">
+                        Sync
+                      </Text>
+                    </View>
+                  )}
+                </Pressable>
+              )}
             </SectionCard>
 
             {/* ── Account ─────────────────────────────────────────────── */}
