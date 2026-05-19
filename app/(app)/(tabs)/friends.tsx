@@ -19,13 +19,14 @@ import {
   Pressable,
   RefreshControl,
   TextInput,
-  Share,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useCallback, useState, useEffect, useMemo } from 'react';
 import { format } from 'date-fns';
-import { Search, UserPlus, Users, ChevronRight } from 'lucide-react-native';
+import { Search, UserPlus, Users, ChevronRight, Check, X } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { useFriendDashboardData } from '@/hooks/useFriendDashboardData';
@@ -73,18 +74,24 @@ function NumericBubble({
   );
 }
 
-/** Friend row — avatar with vibe ring + name + subtitle + chevron */
+/** Friend row — avatar with vibe ring + name + subtitle + chevron OR
+ *  Accept/Decline buttons for incoming pending requests. */
 function FriendRow({
   friend,
   vibe,
   freeToday,
   onPress,
+  onAccept,
+  onDecline,
 }: {
   friend: any;
   vibe?: string | null;
   freeToday?: boolean;
   onPress: () => void;
+  onAccept?: () => void;
+  onDecline?: () => void;
 }) {
+  const isIncoming = friend.isIncoming === true && friend.status === 'pending';
   // Subtitle precedence: vibe label > "Tap to connect"
   let subtitle: string;
   if (vibe) {
@@ -154,7 +161,33 @@ function FriendRow({
         </Text>
       </View>
 
-      <ChevronRight size={16} color="rgba(146,146,152,0.4)" strokeWidth={2} />
+      {isIncoming && onAccept && onDecline ? (
+        <View className="flex-row items-center gap-1.5">
+          <Pressable
+            onPress={onDecline}
+            hitSlop={6}
+            className="w-8 h-8 rounded-full items-center justify-center active:opacity-70"
+            style={{ backgroundColor: 'rgba(212,101,73,0.12)' }}
+          >
+            <X size={16} color="#D46549" strokeWidth={2.5} />
+          </Pressable>
+          <Pressable
+            onPress={onAccept}
+            hitSlop={6}
+            className="w-8 h-8 rounded-full items-center justify-center active:opacity-80 bg-primary"
+          >
+            <Check size={16} color="#FFFFFF" strokeWidth={2.5} />
+          </Pressable>
+        </View>
+      ) : friend.status === 'pending' ? (
+        <View className="px-2.5 py-1 rounded-full bg-muted">
+          <Text className="font-sans text-[11px] font-semibold text-muted-foreground">
+            Sent
+          </Text>
+        </View>
+      ) : (
+        <ChevronRight size={16} color="rgba(146,146,152,0.4)" strokeWidth={2} />
+      )}
     </Pressable>
   );
 }
@@ -228,16 +261,53 @@ export default function FriendsTab() {
     setRefreshing(false);
   }, [loadAllData]);
 
-  const onInvite = useCallback(async () => {
-    try {
-      await Share.share({
-        message:
-          "Join me on Parade — let's hang out IRL more often. https://helloparade.app",
-      });
-    } catch {
-      /* user cancelled — silent */
-    }
+  const onInvite = useCallback(() => {
+    router.push('/(app)/add-friend');
   }, []);
+
+  const acceptFriendRequest = usePlannerStore((s) => s.acceptFriendRequest);
+  const removeFriend         = usePlannerStore((s) => s.removeFriend);
+
+  const handleAccept = useCallback(
+    async (friend: any) => {
+      if (!friend.friendUserId) return;
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      try {
+        await acceptFriendRequest(friend.id, friend.friendUserId);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch (err) {
+        console.error('Accept failed', err);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
+    },
+    [acceptFriendRequest],
+  );
+
+  const handleDecline = useCallback(
+    (friend: any) => {
+      Alert.alert(
+        'Decline request?',
+        `${friend.name} won't be notified.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Decline',
+            style: 'destructive',
+            onPress: async () => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              try {
+                await removeFriend(friend.id);
+              } catch (err) {
+                console.error('Decline failed', err);
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+              }
+            },
+          },
+        ],
+      );
+    },
+    [removeFriend],
+  );
 
   // ── Filter + group ─────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -353,6 +423,7 @@ export default function FriendsTab() {
                 />
                 {pending.map((friend) => {
                   const { vibe, freeToday } = enrich(friend.friendUserId);
+                  const isIncoming = (friend as any).isIncoming === true;
                   return (
                     <FriendRow
                       key={friend.id}
@@ -364,6 +435,8 @@ export default function FriendsTab() {
                           `/(app)/friend/${friend.friendUserId ?? friend.id}`,
                         )
                       }
+                      onAccept={isIncoming ? () => handleAccept(friend) : undefined}
+                      onDecline={isIncoming ? () => handleDecline(friend) : undefined}
                     />
                   );
                 })}
