@@ -1,0 +1,438 @@
+/**
+ * Edit Profile — modal-presented screen.
+ *
+ * Lets the user update:
+ *   - Display name (@handle)
+ *   - First / Last name
+ *   - Bio (500 chars)
+ *   - Current vibe
+ *   - Avatar (via expo-image-picker → Supabase Storage `avatars` bucket)
+ *
+ * Reached via "Edit profile" button on the Profile tab.
+ */
+import {
+  ScrollView,
+  View,
+  Text,
+  Pressable,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
+  ActivityIndicator,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
+import { useState, useEffect, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
+import * as Haptics from 'expo-haptics';
+import { X, Camera } from 'lucide-react-native';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
+import { Avatar } from '@/components/primitives/Avatar';
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const VIBES = [
+  { id: 'social',     label: 'Social',     emoji: '🎉' },
+  { id: 'chill',      label: 'Chill',      emoji: '🛋️' },
+  { id: 'athletic',   label: 'Athletic',   emoji: '🏃' },
+  { id: 'productive', label: 'Productive', emoji: '💼' },
+];
+
+// ─── Profile query ────────────────────────────────────────────────────────────
+
+function useProfile(userId: string | undefined) {
+  return useQuery({
+    enabled: !!userId,
+    queryKey: ['profile', userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select(
+          'user_id, display_name, first_name, last_name, avatar_url, bio, current_vibe',
+        )
+        .eq('user_id', userId!)
+        .single();
+      if (error) throw error;
+      return data as any;
+    },
+  });
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function FieldLabel({ children }: { children: string }) {
+  return (
+    <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
+      {children}
+    </Text>
+  );
+}
+
+// ─── Main screen ──────────────────────────────────────────────────────────────
+
+export default function EditProfileScreen() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const { data: profile, isLoading } = useProfile(user?.id);
+
+  // Form state
+  const [displayName, setDisplayName] = useState('');
+  const [firstName,   setFirstName]   = useState('');
+  const [lastName,    setLastName]    = useState('');
+  const [bio,         setBio]         = useState('');
+  const [vibe,        setVibe]        = useState<string | null>(null);
+  const [avatarUrl,   setAvatarUrl]   = useState<string | null>(null);
+
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError]   = useState<string | null>(null);
+
+  // Initialize form when profile loads
+  useEffect(() => {
+    if (!profile) return;
+    setDisplayName(profile.display_name ?? '');
+    setFirstName(profile.first_name ?? '');
+    setLastName(profile.last_name ?? '');
+    setBio(profile.bio ?? '');
+    setVibe(profile.current_vibe ?? null);
+    setAvatarUrl(profile.avatar_url ?? null);
+  }, [profile]);
+
+  // ── Avatar upload ─────────────────────────────────────────────────────────
+  const handlePickAvatar = useCallback(async () => {
+    if (!user?.id) return;
+    Haptics.selectionAsync();
+
+    // Permission check
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert(
+        'Permission needed',
+        'Allow photo library access in Settings to choose a profile photo.',
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.85,
+    });
+
+    if (result.canceled || !result.assets[0]) return;
+
+    const asset = result.assets[0];
+    setUploading(true);
+
+    try {
+      // Resize + compress to 512x512 JPEG
+      const manipulated = await ImageManipulator.manipulateAsync(
+        asset.uri,
+        [{ resize: { width: 512, height: 512 } }],
+        { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG },
+      );
+
+      // Read as ArrayBuffer for Supabase upload (binary, not base64)
+      const response  = await fetch(manipulated.uri);
+      const arrayBuf  = await response.arrayBuffer();
+
+      const filename = `${user.id}/${Date.now()}.jpg`;
+
+      const { error: uploadErr } = await supabase.storage
+        .from('avatars')
+        .upload(filename, arrayBuf, {
+          contentType: 'image/jpeg',
+          upsert: true,
+        });
+
+      if (uploadErr) throw uploadErr;
+
+      // Get the public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filename);
+
+      // Append a cache-buster timestamp so the new avatar shows immediately
+      const cacheBusted = `${publicUrl}?t=${Date.now()}`;
+      setAvatarUrl(cacheBusted);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err: any) {
+      console.error('Avatar upload failed', err);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert(
+        'Upload failed',
+        err?.message ?? 'Could not upload photo. Please try again.',
+      );
+    } finally {
+      setUploading(false);
+    }
+  }, [user?.id]);
+
+  // ── Save profile ──────────────────────────────────────────────────────────
+  const handleSave = useCallback(async () => {
+    if (!user?.id) return;
+    if (!displayName.trim()) {
+      setError('Display name is required.');
+      return;
+    }
+    setError(null);
+    setSaving(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    try {
+      const { error: updateErr } = await supabase
+        .from('profiles')
+        .update({
+          display_name: displayName.trim(),
+          first_name:   firstName.trim() || null,
+          last_name:    lastName.trim()  || null,
+          bio:          bio.trim()        || null,
+          current_vibe: vibe,
+          avatar_url:   avatarUrl,
+        })
+        .eq('user_id', user.id);
+
+      if (updateErr) throw updateErr;
+
+      // Invalidate profile queries everywhere so they refetch with new data
+      queryClient.invalidateQueries({ queryKey: ['profile'] });
+      queryClient.invalidateQueries({ queryKey: ['friend-dashboard-data'] });
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.back();
+    } catch (err: any) {
+      console.error('Save profile failed', err);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert(
+        'Could not save',
+        err?.message ?? 'Please try again.',
+      );
+    } finally {
+      setSaving(false);
+    }
+  }, [user?.id, displayName, firstName, lastName, bio, vibe, avatarUrl, queryClient]);
+
+  const canSubmit = displayName.trim().length > 0 && !saving && !uploading;
+
+  return (
+    <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
+      {/* ── Header ────────────────────────────────────────────────────── */}
+      <View className="flex-row items-center justify-between px-3 py-2 border-b border-border/20">
+        <Pressable
+          onPress={() => router.back()}
+          hitSlop={8}
+          className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
+        >
+          <X size={20} color="#2F4F3F" strokeWidth={2} />
+        </Pressable>
+        <Text className="font-display text-base text-foreground">Edit profile</Text>
+        <Pressable
+          onPress={handleSave}
+          disabled={!canSubmit}
+          hitSlop={6}
+          className={`rounded-xl px-3 py-1.5 ${canSubmit ? 'bg-primary' : 'bg-muted'}`}
+        >
+          <Text
+            className={`font-sans text-sm font-semibold ${
+              canSubmit ? 'text-white' : 'text-muted-foreground'
+            }`}
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </Text>
+        </Pressable>
+      </View>
+
+      <KeyboardAvoidingView
+        className="flex-1"
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
+          className="flex-1"
+          contentContainerClassName="px-5 py-6 gap-5"
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
+          {isLoading ? (
+            <ActivityIndicator className="mt-12" color="#23744D" />
+          ) : (
+            <>
+              {/* ── Avatar ──────────────────────────────────────────────── */}
+              <View className="items-center gap-3">
+                <Pressable
+                  onPress={handlePickAvatar}
+                  disabled={uploading}
+                  hitSlop={6}
+                  className="active:opacity-70"
+                >
+                  <View
+                    style={{
+                      borderWidth: 4,
+                      borderColor: '#FFFFFF',
+                      borderRadius: 999,
+                      shadowColor: '#040A2A',
+                      shadowOpacity: 0.10,
+                      shadowRadius: 8,
+                      shadowOffset: { width: 0, height: 3 },
+                    }}
+                  >
+                    <Avatar
+                      url={avatarUrl}
+                      firstName={firstName}
+                      lastName={lastName}
+                      displayName={displayName}
+                      size="xl"
+                    />
+                    {/* Camera overlay */}
+                    <View
+                      style={{
+                        position: 'absolute',
+                        bottom: -2,
+                        right: -2,
+                        width: 32,
+                        height: 32,
+                        borderRadius: 999,
+                        backgroundColor: '#23744D',
+                        borderWidth: 3,
+                        borderColor: '#F8F0E0',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      {uploading ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      ) : (
+                        <Camera size={14} color="#FFFFFF" strokeWidth={2.2} />
+                      )}
+                    </View>
+                  </View>
+                </Pressable>
+                <Pressable onPress={handlePickAvatar} disabled={uploading} hitSlop={4}>
+                  <Text className="font-sans text-xs font-semibold text-primary">
+                    {uploading ? 'Uploading…' : 'Change photo'}
+                  </Text>
+                </Pressable>
+              </View>
+
+              {/* ── Display name ────────────────────────────────────────── */}
+              <View>
+                <FieldLabel>Display name</FieldLabel>
+                <TextInput
+                  value={displayName}
+                  onChangeText={(t) => { setDisplayName(t); setError(null); }}
+                  placeholder="e.g. austin"
+                  placeholderTextColor="#929298"
+                  className="bg-white rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
+                  maxLength={40}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                {error && (
+                  <Text className="font-sans text-xs text-destructive mt-1.5 px-0.5">
+                    {error}
+                  </Text>
+                )}
+                <Text className="font-sans text-[11px] text-muted-foreground mt-1.5 px-0.5">
+                  How friends see you — appears as @{displayName || 'handle'}
+                </Text>
+              </View>
+
+              {/* ── First / Last name ──────────────────────────────────── */}
+              <View className="flex-row gap-3">
+                <View className="flex-1">
+                  <FieldLabel>First name</FieldLabel>
+                  <TextInput
+                    value={firstName}
+                    onChangeText={setFirstName}
+                    placeholder="First"
+                    placeholderTextColor="#929298"
+                    className="bg-white rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
+                    maxLength={40}
+                  />
+                </View>
+                <View className="flex-1">
+                  <FieldLabel>Last name</FieldLabel>
+                  <TextInput
+                    value={lastName}
+                    onChangeText={setLastName}
+                    placeholder="Last"
+                    placeholderTextColor="#929298"
+                    className="bg-white rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
+                    maxLength={40}
+                  />
+                </View>
+              </View>
+
+              {/* ── Bio ────────────────────────────────────────────────── */}
+              <View>
+                <View className="flex-row items-center justify-between px-0.5 mb-2">
+                  <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    Bio
+                  </Text>
+                  <Text className="font-sans text-[10px] text-muted-foreground/60">
+                    {bio.length} / 500
+                  </Text>
+                </View>
+                <TextInput
+                  value={bio}
+                  onChangeText={setBio}
+                  placeholder="A line or two about you"
+                  placeholderTextColor="#929298"
+                  className="bg-white rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
+                  maxLength={500}
+                  multiline
+                  style={{ minHeight: 96, textAlignVertical: 'top' }}
+                />
+              </View>
+
+              {/* ── Current vibe ──────────────────────────────────────── */}
+              <View>
+                <FieldLabel>Current vibe</FieldLabel>
+                <View className="flex-row flex-wrap gap-2">
+                  {VIBES.map((v) => {
+                    const selected = vibe === v.id;
+                    return (
+                      <Pressable
+                        key={v.id}
+                        onPress={() => {
+                          Haptics.selectionAsync();
+                          setVibe(selected ? null : v.id);
+                        }}
+                        className={`rounded-xl px-3 py-2.5 border flex-row items-center gap-1.5 active:opacity-70 ${
+                          selected ? 'bg-primary border-primary' : 'bg-white border-border/40'
+                        }`}
+                      >
+                        <Text style={{ fontSize: 14 }}>{v.emoji}</Text>
+                        <Text
+                          className={`font-sans text-xs font-medium ${
+                            selected ? 'text-white' : 'text-foreground'
+                          }`}
+                        >
+                          {v.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                {vibe && (
+                  <Pressable
+                    onPress={() => { Haptics.selectionAsync(); setVibe(null); }}
+                    className="mt-2 self-start"
+                  >
+                    <Text className="font-sans text-xs text-muted-foreground underline">
+                      Clear vibe
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+            </>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}

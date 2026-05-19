@@ -191,6 +191,18 @@ export default function ProfileTab() {
           </View>
         </View>
 
+        {/* ── Edit profile CTA ──────────────────────────────────────────── */}
+        <View className="px-5 pt-4">
+          <Pressable
+            onPress={() => router.push('/(app)/edit-profile')}
+            className="bg-white rounded-2xl border border-border/30 px-4 py-3.5 items-center shadow-sm active:opacity-70"
+          >
+            <Text className="font-sans text-sm font-semibold text-primary">
+              Edit profile
+            </Text>
+          </Pressable>
+        </View>
+
         {/* ── Member since (small footer) ──────────────────────────────── */}
         {profile?.created_at && (
           <View className="px-5 pt-4 items-center">
