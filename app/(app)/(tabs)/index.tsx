@@ -22,6 +22,7 @@ import { useFriendDashboardData } from '@/hooks/useFriendDashboardData';
 import { FriendVibeStrip } from '@/components/dashboard/FriendVibeStrip';
 import { FreeWindowCard } from '@/components/dashboard/FreeWindowCard';
 import { UpcomingPlansWidget } from '@/components/dashboard/UpcomingPlansWidget';
+import { OpenInvitesWidget } from '@/components/dashboard/OpenInvitesWidget';
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
@@ -218,6 +219,8 @@ export default function HomeTab() {
 
         {/* ── Dashboard widgets ────────────────────────────────────────────── */}
         <View className="px-5 gap-6">
+          {/* Open invites first — these need action */}
+          <OpenInvitesWidget />
           <FriendVibeStrip />
           <FreeWindowCard />
           <UpcomingPlansWidget />
