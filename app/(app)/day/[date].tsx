@@ -10,6 +10,7 @@ import {
   Text,
   Pressable,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -98,7 +99,14 @@ export default function DayDetailScreen() {
   const setAvailability = usePlannerStore((s) => s.setAvailability);
   const setUserId       = usePlannerStore((s) => s.setUserId);
 
-  const { data, isLoading } = useDayData(user?.id, date);
+  const { data, isLoading, refetch } = useDayData(user?.id, date);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
+  }, [refetch]);
   const avail: any = data?.avail;
   const plans = (data?.plans ?? []) as any[];
 
@@ -209,7 +217,12 @@ export default function DayDetailScreen() {
       {isLoading ? (
         <ActivityIndicator className="mt-16" color="#23744D" />
       ) : (
-        <ScrollView contentContainerClassName="px-5 pb-10 gap-5 pt-2">
+        <ScrollView
+          contentContainerClassName="px-5 pb-10 gap-5 pt-2"
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#23744D" />
+          }
+        >
           {/* ── Availability ─────────────────────────────────────────── */}
           <View className="gap-2">
             <View className="flex-row items-center justify-between px-1">

@@ -10,6 +10,7 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -97,11 +98,18 @@ export default function PlanDetailScreen() {
   const deletePlan        = usePlannerStore((s) => s.deletePlan);
   const { showActionSheetWithOptions } = useActionSheet();
 
-  const { data, isLoading, error } = usePlan(planId);
+  const { data, isLoading, error, refetch } = usePlan(planId);
   const plan = data?.plan as any;
   const participants = (data?.participants ?? []) as any[];
 
   const [rsvpLoading, setRsvpLoading] = useState<'accepted' | 'declined' | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
+  }, [refetch]);
 
   const accentColor = activityAccent(plan?.activity);
   const isOwner = plan?.user_id === user?.id;
@@ -214,7 +222,12 @@ export default function PlanDetailScreen() {
           </Text>
         </View>
       ) : (
-        <ScrollView contentContainerClassName="px-5 pb-10 gap-4 pt-2">
+        <ScrollView
+          contentContainerClassName="px-5 pb-10 gap-4 pt-2"
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#23744D" />
+          }
+        >
           {/* Hero card — white with activity left-border accent + Fraunces title */}
           <View className="bg-white rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm">
             <View style={{ width: 4, backgroundColor: accentColor }} />

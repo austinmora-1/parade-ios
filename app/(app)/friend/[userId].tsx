@@ -10,9 +10,11 @@ import {
   Text,
   Pressable,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useState, useCallback } from 'react';
 import { ChevronLeft, CalendarDays, MapPin } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
 import { format, isToday } from 'date-fns';
@@ -87,8 +89,15 @@ function useFriendAvailability(userId: string) {
 
 export default function FriendProfileScreen() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
-  const { data: profile, isLoading } = useFriendProfile(userId);
-  const { data: availability } = useFriendAvailability(userId);
+  const { data: profile, isLoading, refetch: refetchProfile } = useFriendProfile(userId);
+  const { data: availability, refetch: refetchAvail } = useFriendAvailability(userId);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([refetchProfile(), refetchAvail()]);
+    setRefreshing(false);
+  }, [refetchProfile, refetchAvail]);
   const p: any = profile;
 
   const name = p
@@ -128,7 +137,12 @@ export default function FriendProfileScreen() {
       {isLoading ? (
         <ActivityIndicator className="mt-16" color="#23744D" />
       ) : (
-        <ScrollView contentContainerClassName="pb-10 gap-5">
+        <ScrollView
+          contentContainerClassName="pb-10 gap-5"
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#23744D" />
+          }
+        >
           {/* ── Profile hero (banner + overlapping avatar, matches Profile tab) ── */}
           <View className="mx-5 bg-white rounded-2xl border border-border/30 overflow-hidden shadow-sm">
             {/* Cover banner */}

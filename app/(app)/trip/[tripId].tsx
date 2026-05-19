@@ -8,6 +8,7 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -72,9 +73,16 @@ function DetailRow({
 export default function TripDetailScreen() {
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
   const { user } = useAuth();
-  const { data: trip, isLoading, error } = useTrip(tripId);
+  const { data: trip, isLoading, error, refetch } = useTrip(tripId);
   const { showActionSheetWithOptions } = useActionSheet();
   const [deleting, setDeleting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
+  }, [refetch]);
 
   const isOwner = trip?.user_id === user?.id;
 
@@ -181,7 +189,12 @@ export default function TripDetailScreen() {
           </Text>
         </View>
       ) : (
-        <ScrollView contentContainerClassName="px-5 pb-10 gap-4 pt-2">
+        <ScrollView
+          contentContainerClassName="px-5 pb-10 gap-4 pt-2"
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#23744D" />
+          }
+        >
           {/* Hero card — white with parade-green accent + Plane icon */}
           <View className="bg-white rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm">
             <View style={{ width: 4, backgroundColor: '#23744D' }} />
