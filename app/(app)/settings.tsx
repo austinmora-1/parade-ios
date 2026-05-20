@@ -473,7 +473,18 @@ export default function SettingsPage() {
 
             {/* ── Footer ─────────────────────────────────────────────── */}
             <View className="items-center gap-2 pt-3">
-              <View className="flex-row gap-3">
+              {/* Take the tour replay */}
+              <Pressable
+                onPress={() => router.push('/(app)/tour')}
+                hitSlop={4}
+                className="active:opacity-60"
+              >
+                <Text className="font-sans text-xs text-muted-foreground">
+                  ✨ Take the tour
+                </Text>
+              </Pressable>
+
+              <View className="flex-row gap-3 mt-1">
                 <Pressable
                   onPress={() => Linking.openURL('https://helloparade.app/privacy')}
                 >

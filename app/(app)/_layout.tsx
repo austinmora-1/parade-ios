@@ -58,6 +58,14 @@ function AppLayoutInner() {
           gestureEnabled: false,
         }}
       />
+      <Stack.Screen
+        name="tour"
+        options={{
+          presentation: 'fullScreenModal',
+          animation: 'fade',
+          gestureEnabled: false,
+        }}
+      />
     </Stack>
   );
 }

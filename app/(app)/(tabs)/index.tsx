@@ -121,16 +121,18 @@ export default function HomeTab() {
     }
   }, [user?.id]);
 
-  // Trigger first-launch welcome walkthrough for truly-empty new users
+  // Trigger first-launch walkthrough — /welcome for empty users (brand
+  // intro), /tour for non-empty users (feature tour). Both write
+  // walkthrough_completed=true on dismiss.
   useEffect(() => {
     if (walkthroughTriggered) return;
-    if (walkthroughLoading || storeLoading) return; // wait for data
+    if (walkthroughLoading || storeLoading) return;
     if (walkthroughDone) return;
     if (!user?.id) return;
-    const connectedCount = friends.filter((f) => f.status === 'connected').length;
-    if (connectedCount > 0 || plans.length > 0) return; // not empty
     setWalkthroughTriggered(true);
-    router.push('/(app)/welcome');
+    const connectedCount = friends.filter((f) => f.status === 'connected').length;
+    const isEmpty = connectedCount === 0 && plans.length === 0;
+    router.push(isEmpty ? '/(app)/welcome' : '/(app)/tour');
   }, [
     walkthroughTriggered, walkthroughLoading, storeLoading,
     walkthroughDone, user?.id, friends, plans.length,
