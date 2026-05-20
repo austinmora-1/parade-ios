@@ -38,6 +38,10 @@ function AppLayoutInner() {
         name="new-trip"
         options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
       />
+      <Stack.Screen
+        name="onboarding"
+        options={{ gestureEnabled: false }}
+      />
     </Stack>
   );
 }
