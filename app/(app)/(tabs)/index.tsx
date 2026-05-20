@@ -7,7 +7,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Bell, Plus } from 'lucide-react-native';
+import { Bell, Plus, MapPin } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useCallback, useState, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -33,11 +33,13 @@ function useProfile(userId: string | undefined) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('user_id, display_name, first_name, last_name, avatar_url')
+        .select(
+          'user_id, display_name, first_name, last_name, avatar_url, home_address',
+        )
         .eq('user_id', userId!)
         .single();
       if (error) throw error;
-      return data;
+      return data as any;
     },
   });
 }
@@ -181,17 +183,30 @@ export default function HomeTab() {
             <Skeleton width="35%" height={13} />
           </View>
         ) : (
-          <View className="px-5 pt-2 pb-4 gap-1">
+          <View className="px-5 pt-2 pb-4 gap-1.5">
             <Text className="font-sans font-semibold text-evergreen text-2xl">
               {greeting(firstName || 'there')}
             </Text>
-            <Text className="font-sans text-sm text-foreground/60">
-              {new Date().toLocaleDateString('en-US', {
-                weekday: 'long',
-                month: 'long',
-                day: 'numeric',
-              })}
-            </Text>
+            <View className="flex-row items-center gap-3">
+              <Text className="font-sans text-sm text-foreground/60">
+                {new Date().toLocaleDateString('en-US', {
+                  weekday: 'long',
+                  month: 'long',
+                  day: 'numeric',
+                })}
+              </Text>
+              {/* City pill — tap to open set-location modal */}
+              <Pressable
+                onPress={() => router.push('/(app)/set-location')}
+                hitSlop={4}
+                className="flex-row items-center gap-1 active:opacity-60"
+              >
+                <MapPin size={11} color="#23744D" strokeWidth={2} />
+                <Text className="font-sans text-xs font-semibold text-primary">
+                  {profile?.home_address || 'Set location'}
+                </Text>
+              </Pressable>
+            </View>
           </View>
         )}
 

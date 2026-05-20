@@ -42,6 +42,10 @@ function AppLayoutInner() {
         name="onboarding"
         options={{ gestureEnabled: false }}
       />
+      <Stack.Screen
+        name="set-location"
+        options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+      />
     </Stack>
   );
 }
