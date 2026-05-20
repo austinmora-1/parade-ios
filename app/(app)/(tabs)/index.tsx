@@ -47,6 +47,26 @@ function useProfile(userId: string | undefined) {
   });
 }
 
+/**
+ * Returns walkthrough_completed flag for the current user. Used to gate the
+ * first-launch EllyWalkthrough modal.
+ */
+function useWalkthroughStatus(userId: string | undefined) {
+  return useQuery({
+    enabled: !!userId,
+    queryKey: ['walkthrough-status', userId],
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('walkthrough_completed')
+        .eq('user_id', userId!)
+        .maybeSingle();
+      return (data?.walkthrough_completed as boolean | undefined) ?? false;
+    },
+  });
+}
+
 /** Returns count of unread notifications for the current user. */
 function useUnreadCount(userId: string | undefined) {
   return useQuery({
@@ -80,14 +100,18 @@ export default function HomeTab() {
   const queryClient = useQueryClient();
   const setUserId = usePlannerStore((s) => s.setUserId);
   const loadAllData = usePlannerStore((s) => s.loadAllData);
-  const plans = usePlannerStore((s) => s.plans);
+  const plans   = usePlannerStore((s) => s.plans);
+  const friends = usePlannerStore((s) => s.friends);
   const storeLoading = usePlannerStore((s) => s.isLoading);
 
   const { data: profile, isLoading: profileLoading, refetch } = useProfile(user?.id);
   const { data: unreadCount } = useUnreadCount(user?.id);
-  const { data: friendData } = useFriendDashboardData();
+  const { data: friendData }  = useFriendDashboardData();
+  const { data: walkthroughDone, isLoading: walkthroughLoading } =
+    useWalkthroughStatus(user?.id);
 
   const [refreshing, setRefreshing] = useState(false);
+  const [walkthroughTriggered, setWalkthroughTriggered] = useState(false);
 
   // Bootstrap the planner store on first mount
   useEffect(() => {
@@ -96,6 +120,21 @@ export default function HomeTab() {
       loadAllData();
     }
   }, [user?.id]);
+
+  // Trigger first-launch welcome walkthrough for truly-empty new users
+  useEffect(() => {
+    if (walkthroughTriggered) return;
+    if (walkthroughLoading || storeLoading) return; // wait for data
+    if (walkthroughDone) return;
+    if (!user?.id) return;
+    const connectedCount = friends.filter((f) => f.status === 'connected').length;
+    if (connectedCount > 0 || plans.length > 0) return; // not empty
+    setWalkthroughTriggered(true);
+    router.push('/(app)/welcome');
+  }, [
+    walkthroughTriggered, walkthroughLoading, storeLoading,
+    walkthroughDone, user?.id, friends, plans.length,
+  ]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

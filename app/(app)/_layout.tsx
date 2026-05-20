@@ -50,6 +50,14 @@ function AppLayoutInner() {
         name="what-planning"
         options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
       />
+      <Stack.Screen
+        name="welcome"
+        options={{
+          presentation: 'fullScreenModal',
+          animation: 'fade',
+          gestureEnabled: false,
+        }}
+      />
     </Stack>
   );
 }
