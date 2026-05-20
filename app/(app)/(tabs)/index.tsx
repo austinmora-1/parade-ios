@@ -242,9 +242,9 @@ export default function HomeTab() {
         </View>
       </ScrollView>
 
-      {/* ── Floating Action Button: new plan ────────────────────────────── */}
+      {/* ── Floating Action Button: opens What-Are-You-Planning sheet ──── */}
       <Pressable
-        onPress={() => router.push('/(app)/new-plan')}
+        onPress={() => router.push('/(app)/what-planning')}
         className="absolute right-5 bottom-6 active:opacity-80"
         style={{
           width: 56,

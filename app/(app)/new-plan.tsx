@@ -117,11 +117,14 @@ export default function NewPlanScreen() {
     date: dateParam,
     slot: slotParam,
     planId: planIdParam,
+    openInvite: openInviteParam,
   } = useLocalSearchParams<{
-    date?:   string;
-    slot?:   string;
-    planId?: string;
+    date?:       string;
+    slot?:       string;
+    planId?:     string;
+    openInvite?: string;
   }>();
+  const isOpenInvite = openInviteParam === 'true';
   const { user } = useAuth();
   const addPlan    = usePlannerStore((s) => s.addPlan);
   const updatePlan = usePlannerStore((s) => s.updatePlan);
@@ -236,9 +239,14 @@ export default function NewPlanScreen() {
           ? { id: '', name: location.trim(), address: '' }
           : undefined,
         notes:    notes.trim() || undefined,
-        participants,
-        status:   participants.length > 0 ? 'proposed' : 'confirmed',
-        feedVisibility: 'private',
+        participants: isOpenInvite ? [] : participants,
+        status:   isOpenInvite
+          ? 'confirmed'
+          : participants.length > 0
+            ? 'proposed'
+            : 'confirmed',
+        // Open invites are visible to all friends; otherwise private
+        feedVisibility: isOpenInvite ? 'friends' : 'private',
         blocksAvailability: true,
       };
 
@@ -263,6 +271,7 @@ export default function NewPlanScreen() {
   }, [
     title, activity, date, timeSlot, location, notes, invitedIds,
     connectedFriends, addPlan, updatePlan, isEditMode, planIdParam,
+    isOpenInvite,
   ]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -280,7 +289,11 @@ export default function NewPlanScreen() {
           <X size={20} color="#2F4F3F" strokeWidth={2} />
         </Pressable>
         <Text className="font-display text-base text-foreground">
-          {isEditMode ? 'Edit plan' : 'New plan'}
+          {isEditMode
+            ? 'Edit plan'
+            : isOpenInvite
+              ? 'Find friends to join'
+              : 'New plan'}
         </Text>
         <Pressable
           onPress={handleSubmit}
@@ -311,6 +324,18 @@ export default function NewPlanScreen() {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
         >
+          {/* Open invite banner */}
+          {isOpenInvite && (
+            <View className="bg-marigold/10 rounded-2xl px-4 py-3 flex-row items-start gap-2.5">
+              <View className="w-1.5 h-1.5 rounded-full bg-marigold mt-1.5" />
+              <Text className="font-sans text-xs text-foreground flex-1 leading-relaxed">
+                <Text className="font-semibold">Open call.</Text> No invitee
+                list — friends in your feed can claim this plan. Great for
+                "I'm getting drinks Friday, who's around?"
+              </Text>
+            </View>
+          )}
+
           {/* ── Title ─────────────────────────────────────────────────── */}
           <View>
             <FieldLabel>What's the plan?</FieldLabel>
@@ -460,7 +485,7 @@ export default function NewPlanScreen() {
           </View>
 
           {/* ── Invite friends ────────────────────────────────────────── */}
-          {connectedFriends.length > 0 && (
+          {!isOpenInvite && connectedFriends.length > 0 && (
             <View>
               <View className="flex-row items-center justify-between mb-2 px-0.5">
                 <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
