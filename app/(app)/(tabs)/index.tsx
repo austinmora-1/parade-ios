@@ -23,6 +23,9 @@ import { FriendVibeStrip } from '@/components/dashboard/FriendVibeStrip';
 import { FreeWindowCard } from '@/components/dashboard/FreeWindowCard';
 import { UpcomingPlansWidget } from '@/components/dashboard/UpcomingPlansWidget';
 import { OpenInvitesWidget } from '@/components/dashboard/OpenInvitesWidget';
+import { SmartPrimaryCTA } from '@/components/dashboard/SmartPrimaryCTA';
+import { PolishProfileCard } from '@/components/dashboard/PolishProfileCard';
+import { PushNotificationPrompt } from '@/components/dashboard/PushNotificationPrompt';
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
@@ -231,6 +234,13 @@ export default function HomeTab() {
             )}
           </View>
         )}
+
+        {/* ── Contextual cards (conditionally rendered) ───────────────────── */}
+        <View className="px-5 gap-3 mb-3">
+          <SmartPrimaryCTA />
+          <PushNotificationPrompt />
+          <PolishProfileCard />
+        </View>
 
         {/* ── Dashboard widgets ────────────────────────────────────────────── */}
         <View className="px-5 gap-6">
