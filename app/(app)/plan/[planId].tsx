@@ -14,8 +14,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ChevronLeft, Calendar, Clock, MapPin, Users, Check, X, MoreHorizontal } from 'lucide-react-native';
+import { ChevronLeft, Calendar, Clock, MapPin, Users, Check, X, MoreHorizontal, AlertCircle } from 'lucide-react-native';
 import { useActionSheet } from '@expo/react-native-action-sheet';
+import {
+  usePlanChangeRequest,
+  useRespondToChange,
+} from '@/hooks/usePlanChangeRequests';
+import { parseISO } from 'date-fns';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { useState, useCallback } from 'react';
@@ -101,6 +106,8 @@ export default function PlanDetailScreen() {
   const { data, isLoading, error, refetch } = usePlan(planId);
   const plan = data?.plan as any;
   const participants = (data?.participants ?? []) as any[];
+  const { data: pendingChange } = usePlanChangeRequest(planId);
+  const respondChangeMut = useRespondToChange();
 
   const [rsvpLoading, setRsvpLoading] = useState<'accepted' | 'declined' | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -149,9 +156,9 @@ export default function PlanDetailScreen() {
 
   const openOwnerMenu = useCallback(() => {
     Haptics.selectionAsync();
-    const options = ['Edit plan', 'Delete plan', 'Cancel'];
-    const destructiveButtonIndex = 1;
-    const cancelButtonIndex = 2;
+    const options = ['Edit plan', 'Propose change', 'Delete plan', 'Cancel'];
+    const destructiveButtonIndex = 2;
+    const cancelButtonIndex = 3;
 
     showActionSheetWithOptions(
       { options, destructiveButtonIndex, cancelButtonIndex },
@@ -159,6 +166,8 @@ export default function PlanDetailScreen() {
         if (selectedIndex === 0) {
           router.push(`/(app)/new-plan?planId=${planId}`);
         } else if (selectedIndex === 1) {
+          router.push(`/(app)/propose-change?planId=${planId}`);
+        } else if (selectedIndex === 2) {
           handleDelete();
         }
       },
@@ -202,9 +211,22 @@ export default function PlanDetailScreen() {
         >
           {plan?.title ?? 'Plan'}
         </Text>
-        {isOwner && (
+        {(isOwner || myParticipant) && (
           <Pressable
-            onPress={openOwnerMenu}
+            onPress={() => {
+              if (isOwner) {
+                openOwnerMenu();
+              } else {
+                // Participant menu: just propose change
+                Haptics.selectionAsync();
+                showActionSheetWithOptions(
+                  { options: ['Propose change', 'Cancel'], cancelButtonIndex: 1 },
+                  (i) => {
+                    if (i === 0) router.push(`/(app)/propose-change?planId=${planId}`);
+                  },
+                );
+              }
+            }}
             hitSlop={8}
             className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
           >
@@ -242,6 +264,82 @@ export default function PlanDetailScreen() {
               ) : null}
             </View>
           </View>
+
+          {/* ── Pending change request banner ─────────────────────────── */}
+          {pendingChange && (
+            <View
+              className="bg-white rounded-2xl border overflow-hidden shadow-sm"
+              style={{ borderColor: 'rgba(180,83,9,0.30)' }}
+            >
+              <View className="px-4 py-3 gap-1">
+                <View className="flex-row items-center gap-1.5">
+                  <AlertCircle size={14} color="#92400E" strokeWidth={2} />
+                  <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest" style={{ color: '#92400E' }}>
+                    Change proposed
+                  </Text>
+                </View>
+                <Text className="font-display text-sm text-foreground mt-1">
+                  Move to{' '}
+                  {pendingChange.proposedDate
+                    ? format(parseISO(pendingChange.proposedDate), 'EEE, MMM d')
+                    : 'a new date'}
+                  {pendingChange.proposedTimeSlot ? ` · ${pendingChange.proposedTimeSlot.replace('-', ' ')}` : ''}
+                </Text>
+                <Text className="font-sans text-xs text-muted-foreground mt-0.5">
+                  Waiting for {pendingChange.responses.filter((r) => r.response === 'pending').length} response
+                  {pendingChange.responses.filter((r) => r.response === 'pending').length === 1 ? '' : 's'} · {
+                    pendingChange.responses.filter((r) => r.response === 'accepted').length
+                  } accepted
+                </Text>
+              </View>
+
+              {/* Show Accept/Decline if user is a non-proposer participant with pending response */}
+              {pendingChange.proposedBy !== user?.id &&
+               pendingChange.responses.some((r) => r.participantId === user?.id && r.response === 'pending') && (
+                <View className="flex-row border-t border-border/20">
+                  <Pressable
+                    onPress={async () => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      try {
+                        await respondChangeMut.mutateAsync({
+                          changeRequestId: pendingChange.id,
+                          response:        'declined',
+                          planId,
+                        });
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                      } catch { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); }
+                    }}
+                    className="flex-1 flex-row items-center justify-center gap-1.5 py-3 active:bg-muted/20"
+                  >
+                    <X size={14} color="#D46549" strokeWidth={2.2} />
+                    <Text className="font-sans text-sm font-semibold text-secondary">
+                      Keep original
+                    </Text>
+                  </Pressable>
+                  <View className="w-px bg-border/30" />
+                  <Pressable
+                    onPress={async () => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                      try {
+                        await respondChangeMut.mutateAsync({
+                          changeRequestId: pendingChange.id,
+                          response:        'accepted',
+                          planId,
+                        });
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                      } catch { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); }
+                    }}
+                    className="flex-1 flex-row items-center justify-center gap-1.5 py-3 active:bg-primary/5"
+                  >
+                    <Check size={14} color="#23744D" strokeWidth={2.5} />
+                    <Text className="font-sans text-sm font-semibold text-primary">
+                      Accept change
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
+            </View>
+          )}
 
           {/* Details card */}
           <View className="bg-white rounded-2xl border border-border/30 shadow-sm overflow-hidden">
