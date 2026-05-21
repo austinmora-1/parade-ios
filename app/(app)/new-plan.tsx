@@ -39,6 +39,8 @@ import { usePlannerStore } from '@/stores/plannerStore';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar } from '@/components/primitives/Avatar';
 import { LocationAutocomplete } from '@/components/primitives/LocationAutocomplete';
+import { usePods } from '@/hooks/usePods';
+import { Eye, Users as UsersIcon, Lock } from 'lucide-react-native';
 import type { TimeSlot } from '@/types/planner';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -132,6 +134,7 @@ export default function NewPlanScreen() {
   const updatePlan = usePlannerStore((s) => s.updatePlan);
   const friends    = usePlannerStore((s) => s.friends);
   const setUserId  = usePlannerStore((s) => s.setUserId);
+  const { data: pods } = usePods();
 
   const isEditMode = !!planIdParam;
 
@@ -167,6 +170,10 @@ export default function NewPlanScreen() {
   const [timeSlot, setTimeSlot] = useState<TimeSlot>(initialSlot);
   const [location, setLocation] = useState('');
   const [notes,    setNotes]    = useState('');
+  /** 'private' | 'friends' | `pod:<id>` */
+  const [visibility, setVisibility] = useState<string>(
+    isOpenInvite ? 'friends' : 'private',
+  );
   const [invitedIds, setInvitedIds] = useState<Set<string>>(() => {
     // Seed from ?preInvite=id1,id2 (passed from plan-with-friends sheet)
     if (preInviteParam) {
@@ -253,8 +260,8 @@ export default function NewPlanScreen() {
           : participants.length > 0
             ? 'proposed'
             : 'confirmed',
-        // Open invites are visible to all friends; otherwise private
-        feedVisibility: isOpenInvite ? 'friends' : 'private',
+        // Open invites force friends-visibility; otherwise user-picked
+        feedVisibility: isOpenInvite ? 'friends' : visibility,
         blocksAvailability: true,
       };
 
@@ -279,7 +286,7 @@ export default function NewPlanScreen() {
   }, [
     title, activity, date, timeSlot, location, notes, invitedIds,
     connectedFriends, addPlan, updatePlan, isEditMode, planIdParam,
-    isOpenInvite,
+    isOpenInvite, visibility,
   ]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -491,6 +498,62 @@ export default function NewPlanScreen() {
               style={{ minHeight: 80, textAlignVertical: 'top' }}
             />
           </View>
+
+          {/* ── Visibility ───────────────────────────────────────────── */}
+          {!isOpenInvite && (
+            <View>
+              <FieldLabel>Who can see this plan</FieldLabel>
+              <View className="flex-row flex-wrap gap-2">
+                <Chip
+                  selected={visibility === 'private'}
+                  onPress={() => { Haptics.selectionAsync(); setVisibility('private'); }}
+                >
+                  <Lock size={12} color={visibility === 'private' ? '#FFFFFF' : '#2F4F3F'} strokeWidth={2.2} />
+                  <Text className={`font-sans text-xs font-semibold ${
+                    visibility === 'private' ? 'text-white' : 'text-foreground'
+                  }`}>
+                    Only invitees
+                  </Text>
+                </Chip>
+                <Chip
+                  selected={visibility === 'friends'}
+                  onPress={() => { Haptics.selectionAsync(); setVisibility('friends'); }}
+                >
+                  <UsersIcon size={12} color={visibility === 'friends' ? '#FFFFFF' : '#2F4F3F'} strokeWidth={2.2} />
+                  <Text className={`font-sans text-xs font-semibold ${
+                    visibility === 'friends' ? 'text-white' : 'text-foreground'
+                  }`}>
+                    All friends
+                  </Text>
+                </Chip>
+                {(pods ?? []).map((pod) => {
+                  const v = `pod:${pod.id}`;
+                  const selected = visibility === v;
+                  return (
+                    <Chip
+                      key={pod.id}
+                      selected={selected}
+                      onPress={() => { Haptics.selectionAsync(); setVisibility(v); }}
+                    >
+                      <Text style={{ fontSize: 13 }}>{pod.emoji ?? '💜'}</Text>
+                      <Text className={`font-sans text-xs font-semibold ${
+                        selected ? 'text-white' : 'text-foreground'
+                      }`}>
+                        {pod.name}
+                      </Text>
+                    </Chip>
+                  );
+                })}
+              </View>
+              <Text className="font-sans text-[11px] text-muted-foreground mt-1.5 px-0.5">
+                {visibility === 'private'
+                  ? 'Only invited friends will see this plan.'
+                  : visibility === 'friends'
+                    ? 'Visible in all friends\' feeds.'
+                    : 'Visible to this pod\'s members.'}
+              </Text>
+            </View>
+          )}
 
           {/* ── Invite friends ────────────────────────────────────────── */}
           {!isOpenInvite && connectedFriends.length > 0 && (
