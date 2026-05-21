@@ -6,6 +6,7 @@
  */
 import { ScrollView, View, Text, Pressable } from 'react-native';
 import { router } from 'expo-router';
+import { useMemo } from 'react';
 import { format, startOfWeek, addDays } from 'date-fns';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { useFriendDashboardData } from '@/hooks/useFriendDashboardData';
@@ -22,11 +23,24 @@ function currentWeekDateStrs(): string[] {
 }
 
 export function FriendVibeStrip() {
-  const friends = usePlannerStore((s) => s.friends);
+  const friends      = usePlannerStore((s) => s.friends);
+  const availability = usePlannerStore((s) => s.availability);
   const { data: friendData, isLoading } = useFriendDashboardData();
 
   const connected = friends.filter((f) => f.status === 'connected' && f.friendUserId);
   const weekDates = currentWeekDateStrs();
+
+  /** Set of yyyy-MM-dd where the *current user* has ≥1 free slot this week */
+  const myFreeDates = useMemo(() => {
+    const set = new Set<string>();
+    for (const day of availability) {
+      const dateStr = format(day.date, 'yyyy-MM-dd');
+      if (!weekDates.includes(dateStr)) continue;
+      const hasFree = Object.values(day.slots).some((v) => v === true);
+      if (hasFree) set.add(dateStr);
+    }
+    return set;
+  }, [availability, weekDates.join(',')]);
 
   if (connected.length === 0) return null;
 
@@ -75,10 +89,29 @@ export function FriendVibeStrip() {
             });
             const firstName = displayName.split(' ')[0];
 
-            // Count how many days this week the friend is free
-            const freeDaysThisWeek = (vibeData?.freeDates ?? []).filter((d) =>
+            // Friend's free dates in current week
+            const friendFreeThisWeek = (vibeData?.freeDates ?? []).filter((d) =>
               weekDates.includes(d),
+            );
+
+            // Days where BOTH are free — the actually-useful number
+            const mutualDays = friendFreeThisWeek.filter((d) =>
+              myFreeDates.has(d),
             ).length;
+
+            // Subtitle precedence: mutual overlap > friend-only free > busy
+            let subtitle: string;
+            let badge: { count: number; tone: 'mutual' | 'one-sided' } | null = null;
+
+            if (mutualDays > 0) {
+              subtitle = `${mutualDays} day${mutualDays > 1 ? 's' : ''} free with you`;
+              badge = { count: mutualDays, tone: 'mutual' };
+            } else if (friendFreeThisWeek.length > 0) {
+              subtitle = `free ${friendFreeThisWeek.length} day${friendFreeThisWeek.length > 1 ? 's' : ''} (no overlap)`;
+              badge = { count: friendFreeThisWeek.length, tone: 'one-sided' };
+            } else {
+              subtitle = 'busy this week';
+            }
 
             return (
               <Pressable
@@ -101,18 +134,27 @@ export function FriendVibeStrip() {
                   >
                     {firstName}
                   </Text>
-                  <Text className="font-sans text-xs text-muted-foreground">
-                    {freeDaysThisWeek > 0
-                      ? `free ${freeDaysThisWeek} day${freeDaysThisWeek > 1 ? 's' : ''} this week`
-                      : 'busy this week'}
+                  <Text
+                    className="font-sans text-xs text-muted-foreground"
+                    numberOfLines={1}
+                  >
+                    {subtitle}
                   </Text>
                 </View>
 
-                {/* Free days badge */}
-                {freeDaysThisWeek > 0 && (
-                  <View className="bg-primary/10 rounded-full px-2 py-0.5">
-                    <Text className="font-sans text-xs text-primary font-semibold">
-                      {freeDaysThisWeek}
+                {/* Count badge: bright green for mutual, muted for one-sided */}
+                {badge && (
+                  <View
+                    className={`rounded-full px-2 py-0.5 ${
+                      badge.tone === 'mutual' ? 'bg-primary/10' : 'bg-muted'
+                    }`}
+                  >
+                    <Text
+                      className={`font-sans text-xs font-semibold ${
+                        badge.tone === 'mutual' ? 'text-primary' : 'text-muted-foreground'
+                      }`}
+                    >
+                      {badge.count}
                     </Text>
                   </View>
                 )}
