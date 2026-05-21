@@ -66,6 +66,10 @@ function AppLayoutInner() {
           gestureEnabled: false,
         }}
       />
+      <Stack.Screen
+        name="new-pod"
+        options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+      />
     </Stack>
   );
 }

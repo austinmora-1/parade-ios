@@ -36,6 +36,7 @@ import {
   STREAK_COLORS,
   shortAgo,
 } from '@/hooks/useLastHungOut';
+import { usePods } from '@/hooks/usePods';
 import { Avatar } from '@/components/primitives/Avatar';
 import { Skeleton } from '@/components/primitives/Skeleton';
 
@@ -272,6 +273,7 @@ export default function FriendsTab() {
   const isLoading   = usePlannerStore((s) => s.isLoading);
   const { data: friendData } = useFriendDashboardData();
   const { data: lastHungOutMap } = useLastHungOut();
+  const { data: pods } = usePods();
 
   const [search, setSearch]         = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -472,6 +474,65 @@ export default function FriendsTab() {
                     />
                   );
                 })}
+              </View>
+            )}
+
+            {/* Pods — horizontal scroll of pod chips + create button */}
+            {connected.length > 0 && (
+              <View className="gap-2">
+                <View className="flex-row items-center justify-between px-1">
+                  <Text className="font-sans text-sm font-semibold text-foreground">
+                    Pods
+                  </Text>
+                  <Pressable
+                    onPress={() => router.push('/(app)/new-pod')}
+                    hitSlop={6}
+                    className="active:opacity-60"
+                  >
+                    <Text className="font-sans text-xs font-semibold text-primary">
+                      + New pod
+                    </Text>
+                  </Pressable>
+                </View>
+
+                {(pods?.length ?? 0) > 0 ? (
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerClassName="gap-2 px-0.5 pb-1"
+                  >
+                    {pods!.map((pod) => (
+                      <Pressable
+                        key={pod.id}
+                        onPress={() => router.push(`/(app)/new-pod?podId=${pod.id}`)}
+                        className="flex-row items-center bg-white border border-border/30 rounded-xl px-3 py-2 gap-2 shadow-sm active:opacity-80"
+                      >
+                        <Text style={{ fontSize: 16 }}>{pod.emoji ?? '💜'}</Text>
+                        <View>
+                          <Text
+                            className="font-sans text-sm font-semibold text-foreground"
+                            numberOfLines={1}
+                          >
+                            {pod.name}
+                          </Text>
+                          <Text className="font-sans text-[11px] text-muted-foreground">
+                            {pod.memberIds.length} member{pod.memberIds.length === 1 ? '' : 's'}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                ) : (
+                  <Pressable
+                    onPress={() => router.push('/(app)/new-pod')}
+                    className="bg-white rounded-xl border border-dashed border-border/40 px-4 py-3 active:opacity-70"
+                  >
+                    <Text className="font-sans text-xs text-muted-foreground text-center">
+                      Group friends into pods to make planning easier — like
+                      "close friends" or "brunch crew".
+                    </Text>
+                  </Pressable>
+                )}
               </View>
             )}
 
