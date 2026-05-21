@@ -215,6 +215,19 @@ export default function FriendProfileScreen() {
                   </View>
                 </View>
               )}
+
+              {/* Action row: Send a ping */}
+              <View className="flex-row mt-4">
+                <Pressable
+                  onPress={() => router.push(`/(app)/new-hang-request?friendId=${userId}`)}
+                  className="flex-row items-center gap-1.5 bg-primary rounded-xl px-4 py-2.5 active:opacity-80"
+                >
+                  <Text style={{ fontSize: 14 }}>👋</Text>
+                  <Text className="font-sans text-sm font-semibold text-white">
+                    Send a ping
+                  </Text>
+                </Pressable>
+              </View>
             </View>
           </View>
 

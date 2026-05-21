@@ -26,6 +26,7 @@ import { OpenInvitesWidget } from '@/components/dashboard/OpenInvitesWidget';
 import { SmartPrimaryCTA } from '@/components/dashboard/SmartPrimaryCTA';
 import { PolishProfileCard } from '@/components/dashboard/PolishProfileCard';
 import { PushNotificationPrompt } from '@/components/dashboard/PushNotificationPrompt';
+import { HangRequestsWidget } from '@/components/dashboard/HangRequestsWidget';
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
@@ -285,7 +286,8 @@ export default function HomeTab() {
 
         {/* ── Dashboard widgets ────────────────────────────────────────────── */}
         <View className="px-5 gap-6">
-          {/* Open invites first — these need action */}
+          {/* Action-required first */}
+          <HangRequestsWidget />
           <OpenInvitesWidget />
           <FriendVibeStrip />
           <FreeWindowCard />
