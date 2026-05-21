@@ -191,6 +191,24 @@ export default function NewTripScreen() {
             </Text>
           </View>
 
+          {/* Switch to proposal flow */}
+          <Pressable
+            onPress={() => router.replace('/(app)/new-trip-proposal')}
+            className="flex-row items-center justify-between bg-white border border-border/30 rounded-xl px-4 py-3 active:opacity-80 shadow-sm"
+          >
+            <View className="flex-1 gap-0.5">
+              <Text className="font-sans text-sm font-semibold text-foreground">
+                Going with friends?
+              </Text>
+              <Text className="font-sans text-[11px] text-muted-foreground">
+                Propose dates and let them vote on the timing.
+              </Text>
+            </View>
+            <Text className="font-sans text-xs font-semibold text-primary">
+              Propose →
+            </Text>
+          </Pressable>
+
           {/* Name */}
           <View>
             <FieldLabel>Trip name</FieldLabel>
