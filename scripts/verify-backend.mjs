@@ -157,10 +157,36 @@ async function checkPlacesFn() {
 // ─── Run ─────────────────────────────────────────────────────────────────────
 console.log(`\n🔎 Verifying backend dependencies against ${URL}\n`);
 
+// ─── 4. push_tokens table ────────────────────────────────────────────────────
+async function checkPushTokensTable() {
+  const url = `${URL}/rest/v1/push_tokens?select=id&limit=1`;
+  const res = await fetch(url, { headers: HEADERS });
+  const text = await res.text();
+  if (res.ok) {
+    pass('push_tokens table', 'exists + selectable');
+    return;
+  }
+  if (res.status === 401 || res.status === 403) {
+    // RLS blocked — table exists but anon can't read (expected)
+    pass('push_tokens table', 'RLS blocked (expected for anon) — table exists');
+    return;
+  }
+  if (res.status === 404 || text.toLowerCase().includes('relation') &&
+      text.toLowerCase().includes('does not exist')) {
+    fail(
+      'push_tokens table',
+      'missing — apply supabase/migrations/20260520000000_push_tokens.sql',
+    );
+    return;
+  }
+  warn('push_tokens table', `HTTP ${res.status}: ${text.slice(0, 200)}`);
+}
+
 await Promise.all([
   checkProfileColumns(),
   checkPhoneRpc(),
   checkPlacesFn(),
+  checkPushTokensTable(),
 ]);
 
 for (const r of results) {
