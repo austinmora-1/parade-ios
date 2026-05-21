@@ -118,11 +118,13 @@ export default function NewPlanScreen() {
     slot: slotParam,
     planId: planIdParam,
     openInvite: openInviteParam,
+    preInvite: preInviteParam,
   } = useLocalSearchParams<{
     date?:       string;
     slot?:       string;
     planId?:     string;
     openInvite?: string;
+    preInvite?:  string;
   }>();
   const isOpenInvite = openInviteParam === 'true';
   const { user } = useAuth();
@@ -165,7 +167,13 @@ export default function NewPlanScreen() {
   const [timeSlot, setTimeSlot] = useState<TimeSlot>(initialSlot);
   const [location, setLocation] = useState('');
   const [notes,    setNotes]    = useState('');
-  const [invitedIds, setInvitedIds] = useState<Set<string>>(new Set());
+  const [invitedIds, setInvitedIds] = useState<Set<string>>(() => {
+    // Seed from ?preInvite=id1,id2 (passed from plan-with-friends sheet)
+    if (preInviteParam) {
+      return new Set(preInviteParam.split(',').filter(Boolean));
+    }
+    return new Set();
+  });
 
   // Hydrate form state when editing existing plan
   useEffect(() => {

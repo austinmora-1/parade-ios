@@ -539,10 +539,23 @@ export default function FriendsTab() {
             {/* Connected */}
             {connected.length > 0 && (
               <View className="gap-2">
-                <SectionHeader
-                  label={`Connected (${connected.length})`}
-                  icon={<Users size={14} color="#23744D" strokeWidth={2.2} />}
-                />
+                <View className="flex-row items-center justify-between mb-2 px-1">
+                  <View className="flex-row items-center gap-1.5">
+                    <Users size={14} color="#23744D" strokeWidth={2.2} />
+                    <Text className="font-sans text-sm font-semibold text-foreground">
+                      Connected ({connected.length})
+                    </Text>
+                  </View>
+                  <Pressable
+                    onPress={() => router.push('/(app)/plan-with-friends')}
+                    hitSlop={6}
+                    className="active:opacity-60"
+                  >
+                    <Text className="font-sans text-xs font-semibold text-primary">
+                      Plan with friends →
+                    </Text>
+                  </Pressable>
+                </View>
                 {connected.map((friend) => {
                   const { vibe, freeToday } = enrich(friend.friendUserId);
                   const lastHungOut = friend.friendUserId

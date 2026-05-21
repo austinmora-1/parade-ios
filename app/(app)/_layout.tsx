@@ -74,6 +74,10 @@ function AppLayoutInner() {
         name="new-hang-request"
         options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
       />
+      <Stack.Screen
+        name="plan-with-friends"
+        options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+      />
     </Stack>
   );
 }
