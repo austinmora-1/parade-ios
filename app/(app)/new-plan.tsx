@@ -176,6 +176,8 @@ export default function NewPlanScreen() {
   );
   /** 'once' | 'weekly' | 'biweekly' | 'monthly' */
   const [frequency, setFrequency] = useState<'once' | 'weekly' | 'biweekly' | 'monthly'>('once');
+  /** Additional proposal options beyond the primary date/slot above */
+  const [extraOptions, setExtraOptions] = useState<Array<{ date: Date; slot: TimeSlot }>>([]);
   const [invitedIds, setInvitedIds] = useState<Set<string>>(() => {
     // Seed from ?preInvite=id1,id2 (passed from plan-with-friends sheet)
     if (preInviteParam) {
@@ -246,6 +248,10 @@ export default function NewPlanScreen() {
           role: 'participant',
         }));
 
+      // If extras are provided AND we have invitees, force status=proposed
+      // so participants can vote on a time
+      const hasMultipleOptions = extraOptions.length > 0 && !isOpenInvite && !isEditMode;
+
       const payload: any = {
         title:    title.trim(),
         activity: activity as any,
@@ -259,7 +265,7 @@ export default function NewPlanScreen() {
         participants: isOpenInvite ? [] : participants,
         status:   isOpenInvite
           ? 'confirmed'
-          : participants.length > 0
+          : (participants.length > 0 || hasMultipleOptions)
             ? 'proposed'
             : 'confirmed',
         // Open invites force friends-visibility; otherwise user-picked
@@ -271,6 +277,37 @@ export default function NewPlanScreen() {
         await updatePlan(planIdParam, payload);
       } else {
         await addPlan(payload);
+
+        // Multi-option proposal: after the plan is created, insert
+        // plan_proposal_options for the primary + each extra option.
+        if (hasMultipleOptions && user?.id) {
+          try {
+            const { data: latestPlan } = await (supabase as any)
+              .from('plans')
+              .select('id, created_at')
+              .eq('user_id', user.id)
+              .eq('time_slot', timeSlot)
+              .gte('created_at', new Date(Date.now() - 30_000).toISOString())
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .single();
+            if (latestPlan) {
+              const allOptions = [
+                { date, slot: timeSlot },
+                ...extraOptions,
+              ];
+              const rows = allOptions.map((opt, i) => ({
+                plan_id:    latestPlan.id,
+                date:       format(opt.date, 'yyyy-MM-dd'),
+                time_slot:  opt.slot,
+                sort_order: i,
+              }));
+              await (supabase as any).from('plan_proposal_options').insert(rows);
+            }
+          } catch (err) {
+            console.warn('plan_proposal_options insert failed', err);
+          }
+        }
 
         // Recurring: insert recurring_plans row + link the just-created
         // plan to it via recurring_plan_id (so future occurrences spawn
@@ -330,7 +367,7 @@ export default function NewPlanScreen() {
   }, [
     title, activity, date, timeSlot, location, notes, invitedIds,
     connectedFriends, addPlan, updatePlan, isEditMode, planIdParam,
-    isOpenInvite, visibility, frequency, user?.id,
+    isOpenInvite, visibility, frequency, extraOptions, user?.id,
   ]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -542,6 +579,74 @@ export default function NewPlanScreen() {
               style={{ minHeight: 80, textAlignVertical: 'top' }}
             />
           </View>
+
+          {/* ── Multi-option proposal (create mode, with invitees) ─── */}
+          {!isEditMode && !isOpenInvite && (
+            <View>
+              <View className="flex-row items-center justify-between mb-2 px-0.5">
+                <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                  Other time options
+                </Text>
+                <Pressable
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    // Add a new option defaulting to next day + same slot
+                    const lastDate =
+                      extraOptions.length > 0
+                        ? extraOptions[extraOptions.length - 1].date
+                        : date;
+                    setExtraOptions([
+                      ...extraOptions,
+                      { date: addDays(lastDate, 1), slot: timeSlot },
+                    ]);
+                  }}
+                  hitSlop={6}
+                  className="active:opacity-60"
+                >
+                  <Text className="font-sans text-xs font-semibold text-primary">
+                    + Add option
+                  </Text>
+                </Pressable>
+              </View>
+
+              {extraOptions.length === 0 ? (
+                <Text className="font-sans text-[11px] text-muted-foreground px-0.5">
+                  Add alternatives so participants can vote on the time.
+                </Text>
+              ) : (
+                <View className="bg-white rounded-2xl border border-border/30 shadow-sm overflow-hidden">
+                  {extraOptions.map((opt, i) => (
+                    <View key={i}>
+                      <View className="px-4 py-3 flex-row items-center gap-2">
+                        <Text className="flex-1 font-sans text-sm text-foreground">
+                          {format(opt.date, 'EEE, MMM d')} ·{' '}
+                          {SLOTS.find((s) => s.id === opt.slot)?.label ?? opt.slot}
+                        </Text>
+                        <Pressable
+                          onPress={() => {
+                            Haptics.selectionAsync();
+                            setExtraOptions(extraOptions.filter((_, idx) => idx !== i));
+                          }}
+                          hitSlop={6}
+                          className="active:opacity-60"
+                        >
+                          <X size={14} color="#929298" strokeWidth={2} />
+                        </Pressable>
+                      </View>
+                      {i < extraOptions.length - 1 && (
+                        <View className="h-px bg-border/30 mx-4" />
+                      )}
+                    </View>
+                  ))}
+                </View>
+              )}
+              {extraOptions.length > 0 && (
+                <Text className="font-sans text-[11px] text-muted-foreground mt-1.5 px-0.5">
+                  Plan ships as a proposal — invitees vote, then you finalize.
+                </Text>
+              )}
+            </View>
+          )}
 
           {/* ── Visibility ───────────────────────────────────────────── */}
           {!isOpenInvite && (
