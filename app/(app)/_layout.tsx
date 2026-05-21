@@ -82,6 +82,10 @@ function AppLayoutInner() {
         name="propose-change"
         options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
       />
+      <Stack.Screen
+        name="trip-proposal/[id]"
+        options={{ animation: 'slide_from_right' }}
+      />
     </Stack>
   );
 }
