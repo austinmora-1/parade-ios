@@ -25,11 +25,17 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useCallback, useState, useEffect, useMemo } from 'react';
 import { format } from 'date-fns';
-import { Search, UserPlus, Users, ChevronRight, Check, X } from 'lucide-react-native';
+import { Search, UserPlus, Users, ChevronRight, Check, X, Flame } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { useFriendDashboardData } from '@/hooks/useFriendDashboardData';
+import {
+  useLastHungOut,
+  streakStage,
+  STREAK_COLORS,
+  shortAgo,
+} from '@/hooks/useLastHungOut';
 import { Avatar } from '@/components/primitives/Avatar';
 import { Skeleton } from '@/components/primitives/Skeleton';
 
@@ -80,6 +86,7 @@ function FriendRow({
   friend,
   vibe,
   freeToday,
+  lastHungOut,
   onPress,
   onAccept,
   onDecline,
@@ -87,17 +94,22 @@ function FriendRow({
   friend: any;
   vibe?: string | null;
   freeToday?: boolean;
+  lastHungOut?: Date | undefined;
   onPress: () => void;
   onAccept?: () => void;
   onDecline?: () => void;
 }) {
   const isIncoming = friend.isIncoming === true && friend.status === 'pending';
-  // Subtitle precedence: vibe label > "Tap to connect"
+  const stage = streakStage(lastHungOut);
+
+  // Subtitle precedence: vibe label > Free today > last-hung-out > Tap to connect
   let subtitle: string;
   if (vibe) {
     subtitle = `${VIBE_EMOJI[vibe] ?? '✨'} ${vibe}`;
   } else if (freeToday) {
     subtitle = 'Free today';
+  } else if (lastHungOut && stage !== 'none') {
+    subtitle = shortAgo(lastHungOut);
   } else {
     subtitle = 'Tap to connect';
   }
@@ -153,9 +165,24 @@ function FriendRow({
 
       {/* Name + subtitle */}
       <View className="flex-1 min-w-0">
-        <Text className="font-sans font-medium text-foreground text-sm" numberOfLines={1}>
-          {friend.name}
-        </Text>
+        <View className="flex-row items-center gap-1">
+          <Text
+            className="font-sans font-medium text-foreground text-sm"
+            numberOfLines={1}
+            style={{ flexShrink: 1 }}
+          >
+            {friend.name}
+          </Text>
+          {/* Streak flame — color-graded by recency */}
+          {stage !== 'none' && stage !== 'cold' && (
+            <Flame
+              size={12}
+              color={STREAK_COLORS[stage]}
+              strokeWidth={2.2}
+              fill={stage === 'hot' ? STREAK_COLORS[stage] : 'transparent'}
+            />
+          )}
+        </View>
         <Text className="font-sans text-xs text-muted-foreground" numberOfLines={1}>
           {subtitle}
         </Text>
@@ -244,6 +271,7 @@ export default function FriendsTab() {
   const friends     = usePlannerStore((s) => s.friends);
   const isLoading   = usePlannerStore((s) => s.isLoading);
   const { data: friendData } = useFriendDashboardData();
+  const { data: lastHungOutMap } = useLastHungOut();
 
   const [search, setSearch]         = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -424,12 +452,16 @@ export default function FriendsTab() {
                 {pending.map((friend) => {
                   const { vibe, freeToday } = enrich(friend.friendUserId);
                   const isIncoming = (friend as any).isIncoming === true;
+                  const lastHungOut = friend.friendUserId
+                    ? lastHungOutMap?.get(friend.friendUserId)
+                    : undefined;
                   return (
                     <FriendRow
                       key={friend.id}
                       friend={friend}
                       vibe={vibe}
                       freeToday={freeToday}
+                      lastHungOut={lastHungOut}
                       onPress={() =>
                         router.push(
                           `/(app)/friend/${friend.friendUserId ?? friend.id}`,
@@ -452,12 +484,16 @@ export default function FriendsTab() {
                 />
                 {connected.map((friend) => {
                   const { vibe, freeToday } = enrich(friend.friendUserId);
+                  const lastHungOut = friend.friendUserId
+                    ? lastHungOutMap?.get(friend.friendUserId)
+                    : undefined;
                   return (
                     <FriendRow
                       key={friend.id}
                       friend={friend}
                       vibe={vibe}
                       freeToday={freeToday}
+                      lastHungOut={lastHungOut}
                       onPress={() =>
                         router.push(`/(app)/friend/${friend.friendUserId}`)
                       }
