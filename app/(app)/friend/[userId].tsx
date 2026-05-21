@@ -11,16 +11,27 @@ import {
   Pressable,
   ActivityIndicator,
   RefreshControl,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState, useCallback } from 'react';
-import { ChevronLeft, CalendarDays, MapPin } from 'lucide-react-native';
+import { useState, useCallback, useMemo } from 'react';
+import { ChevronLeft, CalendarDays, MapPin, Flame, Clock } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
-import { format, isToday } from 'date-fns';
+import { format, isToday, parseISO, isTomorrow } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import { usePlannerStore } from '@/stores/plannerStore';
+import {
+  useLastHungOut,
+  streakStage,
+  STREAK_COLORS,
+  shortAgo,
+} from '@/hooks/useLastHungOut';
 import { Avatar } from '@/components/primitives/Avatar';
 import { formatDisplayName } from '@/lib/utils';
+import { TIME_SLOT_LABELS } from '@/types/planner';
+import type { TimeSlot } from '@/types/planner';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -50,13 +61,65 @@ function useFriendProfile(userId: string) {
       const { data, error } = await supabase
         .from('profiles')
         .select(
-          'user_id, display_name, first_name, last_name, avatar_url, bio, ' +
+          'user_id, display_name, first_name, last_name, avatar_url, cover_photo_url, bio, ' +
           'current_vibe, location_status, neighborhood, show_availability',
         )
         .eq('user_id', userId)
         .single();
       if (error) throw error;
       return data;
+    },
+  });
+}
+
+/**
+ * Upcoming plans where BOTH the current user and the friend are participants.
+ * Uses two queries because we need to intersect user-id sets via plan_id.
+ */
+function useSharedPlans(friendUserId: string, currentUserId: string | undefined) {
+  return useQuery({
+    enabled: !!currentUserId,
+    queryKey: ['shared-plans', friendUserId, currentUserId],
+    staleTime: 60_000,
+    queryFn: async () => {
+      // Get plan_ids where the friend is a participant
+      const { data: friendRows } = await supabase
+        .from('plan_participants')
+        .select('plan_id')
+        .eq('friend_id', friendUserId);
+      const friendPlanIds = new Set((friendRows ?? []).map((r: any) => r.plan_id));
+      if (friendPlanIds.size === 0) return [] as any[];
+
+      // Get plans where the current user is owner OR participant in those plan_ids
+      const planIdArr = [...friendPlanIds];
+      const [{ data: ownerPlans }, { data: userRows }] = await Promise.all([
+        supabase
+          .from('plans')
+          .select('id, title, activity, date, time_slot, location, status, user_id')
+          .in('id', planIdArr)
+          .eq('user_id', currentUserId!),
+        supabase
+          .from('plan_participants')
+          .select('plan_id')
+          .in('plan_id', planIdArr)
+          .eq('friend_id', currentUserId!),
+      ]);
+
+      const userParticipantIds = new Set((userRows ?? []).map((r: any) => r.plan_id));
+      const ownerIds = new Set((ownerPlans ?? []).map((p: any) => p.id));
+      const sharedIds = [...friendPlanIds].filter(
+        (id) => ownerIds.has(id) || userParticipantIds.has(id),
+      );
+      if (sharedIds.length === 0) return [] as any[];
+
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const { data: full } = await supabase
+        .from('plans')
+        .select('id, title, activity, date, time_slot, location, status')
+        .in('id', sharedIds)
+        .gte('date', todayStr)
+        .order('date', { ascending: true });
+      return (full ?? []) as any[];
     },
   });
 }
@@ -89,8 +152,12 @@ function useFriendAvailability(userId: string) {
 
 export default function FriendProfileScreen() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
+  const { user } = useAuth();
   const { data: profile, isLoading, refetch: refetchProfile } = useFriendProfile(userId);
   const { data: availability, refetch: refetchAvail } = useFriendAvailability(userId);
+  const { data: sharedPlans } = useSharedPlans(userId, user?.id);
+  const { data: lastHungOutMap } = useLastHungOut();
+  const myAvailability = usePlannerStore((s) => s.availability);
   const [refreshing, setRefreshing] = useState(false);
 
   const onRefresh = useCallback(async () => {
@@ -99,6 +166,19 @@ export default function FriendProfileScreen() {
     setRefreshing(false);
   }, [refetchProfile, refetchAvail]);
   const p: any = profile;
+
+  const lastHungOut = lastHungOutMap?.get(userId);
+  const stage = streakStage(lastHungOut);
+
+  /** Set of yyyy-MM-dd where the current user has ≥1 free slot */
+  const myFreeDateSet = useMemo(() => {
+    const set = new Set<string>();
+    for (const day of myAvailability) {
+      const hasFree = Object.values(day.slots).some((v) => v === true);
+      if (hasFree) set.add(format(day.date, 'yyyy-MM-dd'));
+    }
+    return set;
+  }, [myAvailability]);
 
   const name = p
     ? formatDisplayName({
@@ -145,10 +225,21 @@ export default function FriendProfileScreen() {
         >
           {/* ── Profile hero (banner + overlapping avatar, matches Profile tab) ── */}
           <View className="mx-5 bg-white rounded-2xl border border-border/30 overflow-hidden shadow-sm">
-            {/* Cover banner */}
-            <View
-              style={{ height: 96, backgroundColor: 'rgba(35,116,77,0.12)' }}
-            />
+            {/* Cover banner — uses photo if set, else gradient-tinted color */}
+            {p?.cover_photo_url ? (
+              <View style={{ height: 96, backgroundColor: '#DED4C3' }}>
+                {/* eslint-disable-next-line react-native/no-inline-styles */}
+                <Image
+                  source={{ uri: p.cover_photo_url }}
+                  style={{ width: '100%', height: '100%' }}
+                  resizeMode="cover"
+                />
+              </View>
+            ) : (
+              <View
+                style={{ height: 96, backgroundColor: 'rgba(35,116,77,0.12)' }}
+              />
+            )}
 
             <View className="px-4 pb-4">
               {/* Avatar overlapping banner — white ring */}
@@ -175,15 +266,35 @@ export default function FriendProfileScreen() {
                 </View>
               </View>
 
-              {/* Name */}
-              <Text className="font-display text-xl text-foreground" numberOfLines={1}>
-                {name}
-              </Text>
+              {/* Name + Streak Flame */}
+              <View className="flex-row items-center gap-1.5">
+                <Text
+                  className="font-display text-xl text-foreground"
+                  numberOfLines={1}
+                  style={{ flexShrink: 1 }}
+                >
+                  {name}
+                </Text>
+                {stage !== 'none' && stage !== 'cold' && (
+                  <Flame
+                    size={16}
+                    color={STREAK_COLORS[stage]}
+                    strokeWidth={2.2}
+                    fill={stage === 'hot' ? STREAK_COLORS[stage] : 'transparent'}
+                  />
+                )}
+              </View>
 
-              {/* Handle */}
+              {/* Handle + last hung out */}
               {p?.display_name && (
                 <Text className="font-sans text-sm text-muted-foreground mt-0.5">
                   @{p.display_name}
+                  {lastHungOut && stage !== 'none' && (
+                    <Text className="text-muted-foreground/70">
+                      {' · '}
+                      {`hung out ${shortAgo(lastHungOut)}`}
+                    </Text>
+                  )}
                 </Text>
               )}
 
@@ -216,15 +327,24 @@ export default function FriendProfileScreen() {
                 </View>
               )}
 
-              {/* Action row: Send a ping */}
-              <View className="flex-row mt-4">
+              {/* Action row: Send a ping + Plan with X */}
+              <View className="flex-row gap-2 mt-4">
+                <Pressable
+                  onPress={() => router.push(`/(app)/new-plan?preInvite=${userId}`)}
+                  className="flex-1 flex-row items-center justify-center gap-1.5 bg-primary rounded-xl px-4 py-2.5 active:opacity-80"
+                >
+                  <Text style={{ fontSize: 14 }}>📅</Text>
+                  <Text className="font-sans text-sm font-semibold text-white">
+                    Plan with {name.split(' ')[0]}
+                  </Text>
+                </Pressable>
                 <Pressable
                   onPress={() => router.push(`/(app)/new-hang-request?friendId=${userId}`)}
-                  className="flex-row items-center gap-1.5 bg-primary rounded-xl px-4 py-2.5 active:opacity-80"
+                  className="flex-row items-center gap-1.5 bg-primary/10 rounded-xl px-3 py-2.5 active:opacity-70"
                 >
                   <Text style={{ fontSize: 14 }}>👋</Text>
-                  <Text className="font-sans text-sm font-semibold text-white">
-                    Send a ping
+                  <Text className="font-sans text-sm font-semibold text-primary">
+                    Ping
                   </Text>
                 </Pressable>
               </View>
@@ -245,6 +365,7 @@ export default function FriendProfileScreen() {
                 const day = new Date(row.date + 'T00:00:00');
                 const freeSlots = SLOTS.filter((s) => row[s] === 'free');
                 const today = isToday(day);
+                const mutual = myFreeDateSet.has(row.date);
                 return (
                   <View
                     key={row.date}
@@ -252,9 +373,21 @@ export default function FriendProfileScreen() {
                     style={
                       today
                         ? { borderWidth: 2, borderColor: '#23744D' }
-                        : { borderWidth: 1, borderColor: 'rgba(0,0,0,0.08)' }
+                        : mutual
+                          ? { borderWidth: 1, borderColor: 'rgba(35,116,77,0.4)' }
+                          : { borderWidth: 1, borderColor: 'rgba(0,0,0,0.08)' }
                     }
                   >
+                    {/* Mutual badge — top-right "both free" indicator */}
+                    {mutual && !today && (
+                      <View
+                        className="absolute top-2 right-3 bg-primary/10 rounded-full px-2 py-0.5"
+                      >
+                        <Text className="font-sans text-[10px] font-semibold text-primary">
+                          both free
+                        </Text>
+                      </View>
+                    )}
                     {/* DateDial */}
                     <View className="w-11 items-center">
                       <Text
@@ -305,6 +438,69 @@ export default function FriendProfileScreen() {
               <Text className="font-sans text-xs text-muted-foreground/60">
                 {name.split(' ')[0]} hasn't marked availability for the next 2 weeks
               </Text>
+            </View>
+          )}
+
+          {/* ── Shared upcoming plans ─────────────────────────────────── */}
+          {(sharedPlans?.length ?? 0) > 0 && (
+            <View className="px-5 gap-2">
+              <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground px-1">
+                Plans together
+              </Text>
+              {sharedPlans!.map((plan: any) => {
+                const planDate = parseISO(plan.date);
+                const slotLabel = TIME_SLOT_LABELS[plan.time_slot as TimeSlot]?.time ?? '';
+                const dateLabel = isToday(planDate)
+                  ? 'Today'
+                  : isTomorrow(planDate)
+                    ? 'Tomorrow'
+                    : format(planDate, 'EEE, MMM d');
+                return (
+                  <Pressable
+                    key={plan.id}
+                    onPress={() => router.push(`/(app)/plan/${plan.id}`)}
+                    className="bg-white rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm active:opacity-80"
+                  >
+                    <View style={{ width: 4, backgroundColor: '#23744D' }} />
+                    <View className="flex-1 px-4 py-3 gap-1">
+                      <View className="flex-row items-start justify-between gap-2">
+                        <Text
+                          className="font-display text-sm text-foreground flex-1"
+                          numberOfLines={1}
+                        >
+                          {plan.title || 'Untitled plan'}
+                        </Text>
+                        <Text className="font-sans text-xs text-muted-foreground">
+                          {dateLabel}
+                        </Text>
+                      </View>
+                      {(slotLabel || plan.location) && (
+                        <View className="flex-row items-center gap-3">
+                          {slotLabel && (
+                            <View className="flex-row items-center gap-1">
+                              <Clock size={11} color="#929298" strokeWidth={1.75} />
+                              <Text className="font-sans text-xs text-muted-foreground">
+                                {slotLabel}
+                              </Text>
+                            </View>
+                          )}
+                          {plan.location && (
+                            <View className="flex-row items-center gap-1 flex-1">
+                              <MapPin size={11} color="#929298" strokeWidth={1.75} />
+                              <Text
+                                className="font-sans text-xs text-muted-foreground"
+                                numberOfLines={1}
+                              >
+                                {typeof plan.location === 'string' ? plan.location : ''}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      )}
+                    </View>
+                  </Pressable>
+                );
+              })}
             </View>
           )}
         </ScrollView>
