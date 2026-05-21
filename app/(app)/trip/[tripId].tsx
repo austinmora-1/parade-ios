@@ -30,6 +30,7 @@ import { usePlannerStore } from '@/stores/plannerStore';
 import { setTripAvailability } from '@/lib/tripBusy';
 import { resetCalendarSyncCache, syncCalendarBusyTimes } from '@/lib/calendarSync';
 import * as ExpoCalendar from 'expo-calendar';
+import { TripActivitiesSection } from '@/components/trip/TripActivitiesSection';
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
@@ -39,7 +40,7 @@ function useTrip(tripId: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('trips')
-        .select('id, user_id, name, location, start_date, end_date, available_slots')
+        .select('id, user_id, name, location, start_date, end_date, available_slots, proposal_id')
         .eq('id', tripId)
         .single();
       if (error) throw error;
@@ -268,6 +269,11 @@ export default function TripDetailScreen() {
               </>
             )}
           </View>
+
+          {/* Activity suggestions — carries over from a finalized proposal */}
+          {trip.proposal_id && (
+            <TripActivitiesSection proposalId={trip.proposal_id} />
+          )}
         </ScrollView>
       )}
     </SafeAreaView>

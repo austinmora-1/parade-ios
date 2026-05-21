@@ -28,6 +28,7 @@ import {
   useVoteForTripDate,
   useFinalizeTripProposal,
 } from '@/hooks/useTripProposal';
+import { TripActivitiesSection } from '@/components/trip/TripActivitiesSection';
 
 export default function TripProposalScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -234,6 +235,9 @@ export default function TripProposalScreen() {
               </Text>
             </View>
           )}
+
+          {/* Activity suggestions + voting */}
+          <TripActivitiesSection proposalId={proposal.id} />
         </ScrollView>
       )}
     </SafeAreaView>
