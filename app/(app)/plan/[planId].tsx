@@ -21,6 +21,8 @@ import {
   useRespondToChange,
 } from '@/hooks/usePlanChangeRequests';
 import { parseISO } from 'date-fns';
+import { PlanCommentsSection } from '@/components/plan/PlanCommentsSection';
+import { PlanPhotosSection } from '@/components/plan/PlanPhotosSection';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { useState, useCallback } from 'react';
@@ -479,6 +481,12 @@ export default function PlanDetailScreen() {
               </Text>
             </View>
           )}
+
+          {/* ── Photos ────────────────────────────────────────────────── */}
+          <PlanPhotosSection planId={planId} />
+
+          {/* ── Comments ──────────────────────────────────────────────── */}
+          <PlanCommentsSection planId={planId} />
         </ScrollView>
       )}
     </SafeAreaView>
