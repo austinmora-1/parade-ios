@@ -174,6 +174,8 @@ export default function NewPlanScreen() {
   const [visibility, setVisibility] = useState<string>(
     isOpenInvite ? 'friends' : 'private',
   );
+  /** 'once' | 'weekly' | 'biweekly' | 'monthly' */
+  const [frequency, setFrequency] = useState<'once' | 'weekly' | 'biweekly' | 'monthly'>('once');
   const [invitedIds, setInvitedIds] = useState<Set<string>>(() => {
     // Seed from ?preInvite=id1,id2 (passed from plan-with-friends sheet)
     if (preInviteParam) {
@@ -269,6 +271,48 @@ export default function NewPlanScreen() {
         await updatePlan(planIdParam, payload);
       } else {
         await addPlan(payload);
+
+        // Recurring: insert recurring_plans row + link the just-created
+        // plan to it via recurring_plan_id (so future occurrences spawn
+        // off the parent series via the server-side cron).
+        if (frequency !== 'once' && user?.id) {
+          try {
+            const { data: rec, error: recErr } = await (supabase as any)
+              .from('recurring_plans')
+              .insert({
+                user_id:         user.id,
+                title:           title.trim(),
+                activity:        activity as any,
+                frequency,
+                day_of_week:     date.getDay(),
+                starts_on:       format(date, 'yyyy-MM-dd'),
+                time_slot:       timeSlot,
+                duration:        60,
+                location:        location.trim() || null,
+                notes:           notes.trim() || null,
+                feed_visibility: isOpenInvite ? 'friends' : visibility,
+                status:          participants.length > 0 ? 'proposed' : 'confirmed',
+                is_active:       true,
+              })
+              .select('id')
+              .single();
+            if (!recErr && rec) {
+              // Link the just-created plan to this series. We don't have the
+              // new plan's id locally — match by user_id + date + time_slot +
+              // most-recent created_at.
+              await (supabase as any)
+                .from('plans')
+                .update({ recurring_plan_id: rec.id })
+                .eq('user_id', user.id)
+                .eq('time_slot', timeSlot)
+                .gte('created_at', new Date(Date.now() - 30_000).toISOString());
+            }
+          } catch (err) {
+            // Recurring is a follow-up convenience — if it fails, the
+            // single plan still exists. Log + continue.
+            console.warn('recurring_plans insert failed', err);
+          }
+        }
       }
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -286,7 +330,7 @@ export default function NewPlanScreen() {
   }, [
     title, activity, date, timeSlot, location, notes, invitedIds,
     connectedFriends, addPlan, updatePlan, isEditMode, planIdParam,
-    isOpenInvite, visibility,
+    isOpenInvite, visibility, frequency, user?.id,
   ]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -552,6 +596,43 @@ export default function NewPlanScreen() {
                     ? 'Visible in all friends\' feeds.'
                     : 'Visible to this pod\'s members.'}
               </Text>
+            </View>
+          )}
+
+          {/* ── Repeats (recurring) — create mode only ─────────────────── */}
+          {!isEditMode && (
+            <View>
+              <FieldLabel>Repeats</FieldLabel>
+              <View className="flex-row flex-wrap gap-2">
+                {(['once', 'weekly', 'biweekly', 'monthly'] as const).map((f) => {
+                  const selected = frequency === f;
+                  const label =
+                    f === 'once' ? 'Once'
+                    : f === 'weekly' ? 'Weekly'
+                    : f === 'biweekly' ? 'Every 2 weeks'
+                    : 'Monthly';
+                  return (
+                    <Chip
+                      key={f}
+                      selected={selected}
+                      onPress={() => { Haptics.selectionAsync(); setFrequency(f); }}
+                    >
+                      <Text className={`font-sans text-xs font-semibold ${
+                        selected ? 'text-white' : 'text-foreground'
+                      }`}>
+                        {label}
+                      </Text>
+                    </Chip>
+                  );
+                })}
+              </View>
+              {frequency !== 'once' && (
+                <Text className="font-sans text-[11px] text-muted-foreground mt-1.5 px-0.5">
+                  Repeats {frequency === 'biweekly' ? 'every other ' : ''}
+                  {format(date, 'EEEE')}
+                  {frequency === 'monthly' ? ' each month' : ''}.
+                </Text>
+              )}
             </View>
           )}
 
