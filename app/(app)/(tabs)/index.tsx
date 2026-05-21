@@ -28,6 +28,7 @@ import { PolishProfileCard } from '@/components/dashboard/PolishProfileCard';
 import { PushNotificationPrompt } from '@/components/dashboard/PushNotificationPrompt';
 import { HangRequestsWidget } from '@/components/dashboard/HangRequestsWidget';
 import { DiscoverableInvitesWidget } from '@/components/dashboard/DiscoverableInvitesWidget';
+import { TripProposalInvitesWidget } from '@/components/dashboard/TripProposalInvitesWidget';
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
@@ -290,6 +291,7 @@ export default function HomeTab() {
           {/* Action-required first */}
           <HangRequestsWidget />
           <OpenInvitesWidget />
+          <TripProposalInvitesWidget />
           <DiscoverableInvitesWidget />
           <FriendVibeStrip />
           <FreeWindowCard />
