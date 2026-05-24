@@ -51,7 +51,9 @@ function useProfileSettings(userId: string | undefined) {
       const { data, error } = await supabase
         .from('profiles')
         .select(
-          'plan_reminders, friend_requests_notifications, plan_invitations_notifications, show_availability',
+          'plan_reminders, friend_requests_notifications, plan_invitations_notifications, ' +
+          'show_availability, show_location, show_vibe_status, allow_all_hang_requests, ' +
+          'interests, social_goals, social_cap, preferred_social_days, preferred_social_times',
         )
         .eq('user_id', userId!)
         .single();
@@ -60,6 +62,36 @@ function useProfileSettings(userId: string | undefined) {
     },
   });
 }
+
+// ─── Social preferences constants ────────────────────────────────────────────
+
+const INTEREST_OPTIONS = [
+  'Foodie', 'Outdoors', 'Movies', 'Concerts', 'Sports', 'Reading',
+  'Travel', 'Art', 'Gaming', 'Music', 'Cooking', 'Yoga', 'Coffee',
+  'Cocktails', 'Nightlife', 'Photography', 'Hiking', 'Fitness',
+];
+
+const GOAL_OPTIONS = [
+  'Meet new people',
+  'Stay close with friends',
+  'Try new activities',
+  'Have a regular routine',
+  'Spontaneous fun',
+  'Quality time',
+  'Be more active',
+];
+
+const DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+const DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
+
+const TIME_SLOT_OPTIONS = [
+  { id: 'early-morning',   label: 'Early AM' },
+  { id: 'late-morning',    label: 'Morning' },
+  { id: 'early-afternoon', label: 'Afternoon' },
+  { id: 'late-afternoon',  label: 'Late PM' },
+  { id: 'evening',         label: 'Evening' },
+  { id: 'late-night',      label: 'Late night' },
+];
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -150,6 +182,14 @@ export default function SettingsPage() {
   const [friendReq,     setFriendReq]     = useState(true);
   const [planInvites,   setPlanInvites]   = useState(true);
   const [showAvail,     setShowAvail]     = useState(true);
+  const [showLocation,  setShowLocation]  = useState(true);
+  const [showVibe,      setShowVibe]      = useState(true);
+  const [allowHang,     setAllowHang]     = useState(true);
+  const [interests,     setInterests]     = useState<string[]>([]);
+  const [socialGoals,   setSocialGoals]   = useState<string[]>([]);
+  const [socialCap,     setSocialCap]     = useState<number | null>(null);
+  const [prefDays,      setPrefDays]      = useState<string[]>([]);
+  const [prefTimes,     setPrefTimes]     = useState<string[]>([]);
   const [savingKey,     setSavingKey]     = useState<string | null>(null);
   const [calendarState, setCalendarState] = useState<
     'unknown' | 'granted' | 'denied'
@@ -169,6 +209,14 @@ export default function SettingsPage() {
     setFriendReq(settings.friend_requests_notifications ?? true);
     setPlanInvites(settings.plan_invitations_notifications ?? true);
     setShowAvail(settings.show_availability ?? true);
+    setShowLocation(settings.show_location ?? true);
+    setShowVibe(settings.show_vibe_status ?? true);
+    setAllowHang(settings.allow_all_hang_requests ?? true);
+    setInterests(settings.interests ?? []);
+    setSocialGoals(settings.social_goals ?? []);
+    setSocialCap(settings.social_cap ?? null);
+    setPrefDays(settings.preferred_social_days ?? []);
+    setPrefTimes(settings.preferred_social_times ?? []);
   }, [settings]);
 
   // Check calendar permission status on mount
@@ -181,13 +229,9 @@ export default function SettingsPage() {
   // ── Save a single setting ─────────────────────────────────────────────────
   const persist = useCallback(
     async (
-      column:
-        | 'plan_reminders'
-        | 'friend_requests_notifications'
-        | 'plan_invitations_notifications'
-        | 'show_availability',
-      value: boolean,
-      onRollback: () => void,
+      column: string,
+      value: any,
+      onRollback?: () => void,
     ) => {
       if (!user?.id) return;
       setSavingKey(column);
@@ -201,13 +245,30 @@ export default function SettingsPage() {
       } catch (err) {
         console.error(`Save ${column} failed`, err);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        onRollback();
+        onRollback?.();
         Alert.alert('Could not save', 'Please try again.');
       } finally {
         setSavingKey(null);
       }
     },
     [user?.id],
+  );
+
+  // ── Array-toggle helpers for chip-style fields ──────────────────────────
+  const toggleArrayValue = useCallback(
+    (
+      column: 'interests' | 'social_goals' | 'preferred_social_days' | 'preferred_social_times',
+      arr: string[],
+      setLocal: (next: string[]) => void,
+      value: string,
+    ) => {
+      const next = arr.includes(value)
+        ? arr.filter((v) => v !== value)
+        : [...arr, value];
+      setLocal(next);
+      persist(column, next, () => setLocal(arr));
+    },
+    [persist],
   );
 
   // ── Calendar permission flow ───────────────────────────────────────────────
@@ -367,6 +428,203 @@ export default function SettingsPage() {
                 disabled={savingKey === 'show_availability'}
                 isLast
               />
+            </SectionCard>
+
+            {/* ── Social preferences ──────────────────────────────────── */}
+            <SectionCard>
+              <SectionHeader
+                icon={<Sparkles size={14} color="#DFA53A" strokeWidth={2} />}
+                label="Social Preferences"
+              />
+
+              {/* Interests */}
+              <View className="px-4 py-3 border-b border-border/20">
+                <Text className="font-sans text-sm font-medium text-foreground">
+                  Interests
+                </Text>
+                <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">
+                  Used to suggest plans you'd actually enjoy.
+                </Text>
+                <View className="flex-row flex-wrap gap-1.5 mt-2">
+                  {INTEREST_OPTIONS.map((opt) => {
+                    const selected = interests.includes(opt);
+                    return (
+                      <Pressable
+                        key={opt}
+                        onPress={() =>
+                          toggleArrayValue('interests', interests, setInterests, opt)
+                        }
+                        className={`rounded-full px-2.5 py-1 border ${
+                          selected ? 'bg-primary border-primary' : 'bg-white border-border/40'
+                        } active:opacity-70`}
+                      >
+                        <Text
+                          className={`font-sans text-xs font-medium ${
+                            selected ? 'text-white' : 'text-foreground'
+                          }`}
+                        >
+                          {opt}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Social goals */}
+              <View className="px-4 py-3 border-b border-border/20">
+                <Text className="font-sans text-sm font-medium text-foreground">
+                  What I'm looking for
+                </Text>
+                <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">
+                  Helps us prioritize the right kinds of plans.
+                </Text>
+                <View className="flex-row flex-wrap gap-1.5 mt-2">
+                  {GOAL_OPTIONS.map((opt) => {
+                    const selected = socialGoals.includes(opt);
+                    return (
+                      <Pressable
+                        key={opt}
+                        onPress={() =>
+                          toggleArrayValue('social_goals', socialGoals, setSocialGoals, opt)
+                        }
+                        className={`rounded-full px-2.5 py-1 border ${
+                          selected ? 'bg-primary border-primary' : 'bg-white border-border/40'
+                        } active:opacity-70`}
+                      >
+                        <Text
+                          className={`font-sans text-xs font-medium ${
+                            selected ? 'text-white' : 'text-foreground'
+                          }`}
+                        >
+                          {opt}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Social cap */}
+              <View className="px-4 py-3 border-b border-border/20">
+                <View className="flex-row items-center justify-between gap-3">
+                  <View className="flex-1">
+                    <Text className="font-sans text-sm font-medium text-foreground">
+                      Plans per week
+                    </Text>
+                    <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">
+                      Your social capacity — we won't over-schedule you.
+                    </Text>
+                  </View>
+                  <View className="flex-row items-center gap-2">
+                    <Pressable
+                      onPress={() => {
+                        Haptics.selectionAsync();
+                        const next = Math.max(1, (socialCap ?? 3) - 1);
+                        setSocialCap(next);
+                        persist('social_cap', next, () => setSocialCap(socialCap));
+                      }}
+                      hitSlop={6}
+                      className="w-8 h-8 rounded-full bg-muted items-center justify-center active:opacity-70"
+                    >
+                      <Text className="font-sans text-base font-semibold text-foreground">−</Text>
+                    </Pressable>
+                    <Text className="font-display text-base text-foreground w-6 text-center">
+                      {socialCap ?? '—'}
+                    </Text>
+                    <Pressable
+                      onPress={() => {
+                        Haptics.selectionAsync();
+                        const next = Math.min(14, (socialCap ?? 2) + 1);
+                        setSocialCap(next);
+                        persist('social_cap', next, () => setSocialCap(socialCap));
+                      }}
+                      hitSlop={6}
+                      className="w-8 h-8 rounded-full bg-primary items-center justify-center active:opacity-80"
+                    >
+                      <Text className="font-sans text-base font-semibold text-white">+</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+
+              {/* Preferred days */}
+              <View className="px-4 py-3 border-b border-border/20">
+                <Text className="font-sans text-sm font-medium text-foreground">
+                  Preferred days
+                </Text>
+                <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">
+                  When you typically want to make plans.
+                </Text>
+                <View className="flex-row gap-1.5 mt-2">
+                  {DAY_KEYS.map((key, i) => {
+                    const selected = prefDays.includes(key);
+                    return (
+                      <Pressable
+                        key={key}
+                        onPress={() =>
+                          toggleArrayValue(
+                            'preferred_social_days',
+                            prefDays,
+                            setPrefDays,
+                            key,
+                          )
+                        }
+                        className={`flex-1 h-9 rounded-xl border items-center justify-center active:opacity-70 ${
+                          selected ? 'bg-primary border-primary' : 'bg-white border-border/40'
+                        }`}
+                      >
+                        <Text
+                          className={`font-sans text-xs font-semibold ${
+                            selected ? 'text-white' : 'text-foreground'
+                          }`}
+                        >
+                          {DAY_LABELS[i]}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Preferred times */}
+              <View className="px-4 py-3">
+                <Text className="font-sans text-sm font-medium text-foreground">
+                  Preferred times
+                </Text>
+                <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">
+                  When you're typically up for hanging out.
+                </Text>
+                <View className="flex-row flex-wrap gap-1.5 mt-2">
+                  {TIME_SLOT_OPTIONS.map((opt) => {
+                    const selected = prefTimes.includes(opt.id);
+                    return (
+                      <Pressable
+                        key={opt.id}
+                        onPress={() =>
+                          toggleArrayValue(
+                            'preferred_social_times',
+                            prefTimes,
+                            setPrefTimes,
+                            opt.id,
+                          )
+                        }
+                        className={`rounded-full px-2.5 py-1 border ${
+                          selected ? 'bg-primary border-primary' : 'bg-white border-border/40'
+                        } active:opacity-70`}
+                      >
+                        <Text
+                          className={`font-sans text-xs font-medium ${
+                            selected ? 'text-white' : 'text-foreground'
+                          }`}
+                        >
+                          {opt.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
             </SectionCard>
 
             {/* ── Calendar ────────────────────────────────────────────── */}
