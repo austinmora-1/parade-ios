@@ -32,6 +32,7 @@ import { X, Camera, Check, AlertCircle } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar } from '@/components/primitives/Avatar';
+import { LocationAutocomplete } from '@/components/primitives/LocationAutocomplete';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -52,7 +53,7 @@ function useProfile(userId: string | undefined) {
       const { data, error } = await supabase
         .from('profiles')
         .select(
-          'user_id, display_name, first_name, last_name, avatar_url, bio, current_vibe',
+          'user_id, display_name, first_name, last_name, avatar_url, bio, current_vibe, home_address, neighborhood',
         )
         .eq('user_id', userId!)
         .single();
@@ -84,6 +85,8 @@ export default function EditProfileScreen() {
   const [firstName,   setFirstName]   = useState('');
   const [lastName,    setLastName]    = useState('');
   const [bio,         setBio]         = useState('');
+  const [homeAddress, setHomeAddress] = useState('');
+  const [neighborhood, setNeighborhood] = useState('');
   const [vibe,        setVibe]        = useState<string | null>(null);
   const [avatarUrl,   setAvatarUrl]   = useState<string | null>(null);
 
@@ -105,6 +108,8 @@ export default function EditProfileScreen() {
     setFirstName(profile.first_name ?? '');
     setLastName(profile.last_name ?? '');
     setBio(profile.bio ?? '');
+    setHomeAddress(profile.home_address ?? '');
+    setNeighborhood(profile.neighborhood ?? '');
     setVibe(profile.current_vibe ?? null);
     setAvatarUrl(profile.avatar_url ?? null);
   }, [profile]);
@@ -246,12 +251,14 @@ export default function EditProfileScreen() {
       const { error: updateErr } = await supabase
         .from('profiles')
         .update({
-          display_name: displayName.trim(),
-          first_name:   firstName.trim() || null,
-          last_name:    lastName.trim()  || null,
-          bio:          bio.trim()        || null,
-          current_vibe: vibe,
-          avatar_url:   avatarUrl,
+          display_name:  displayName.trim(),
+          first_name:    firstName.trim()    || null,
+          last_name:     lastName.trim()     || null,
+          bio:           bio.trim()          || null,
+          current_vibe:  vibe,
+          avatar_url:    avatarUrl,
+          home_address:  homeAddress.trim()  || null,
+          neighborhood:  neighborhood.trim() || null,
         })
         .eq('user_id', user.id);
 
@@ -273,7 +280,7 @@ export default function EditProfileScreen() {
     } finally {
       setSaving(false);
     }
-  }, [user?.id, displayName, firstName, lastName, bio, vibe, avatarUrl, queryClient]);
+  }, [user?.id, displayName, firstName, lastName, bio, vibe, avatarUrl, homeAddress, neighborhood, queryClient]);
 
   const canSubmit =
     displayName.trim().length > 0 &&
@@ -499,6 +506,33 @@ export default function EditProfileScreen() {
                   maxLength={500}
                   multiline
                   style={{ minHeight: 96, textAlignVertical: 'top' }}
+                />
+              </View>
+
+              {/* ── Home location ──────────────────────────────────────── */}
+              <View>
+                <FieldLabel>Home base</FieldLabel>
+                <LocationAutocomplete
+                  value={homeAddress}
+                  onChange={setHomeAddress}
+                  placeholder="Where you usually are"
+                  types="(cities)"
+                />
+                <Text className="font-sans text-[11px] text-muted-foreground mt-1.5 px-0.5">
+                  Friends see this on your profile.
+                </Text>
+              </View>
+
+              {/* ── Neighborhood ──────────────────────────────────────── */}
+              <View>
+                <FieldLabel>Neighborhood (optional)</FieldLabel>
+                <TextInput
+                  value={neighborhood}
+                  onChangeText={setNeighborhood}
+                  placeholder="e.g. Mission, Williamsburg"
+                  placeholderTextColor="#929298"
+                  className="bg-white rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
+                  maxLength={80}
                 />
               </View>
 
