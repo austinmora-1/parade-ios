@@ -23,6 +23,7 @@ import {
 import { parseISO } from 'date-fns';
 import { PlanCommentsSection } from '@/components/plan/PlanCommentsSection';
 import { PlanPhotosSection } from '@/components/plan/PlanPhotosSection';
+import { ReactionBar } from '@/components/primitives/ReactionBar';
 import {
   usePlanJoinRequests,
   useMyJoinRequest,
@@ -309,6 +310,9 @@ export default function PlanDetailScreen() {
                   {plan.description}
                 </Text>
               ) : null}
+              <View className="mt-2">
+                <ReactionBar target="plan" targetId={planId} />
+              </View>
             </View>
           </View>
 

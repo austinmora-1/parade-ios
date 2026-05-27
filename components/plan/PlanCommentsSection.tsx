@@ -17,6 +17,7 @@ import { MessageCircle, Send } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar } from '@/components/primitives/Avatar';
+import { ReactionBar } from '@/components/primitives/ReactionBar';
 import { formatDisplayName } from '@/lib/utils';
 
 interface Comment {
@@ -157,6 +158,9 @@ export function PlanCommentsSection({ planId }: { planId: string }) {
                     <Text className="font-sans text-sm text-foreground leading-relaxed">
                       {c.content}
                     </Text>
+                    <View className="mt-1.5">
+                      <ReactionBar target="comment" targetId={c.id} compact />
+                    </View>
                   </View>
                 </View>
                 {i < (comments?.length ?? 0) - 1 && (

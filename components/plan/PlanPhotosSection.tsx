@@ -14,7 +14,7 @@ import {
   ActivityIndicator,
   Dimensions,
 } from 'react-native';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -22,6 +22,8 @@ import * as Haptics from 'expo-haptics';
 import { Camera, ImagePlus } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { ReactionBar, EmojiReactionSheet } from '@/components/primitives/ReactionBar';
+import { useToggleReaction } from '@/hooks/useReactions';
 
 interface PlanPhoto {
   id:         string;
@@ -103,6 +105,91 @@ function useUploadPhoto() {
       queryClient.invalidateQueries({ queryKey: ['plan-photos', vars.planId] });
     },
   });
+}
+
+// ─── PhotoTile ───────────────────────────────────────────────────────────────
+
+/**
+ * PhotoTile — single grid tile with double-tap-to-❤️ and long-press-to-react.
+ * Existing reactions render as a compact overlay strip pinned to the bottom.
+ */
+function PhotoTile({
+  photoId,
+  url,
+  size,
+}: {
+  photoId: string;
+  url:     string;
+  size:    number;
+}) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const lastTapRef = useRef<number>(0);
+  const toggle = useToggleReaction('photo', photoId);
+
+  const handlePress = useCallback(() => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 300) {
+      // Double-tap → ❤️
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      toggle.mutate('❤️');
+      lastTapRef.current = 0;
+      return;
+    }
+    lastTapRef.current = now;
+  }, [toggle]);
+
+  const handleLongPress = useCallback(() => {
+    Haptics.selectionAsync().catch(() => {});
+    setPickerOpen(true);
+  }, []);
+
+  const handlePick = useCallback(
+    (emoji: string) => {
+      setPickerOpen(false);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      toggle.mutate(emoji);
+    },
+    [toggle],
+  );
+
+  return (
+    <>
+      <Pressable
+        onPress={handlePress}
+        onLongPress={handleLongPress}
+        delayLongPress={300}
+        style={{
+          width:  size,
+          height: size,
+          borderRadius: 12,
+          overflow: 'hidden',
+          backgroundColor: '#DED4C3',
+        }}
+      >
+        <Image
+          source={{ uri: url }}
+          style={{ width: '100%', height: '100%' }}
+          resizeMode="cover"
+        />
+        {/* Reactions overlay (bottom) */}
+        <View
+          style={{
+            position: 'absolute',
+            left: 4,
+            right: 4,
+            bottom: 4,
+          }}
+        >
+          <ReactionBar target="photo" targetId={photoId} compact hideAddButton />
+        </View>
+      </Pressable>
+      <EmojiReactionSheet
+        visible={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onPick={handlePick}
+      />
+    </>
+  );
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -199,22 +286,7 @@ export function PlanPhotosSection({ planId }: { planId: string }) {
           style={{ gap: GAP }}
         >
           {(photos ?? []).map((p) => (
-            <View
-              key={p.id}
-              style={{
-                width:  TILE_W,
-                height: TILE_W,
-                borderRadius: 12,
-                overflow: 'hidden',
-                backgroundColor: '#DED4C3',
-              }}
-            >
-              <Image
-                source={{ uri: p.publicUrl }}
-                style={{ width: '100%', height: '100%' }}
-                resizeMode="cover"
-              />
-            </View>
+            <PhotoTile key={p.id} photoId={p.id} url={p.publicUrl} size={TILE_W} />
           ))}
         </View>
       )}
