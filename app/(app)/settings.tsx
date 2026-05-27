@@ -170,7 +170,7 @@ function HourStepper({
   value,
   onChange,
   min = 0,
-  max = 23,
+  max = 23.5,
 }: {
   label:    string;
   value:    number;
@@ -179,9 +179,14 @@ function HourStepper({
   max?:     number;
 }) {
   const formatHour = (h: number) => {
-    const period = h < 12 ? 'AM' : 'PM';
-    const display = h % 12 === 0 ? 12 : h % 12;
-    return `${display}:00 ${period}`;
+    // Values may be fractional (8.5 = 8:30). Split into whole hour + minutes
+    // and format as H:MM AM/PM regardless of step size.
+    const wholeHour  = Math.floor(h);
+    const minutes    = Math.round((h - wholeHour) * 60);
+    const period     = wholeHour < 12 || wholeHour === 24 ? 'AM' : 'PM';
+    const hour12     = wholeHour % 12 === 0 ? 12 : wholeHour % 12;
+    const mmPadded   = minutes.toString().padStart(2, '0');
+    return `${hour12}:${mmPadded} ${period}`;
   };
   return (
     <View className="flex-1 flex-row items-center justify-between">
@@ -193,7 +198,7 @@ function HourStepper({
           onPress={() => {
             if (value <= min) return;
             Haptics.selectionAsync();
-            onChange(value - 1);
+            onChange(Math.max(min, value - 0.5));
           }}
           hitSlop={6}
           className="w-7 h-7 rounded-full bg-muted items-center justify-center active:opacity-70"
@@ -207,7 +212,7 @@ function HourStepper({
           onPress={() => {
             if (value >= max) return;
             Haptics.selectionAsync();
-            onChange(value + 1);
+            onChange(Math.min(max, value + 0.5));
           }}
           hitSlop={6}
           className="w-7 h-7 rounded-full bg-primary items-center justify-center active:opacity-80"
