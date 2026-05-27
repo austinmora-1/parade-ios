@@ -57,7 +57,7 @@ function useProfileSettings(userId: string | undefined) {
         .select(
           'plan_reminders, friend_requests_notifications, plan_invitations_notifications, ' +
           'show_availability, show_location, show_vibe_status, allow_all_hang_requests, ' +
-          'interests, social_goals, social_cap, preferred_social_days, preferred_social_times',
+          'interests, preferred_social_days, preferred_social_times, default_work_days, default_work_start_hour, default_work_end_hour',
         )
         .eq('user_id', userId!)
         .single();
@@ -73,16 +73,6 @@ const INTEREST_OPTIONS = [
   'Foodie', 'Outdoors', 'Movies', 'Concerts', 'Sports', 'Reading',
   'Travel', 'Art', 'Gaming', 'Music', 'Cooking', 'Yoga', 'Coffee',
   'Cocktails', 'Nightlife', 'Photography', 'Hiking', 'Fitness',
-];
-
-const GOAL_OPTIONS = [
-  'Meet new people',
-  'Stay close with friends',
-  'Try new activities',
-  'Have a regular routine',
-  'Spontaneous fun',
-  'Quality time',
-  'Be more active',
 ];
 
 const DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -169,6 +159,63 @@ function ToggleRow({
         thumbColor="#FFFFFF"
         ios_backgroundColor="#DED4C3"
       />
+    </View>
+  );
+}
+
+// ─── Hour stepper (Work Schedule) ────────────────────────────────────────────
+
+function HourStepper({
+  label,
+  value,
+  onChange,
+  min = 0,
+  max = 23,
+}: {
+  label:    string;
+  value:    number;
+  onChange: (v: number) => void;
+  min?:     number;
+  max?:     number;
+}) {
+  const formatHour = (h: number) => {
+    if (h === 0)  return '12 AM';
+    if (h === 12) return '12 PM';
+    if (h < 12)   return `${h} AM`;
+    return `${h - 12} PM`;
+  };
+  return (
+    <View className="flex-1 flex-row items-center justify-between">
+      <Text className="font-sans text-[11px] uppercase tracking-wider text-muted-foreground">
+        {label}
+      </Text>
+      <View className="flex-row items-center gap-2">
+        <Pressable
+          onPress={() => {
+            if (value <= min) return;
+            Haptics.selectionAsync();
+            onChange(value - 1);
+          }}
+          hitSlop={6}
+          className="w-7 h-7 rounded-full bg-muted items-center justify-center active:opacity-70"
+        >
+          <Text className="font-sans text-sm font-semibold text-foreground">−</Text>
+        </Pressable>
+        <Text className="font-display text-sm text-foreground w-14 text-center">
+          {formatHour(value)}
+        </Text>
+        <Pressable
+          onPress={() => {
+            if (value >= max) return;
+            Haptics.selectionAsync();
+            onChange(value + 1);
+          }}
+          hitSlop={6}
+          className="w-7 h-7 rounded-full bg-primary items-center justify-center active:opacity-80"
+        >
+          <Text className="font-sans text-sm font-semibold text-white">+</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -341,10 +388,11 @@ export default function SettingsPage() {
   const [showVibe,      setShowVibe]      = useState(true);
   const [allowHang,     setAllowHang]     = useState(true);
   const [interests,     setInterests]     = useState<string[]>([]);
-  const [socialGoals,   setSocialGoals]   = useState<string[]>([]);
-  const [socialCap,     setSocialCap]     = useState<number | null>(null);
   const [prefDays,      setPrefDays]      = useState<string[]>([]);
   const [prefTimes,     setPrefTimes]     = useState<string[]>([]);
+  const [workDays,      setWorkDays]      = useState<string[]>([]);
+  const [workStart,     setWorkStart]     = useState<number>(9);
+  const [workEnd,       setWorkEnd]       = useState<number>(17);
   const [savingKey,     setSavingKey]     = useState<string | null>(null);
   const [calendarState, setCalendarState] = useState<
     'unknown' | 'granted' | 'denied'
@@ -368,10 +416,14 @@ export default function SettingsPage() {
     setShowVibe(settings.show_vibe_status ?? true);
     setAllowHang(settings.allow_all_hang_requests ?? true);
     setInterests(settings.interests ?? []);
-    setSocialGoals(settings.social_goals ?? []);
-    setSocialCap(settings.social_cap ?? null);
     setPrefDays(settings.preferred_social_days ?? []);
     setPrefTimes(settings.preferred_social_times ?? []);
+    setWorkDays(
+      (settings as any).default_work_days ??
+        ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
+    );
+    setWorkStart((settings as any).default_work_start_hour ?? 9);
+    setWorkEnd((settings as any).default_work_end_hour ?? 17);
   }, [settings]);
 
   // Check calendar permission status on mount
@@ -412,7 +464,12 @@ export default function SettingsPage() {
   // ── Array-toggle helpers for chip-style fields ──────────────────────────
   const toggleArrayValue = useCallback(
     (
-      column: 'interests' | 'social_goals' | 'preferred_social_days' | 'preferred_social_times',
+      column:
+        | 'interests'
+        | 'social_goals'
+        | 'preferred_social_days'
+        | 'preferred_social_times'
+        | 'default_work_days',
       arr: string[],
       setLocal: (next: string[]) => void,
       value: string,
@@ -659,80 +716,67 @@ export default function SettingsPage() {
                 </View>
               </View>
 
-              {/* Social goals */}
+              {/* Work Schedule */}
               <View className="px-4 py-3 border-b border-border/20">
                 <Text className="font-sans text-sm font-medium text-foreground">
-                  What I'm looking for
+                  Work schedule
                 </Text>
                 <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">
-                  Helps us prioritize the right kinds of plans.
+                  We'll block these times as busy by default.
                 </Text>
-                <View className="flex-row flex-wrap gap-1.5 mt-2">
-                  {GOAL_OPTIONS.map((opt) => {
-                    const selected = socialGoals.includes(opt);
+
+                {/* Work days row */}
+                <View className="flex-row gap-1.5 mt-2.5">
+                  {DAY_KEYS.map((key, i) => {
+                    const selected = workDays.includes(key);
                     return (
                       <Pressable
-                        key={opt}
+                        key={key}
                         onPress={() =>
-                          toggleArrayValue('social_goals', socialGoals, setSocialGoals, opt)
+                          toggleArrayValue(
+                            'default_work_days',
+                            workDays,
+                            setWorkDays,
+                            key,
+                          )
                         }
-                        className={`rounded-full px-2.5 py-1 border ${
+                        className={`flex-1 h-9 rounded-xl border items-center justify-center active:opacity-70 ${
                           selected ? 'bg-primary border-primary' : 'bg-white border-border/40'
-                        } active:opacity-70`}
+                        }`}
                       >
                         <Text
-                          className={`font-sans text-xs font-medium ${
+                          className={`font-sans text-xs font-semibold ${
                             selected ? 'text-white' : 'text-foreground'
                           }`}
                         >
-                          {opt}
+                          {DAY_LABELS[i]}
                         </Text>
                       </Pressable>
                     );
                   })}
                 </View>
-              </View>
 
-              {/* Social cap */}
-              <View className="px-4 py-3 border-b border-border/20">
-                <View className="flex-row items-center justify-between gap-3">
-                  <View className="flex-1">
-                    <Text className="font-sans text-sm font-medium text-foreground">
-                      Plans per week
-                    </Text>
-                    <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">
-                      Your social capacity — we won't over-schedule you.
-                    </Text>
-                  </View>
-                  <View className="flex-row items-center gap-2">
-                    <Pressable
-                      onPress={() => {
-                        Haptics.selectionAsync();
-                        const next = Math.max(1, (socialCap ?? 3) - 1);
-                        setSocialCap(next);
-                        persist('social_cap', next, () => setSocialCap(socialCap));
-                      }}
-                      hitSlop={6}
-                      className="w-8 h-8 rounded-full bg-muted items-center justify-center active:opacity-70"
-                    >
-                      <Text className="font-sans text-base font-semibold text-foreground">−</Text>
-                    </Pressable>
-                    <Text className="font-display text-base text-foreground w-6 text-center">
-                      {socialCap ?? '—'}
-                    </Text>
-                    <Pressable
-                      onPress={() => {
-                        Haptics.selectionAsync();
-                        const next = Math.min(14, (socialCap ?? 2) + 1);
-                        setSocialCap(next);
-                        persist('social_cap', next, () => setSocialCap(socialCap));
-                      }}
-                      hitSlop={6}
-                      className="w-8 h-8 rounded-full bg-primary items-center justify-center active:opacity-80"
-                    >
-                      <Text className="font-sans text-base font-semibold text-white">+</Text>
-                    </Pressable>
-                  </View>
+                {/* Hours row */}
+                <View className="flex-row items-center justify-between mt-3 gap-3">
+                  <HourStepper
+                    label="Start"
+                    value={workStart}
+                    onChange={(v) => {
+                      setWorkStart(v);
+                      persist('default_work_start_hour', v, () => setWorkStart(workStart));
+                    }}
+                    max={workEnd - 1}
+                  />
+                  <View className="w-px h-8 bg-border/30" />
+                  <HourStepper
+                    label="End"
+                    value={workEnd}
+                    onChange={(v) => {
+                      setWorkEnd(v);
+                      persist('default_work_end_hour', v, () => setWorkEnd(workEnd));
+                    }}
+                    min={workStart + 1}
+                  />
                 </View>
               </View>
 
