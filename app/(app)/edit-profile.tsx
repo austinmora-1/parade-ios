@@ -114,6 +114,19 @@ export default function EditProfileScreen() {
     setAvatarUrl(profile.avatar_url ?? null);
   }, [profile]);
 
+  // ── Dirty check — disable Save until something actually changes ─────────
+  const isDirty =
+    !!profile && (
+      (profile.display_name   ?? '') !== displayName  ||
+      (profile.first_name     ?? '') !== firstName    ||
+      (profile.last_name      ?? '') !== lastName     ||
+      (profile.bio            ?? '') !== bio          ||
+      (profile.home_address   ?? '') !== homeAddress  ||
+      (profile.neighborhood   ?? '') !== neighborhood ||
+      (profile.current_vibe   ?? null) !== vibe       ||
+      (profile.avatar_url     ?? null) !== avatarUrl
+    );
+
   // ── Debounced username availability check ─────────────────────────────────
   useEffect(() => {
     const trimmed = displayName.trim();
@@ -283,6 +296,7 @@ export default function EditProfileScreen() {
   }, [user?.id, displayName, firstName, lastName, bio, vibe, avatarUrl, homeAddress, neighborhood, queryClient]);
 
   const canSubmit =
+    isDirty &&
     displayName.trim().length > 0 &&
     !saving &&
     !uploading &&
@@ -295,7 +309,24 @@ export default function EditProfileScreen() {
       {/* ── Header ────────────────────────────────────────────────────── */}
       <View className="flex-row items-center justify-between px-3 py-2 border-b border-border/20">
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => {
+            if (!isDirty) {
+              router.back();
+              return;
+            }
+            Alert.alert(
+              'Discard changes?',
+              'You have unsaved profile edits.',
+              [
+                { text: 'Keep editing', style: 'cancel' },
+                {
+                  text: 'Discard',
+                  style: 'destructive',
+                  onPress: () => router.back(),
+                },
+              ],
+            );
+          }}
           hitSlop={8}
           className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
         >

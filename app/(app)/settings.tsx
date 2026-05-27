@@ -395,7 +395,8 @@ export default function SettingsPage() {
   const [workDays,      setWorkDays]      = useState<string[]>([]);
   const [workStart,     setWorkStart]     = useState<number>(9);
   const [workEnd,       setWorkEnd]       = useState<number>(17);
-  const [savingKey,     setSavingKey]     = useState<string | null>(null);
+  // Legacy per-field saving indicator — disabled now that Save is batched.
+  // Toggles never disable themselves; the global Save button reflects state.
   const [calendarState, setCalendarState] = useState<
     'unknown' | 'granted' | 'denied'
   >('unknown');
@@ -435,33 +436,44 @@ export default function SettingsPage() {
     }).catch(() => {});
   }, []);
 
-  // ── Save a single setting ─────────────────────────────────────────────────
-  const persist = useCallback(
-    async (
-      column: string,
-      value: any,
-      onRollback?: () => void,
-    ) => {
-      if (!user?.id) return;
-      setSavingKey(column);
+  // ── Dirty-tracking save ───────────────────────────────────────────────────
+  // Settings used to auto-save each field on change. Now we accumulate
+  // changes locally and commit them on the explicit Save button tap.
+  const [pendingChanges, setPendingChanges] = useState<Record<string, any>>({});
+  const [savingAll, setSavingAll] = useState(false);
+
+  // Track local state as it diverges from the server snapshot
+  const markDirty = useCallback(
+    (column: string, value: any) => {
       Haptics.selectionAsync();
-      try {
-        const { error } = await supabase
-          .from('profiles')
-          .update({ [column]: value } as any)
-          .eq('user_id', user.id);
-        if (error) throw error;
-      } catch (err) {
-        console.error(`Save ${column} failed`, err);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        onRollback?.();
-        Alert.alert('Could not save', 'Please try again.');
-      } finally {
-        setSavingKey(null);
-      }
+      setPendingChanges((prev) => ({ ...prev, [column]: value }));
     },
-    [user?.id],
+    [],
   );
+
+  // Commit every pending change in a single profiles update
+  const saveAll = useCallback(async () => {
+    if (!user?.id) return;
+    const keys = Object.keys(pendingChanges);
+    if (keys.length === 0) return;
+    setSavingAll(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update(pendingChanges as any)
+        .eq('user_id', user.id);
+      if (error) throw error;
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      setPendingChanges({});
+    } catch (err: any) {
+      console.error('Settings saveAll failed', err);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      Alert.alert('Could not save', err?.message ?? 'Please try again.');
+    } finally {
+      setSavingAll(false);
+    }
+  }, [user?.id, pendingChanges]);
 
   // ── Array-toggle helpers for chip-style fields ──────────────────────────
   const toggleArrayValue = useCallback(
@@ -480,10 +492,35 @@ export default function SettingsPage() {
         ? arr.filter((v) => v !== value)
         : [...arr, value];
       setLocal(next);
-      persist(column, next, () => setLocal(arr));
+      markDirty(column, next);
     },
-    [persist],
+    [markDirty],
   );
+
+  const hasUnsavedChanges = Object.keys(pendingChanges).length > 0;
+
+  // Guard against losing edits when the user taps Back
+  const handleBack = useCallback(() => {
+    if (!hasUnsavedChanges) {
+      router.back();
+      return;
+    }
+    Alert.alert(
+      'Discard changes?',
+      'You have unsaved changes to your settings.',
+      [
+        { text: 'Keep editing', style: 'cancel' },
+        {
+          text: 'Discard',
+          style: 'destructive',
+          onPress: () => {
+            setPendingChanges({});
+            router.back();
+          },
+        },
+      ],
+    );
+  }, [hasUnsavedChanges]);
 
   // ── Calendar permission flow ───────────────────────────────────────────────
   const handleConnectCalendar = useCallback(async () => {
@@ -552,34 +589,34 @@ export default function SettingsPage() {
     ]);
   };
 
-  // ── Toggle handlers (optimistic) ──────────────────────────────────────────
+  // ── Toggle handlers (dirty-tracking, no auto-save) ───────────────────────
   const onTogglePlanReminders = (v: boolean) => {
     setReminders(v);
-    persist('plan_reminders', v, () => setReminders(!v));
+    markDirty('plan_reminders', v);
   };
   const onToggleFriendReq = (v: boolean) => {
     setFriendReq(v);
-    persist('friend_requests_notifications', v, () => setFriendReq(!v));
+    markDirty('friend_requests_notifications', v);
   };
   const onTogglePlanInvites = (v: boolean) => {
     setPlanInvites(v);
-    persist('plan_invitations_notifications', v, () => setPlanInvites(!v));
+    markDirty('plan_invitations_notifications', v);
   };
   const onToggleShowAvail = (v: boolean) => {
     setShowAvail(v);
-    persist('show_availability', v, () => setShowAvail(!v));
+    markDirty('show_availability', v);
   };
   const onToggleShowLocation = (v: boolean) => {
     setShowLocation(v);
-    persist('show_location', v, () => setShowLocation(!v));
+    markDirty('show_location', v);
   };
   const onToggleShowVibe = (v: boolean) => {
     setShowVibe(v);
-    persist('show_vibe_status', v, () => setShowVibe(!v));
+    markDirty('show_vibe_status', v);
   };
   const onToggleAllowHang = (v: boolean) => {
     setAllowHang(v);
-    persist('allow_all_hang_requests', v, () => setAllowHang(!v));
+    markDirty('allow_all_hang_requests', v);
   };
 
   return (
@@ -587,7 +624,7 @@ export default function SettingsPage() {
       {/* Header */}
       <View className="flex-row items-center px-3 pt-2 pb-3 gap-1">
         <Pressable
-          onPress={() => router.back()}
+          onPress={handleBack}
           hitSlop={8}
           className="w-9 h-9 items-center justify-center rounded-full active:opacity-70"
         >
@@ -596,9 +633,31 @@ export default function SettingsPage() {
         <View className="flex-1">
           <Text className="font-display text-base text-foreground">Settings</Text>
           <Text className="font-sans text-[11px] text-muted-foreground">
-            Manage your account and preferences
+            {hasUnsavedChanges
+              ? 'Unsaved changes'
+              : 'Manage your account and preferences'}
           </Text>
         </View>
+        <Pressable
+          onPress={saveAll}
+          disabled={!hasUnsavedChanges || savingAll}
+          hitSlop={6}
+          className={`rounded-xl px-3 py-1.5 ${
+            hasUnsavedChanges ? 'bg-primary active:opacity-80' : 'bg-muted'
+          }`}
+        >
+          {savingAll ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Text
+              className={`font-sans text-sm font-semibold ${
+                hasUnsavedChanges ? 'text-white' : 'text-muted-foreground'
+              }`}
+            >
+              Save
+            </Text>
+          )}
+        </Pressable>
       </View>
 
       <ScrollView
@@ -621,21 +680,21 @@ export default function SettingsPage() {
                 subtitle="Get notified before your plans"
                 value={reminders}
                 onValueChange={onTogglePlanReminders}
-                disabled={savingKey === 'plan_reminders'}
+                
               />
               <ToggleRow
                 title="Friend Requests"
                 subtitle="When someone connects with you"
                 value={friendReq}
                 onValueChange={onToggleFriendReq}
-                disabled={savingKey === 'friend_requests_notifications'}
+                
               />
               <ToggleRow
                 title="Plan Invitations"
                 subtitle="When you're invited to a plan"
                 value={planInvites}
                 onValueChange={onTogglePlanInvites}
-                disabled={savingKey === 'plan_invitations_notifications'}
+                
                 isLast
               />
             </SectionCard>
@@ -651,28 +710,28 @@ export default function SettingsPage() {
                 subtitle="Friends can see your free slots"
                 value={showAvail}
                 onValueChange={onToggleShowAvail}
-                disabled={savingKey === 'show_availability'}
+                
               />
               <ToggleRow
                 title="Show Location"
                 subtitle="Friends can see your home base + current city"
                 value={showLocation}
                 onValueChange={onToggleShowLocation}
-                disabled={savingKey === 'show_location'}
+                
               />
               <ToggleRow
                 title="Show Vibe"
                 subtitle="Friends can see your current vibe + weekly intentions"
                 value={showVibe}
                 onValueChange={onToggleShowVibe}
-                disabled={savingKey === 'show_vibe_status'}
+                
               />
               <ToggleRow
                 title="Allow Pings From All Friends"
                 subtitle="Off → only your close friends can ping you for hangouts"
                 value={allowHang}
                 onValueChange={onToggleAllowHang}
-                disabled={savingKey === 'allow_all_hang_requests'}
+                
                 isLast
               />
             </SectionCard>
@@ -765,7 +824,7 @@ export default function SettingsPage() {
                     value={workStart}
                     onChange={(v) => {
                       setWorkStart(v);
-                      persist('default_work_start_hour', v, () => setWorkStart(workStart));
+                      markDirty('default_work_start_hour', v);
                     }}
                     max={workEnd - 1}
                   />
@@ -775,7 +834,7 @@ export default function SettingsPage() {
                     value={workEnd}
                     onChange={(v) => {
                       setWorkEnd(v);
-                      persist('default_work_end_hour', v, () => setWorkEnd(workEnd));
+                      markDirty('default_work_end_hour', v);
                     }}
                     min={workStart + 1}
                   />
