@@ -11,6 +11,7 @@
  *   4. We re-check connection status to flip UI to "Connected".
  */
 import { useState, useEffect, useCallback } from 'react';
+import { AppState, Linking } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -114,18 +115,33 @@ export function useGoogleCalendar() {
         }
       }, 1500);
 
-      // Open Google's OAuth flow via SFSafariViewController. We use
-      // openBrowserAsync (NOT openAuthSessionAsync) because dismissBrowser()
-      // reliably closes SFSafariViewController, whereas ASWebAuthSession's
-      // dismissAuthSession() is silently ignored on many iOS builds.
-      await WebBrowser.openBrowserAsync(authUrl, {
-        showInRecents:        false,
-        dismissButtonStyle:   'cancel',
-        presentationStyle:    WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
-        // Match the parade-green tab bar tint for a native feel.
-        toolbarColor:         '#23744D',
-        controlsColor:        '#FFFFFF',
+      // Open Google's OAuth flow in the SYSTEM Safari (Linking.openURL)
+      // rather than an in-app browser. The user briefly leaves Parade,
+      // signs in, and the PWA /google-callback page redirects to
+      // parade://calendar-connected — iOS's custom-scheme handler then
+      // reopens Parade automatically. We listen for AppState to flip
+      // back to "active" and re-check status when that happens.
+      const sub = AppState.addEventListener('change', (state) => {
+        if (state === 'active') {
+          console.log('[google-calendar] app resumed — rechecking status');
+          checkConnection();
+          sub.remove();
+        }
       });
+      await Linking.openURL(authUrl);
+      // Wait for the user to come back. We don't await anything visual
+      // here — both AppState and the polling timer drive the UI update.
+      await new Promise<void>((resolve) => {
+        const checkDone = setInterval(() => {
+          if (connectedDetected) { clearInterval(checkDone); resolve(); }
+          // Hard stop after 4 min
+          if (Date.now() - pollStarted > 4 * 60 * 1000) {
+            clearInterval(checkDone);
+            resolve();
+          }
+        }, 750);
+      });
+      sub.remove();
 
       // Whether the user completed or cancelled, re-check status.
       await checkConnection();
