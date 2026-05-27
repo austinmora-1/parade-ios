@@ -65,7 +65,12 @@ export function useGoogleCalendar() {
     try {
       const { data, error } = await supabase.functions.invoke(
         'google-calendar-auth',
-        { headers: { Authorization: `Bearer ${accessToken}` } },
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          // Signal the callback page to deep-link back into the native app
+          // instead of redirecting to the web /settings page.
+          body: { mobile: true, returnUrl: 'parade://calendar-connected?ok=1' },
+        },
       );
       if (error) throw error;
       const authUrl = (data as any)?.authUrl as string | undefined;

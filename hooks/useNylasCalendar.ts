@@ -58,7 +58,9 @@ export function useNylasCalendar() {
       try {
         const { data, error } = await supabase.functions.invoke('nylas-auth', {
           headers: { Authorization: `Bearer ${accessToken}` },
-          body: { provider },
+          // mobile:true tells nylas-callback to 302 to parade:// instead of
+          // ${origin}/settings — closing the in-app browser cleanly.
+          body: { provider, mobile: true, returnUrl: 'parade://calendar-connected?ok=1' },
         });
         if (error) throw error;
         const authUrl = (data as any)?.authUrl as string | undefined;
