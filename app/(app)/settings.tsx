@@ -37,6 +37,7 @@ import {
   Apple,
 } from 'lucide-react-native';
 import Svg, { Path } from 'react-native-svg';
+import { TimeWheelPicker } from '@/components/primitives/TimeWheelPicker';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlannerStore } from '@/stores/plannerStore';
@@ -163,7 +164,16 @@ function ToggleRow({
   );
 }
 
-// ─── Hour stepper (Work Schedule) ────────────────────────────────────────────
+// ─── Hour stepper (Work Schedule) — tap to open scroll wheel ────────────────
+
+function formatHourLabel(h: number): string {
+  const wholeHour = Math.floor(h);
+  const minutes   = Math.round((h - wholeHour) * 60);
+  const period    = wholeHour < 12 || wholeHour === 24 ? 'AM' : 'PM';
+  const hour12    = wholeHour % 12 === 0 ? 12 : wholeHour % 12;
+  const mmPadded  = minutes.toString().padStart(2, '0');
+  return `${hour12}:${mmPadded} ${period}`;
+}
 
 function HourStepper({
   label,
@@ -178,48 +188,36 @@ function HourStepper({
   min?:     number;
   max?:     number;
 }) {
-  const formatHour = (h: number) => {
-    // Values may be fractional (8.5 = 8:30). Split into whole hour + minutes
-    // and format as H:MM AM/PM regardless of step size.
-    const wholeHour  = Math.floor(h);
-    const minutes    = Math.round((h - wholeHour) * 60);
-    const period     = wholeHour < 12 || wholeHour === 24 ? 'AM' : 'PM';
-    const hour12     = wholeHour % 12 === 0 ? 12 : wholeHour % 12;
-    const mmPadded   = minutes.toString().padStart(2, '0');
-    return `${hour12}:${mmPadded} ${period}`;
-  };
+  const [pickerOpen, setPickerOpen] = useState(false);
   return (
     <View className="flex-1 flex-row items-center justify-between">
       <Text className="font-sans text-[11px] uppercase tracking-wider text-muted-foreground">
         {label}
       </Text>
-      <View className="flex-row items-center gap-2">
-        <Pressable
-          onPress={() => {
-            if (value <= min) return;
-            Haptics.selectionAsync();
-            onChange(Math.max(min, value - 0.5));
-          }}
-          hitSlop={6}
-          className="w-7 h-7 rounded-full bg-muted items-center justify-center active:opacity-70"
-        >
-          <Text className="font-sans text-sm font-semibold text-foreground">−</Text>
-        </Pressable>
-        <Text className="font-display text-sm text-foreground w-20 text-center">
-          {formatHour(value)}
+      <Pressable
+        onPress={() => {
+          Haptics.selectionAsync();
+          setPickerOpen(true);
+        }}
+        className="bg-primary/10 rounded-xl px-3 py-1.5 active:opacity-70"
+        hitSlop={6}
+      >
+        <Text className="font-display text-sm text-primary font-semibold">
+          {formatHourLabel(value)}
         </Text>
-        <Pressable
-          onPress={() => {
-            if (value >= max) return;
-            Haptics.selectionAsync();
-            onChange(Math.min(max, value + 0.5));
-          }}
-          hitSlop={6}
-          className="w-7 h-7 rounded-full bg-primary items-center justify-center active:opacity-80"
-        >
-          <Text className="font-sans text-sm font-semibold text-white">+</Text>
-        </Pressable>
-      </View>
+      </Pressable>
+      <TimeWheelPicker
+        visible={pickerOpen}
+        value={value}
+        min={min}
+        max={max}
+        title={`${label} time`}
+        onCancel={() => setPickerOpen(false)}
+        onConfirm={(v) => {
+          setPickerOpen(false);
+          onChange(v);
+        }}
+      />
     </View>
   );
 }
