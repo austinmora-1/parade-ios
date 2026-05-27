@@ -27,6 +27,7 @@ import { Avatar } from '@/components/primitives/Avatar';
 import { Skeleton } from '@/components/primitives/Skeleton';
 import { formatDisplayName } from '@/lib/utils';
 import { WeeklyIntentionCard } from '@/components/profile/WeeklyIntentionCard';
+import { QuickStatsCard } from '@/components/profile/QuickStatsCard';
 
 // ─── Profile query ────────────────────────────────────────────────────────────
 
@@ -195,6 +196,11 @@ export default function ProfileTab() {
         {/* ── Weekly intention + vibe ───────────────────────────────────── */}
         <View className="px-5 pt-4">
           <WeeklyIntentionCard currentVibe={(profile as any)?.current_vibe ?? null} />
+        </View>
+
+        {/* ── Quick stats (this week) ───────────────────────────────────── */}
+        <View className="px-5 pt-3">
+          <QuickStatsCard currentVibe={(profile as any)?.current_vibe ?? null} />
         </View>
 
         {/* ── Edit profile CTA ──────────────────────────────────────────── */}
