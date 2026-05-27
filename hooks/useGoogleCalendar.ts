@@ -84,26 +84,33 @@ export function useGoogleCalendar() {
       // server confirms the token was stored, dismiss the in-app browser.
       const pollStarted = Date.now();
       let connectedDetected = false;
+      let pollCount = 0;
+      console.log('[google-calendar] connect: starting poll loop');
       pollTimer = setInterval(async () => {
         // Safety: stop polling after 3 minutes (user abandoned the flow).
         if (Date.now() - pollStarted > 3 * 60 * 1000) {
+          console.log('[google-calendar] poll timeout, stopping');
           if (pollTimer) clearInterval(pollTimer);
           return;
         }
+        pollCount += 1;
         try {
-          const { data: poll } = await supabase.functions.invoke(
+          const { data: poll, error: pollErr } = await supabase.functions.invoke(
             'google-calendar-events',
             { headers: { Authorization: `Bearer ${accessToken}` } },
           );
-          if ((poll as any)?.connected) {
+          const connected = !!(poll as any)?.connected;
+          console.log(`[google-calendar] poll #${pollCount} connected=${connected}`, pollErr?.message ?? '');
+          if (connected) {
             connectedDetected = true;
             if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+            console.log('[google-calendar] DETECTED CONNECTED — dismissing sheet');
             // Programmatic dismissal of the in-app browser (iOS).
-            try { WebBrowser.dismissBrowser(); } catch {}
-            try { (WebBrowser as any).dismissAuthSession?.(); } catch {}
+            try { WebBrowser.dismissBrowser(); } catch (e) { console.log('dismissBrowser err', e); }
+            try { WebBrowser.dismissAuthSession(); } catch (e) { console.log('dismissAuthSession err', e); }
           }
-        } catch {
-          // ignore transient errors while polling
+        } catch (e: any) {
+          console.log(`[google-calendar] poll #${pollCount} threw`, e?.message);
         }
       }, 1500);
 
