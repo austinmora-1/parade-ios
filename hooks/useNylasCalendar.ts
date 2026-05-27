@@ -55,25 +55,53 @@ export function useNylasCalendar() {
       if (!accessToken) return;
       setIsConnecting(true);
       setError(null);
+
+      let pollTimer: ReturnType<typeof setInterval> | null = null;
       try {
         const { data, error } = await supabase.functions.invoke('nylas-auth', {
           headers: { Authorization: `Bearer ${accessToken}` },
           // mobile:true tells nylas-callback to 302 to parade:// instead of
-          // ${origin}/settings — closing the in-app browser cleanly.
+          // ${origin}/settings — closing the in-app browser cleanly. We
+          // also poll status as a fallback for iOS versions where the
+          // ASWebAuthenticationSession ignores the scheme redirect.
           body: { provider, mobile: true, returnUrl: 'parade://calendar-connected?ok=1' },
         });
         if (error) throw error;
         const authUrl = (data as any)?.authUrl as string | undefined;
         if (!authUrl) throw new Error('No authUrl returned');
 
+        const pollStarted = Date.now();
+        let connectedDetected = false;
+        pollTimer = setInterval(async () => {
+          if (Date.now() - pollStarted > 3 * 60 * 1000) {
+            if (pollTimer) clearInterval(pollTimer);
+            return;
+          }
+          try {
+            const { data: poll } = await supabase.functions.invoke('nylas-status', {
+              headers: { Authorization: `Bearer ${accessToken}` },
+            });
+            if ((poll as any)?.connected) {
+              connectedDetected = true;
+              if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+              try { WebBrowser.dismissBrowser(); } catch {}
+              try { (WebBrowser as any).dismissAuthSession?.(); } catch {}
+            }
+          } catch {
+            // ignore transient errors while polling
+          }
+        }, 1500);
+
         await WebBrowser.openAuthSessionAsync(authUrl, 'parade://calendar-connected', {
           showInRecents: false,
         });
         await checkConnection();
+        if (connectedDetected) setIsConnected(true);
       } catch (err: any) {
         console.error('[nylas] connect failed', err);
         setError(err?.message ?? 'Failed to connect');
       } finally {
+        if (pollTimer) clearInterval(pollTimer);
         setIsConnecting(false);
       }
     },

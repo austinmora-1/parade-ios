@@ -62,13 +62,17 @@ export function useGoogleCalendar() {
     if (!accessToken) return;
     setIsConnecting(true);
     setError(null);
+
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
     try {
       const { data, error } = await supabase.functions.invoke(
         'google-calendar-auth',
         {
           headers: { Authorization: `Bearer ${accessToken}` },
-          // Signal the callback page to deep-link back into the native app
-          // instead of redirecting to the web /settings page.
+          // Belt-and-suspenders: tell the web /google-callback page to
+          // deep-link back into the app, AND poll status from here in
+          // case ASWebAuthenticationSession ignores the JS-driven
+          // navigation (which happens silently on some iOS versions).
           body: { mobile: true, returnUrl: 'parade://calendar-connected?ok=1' },
         },
       );
@@ -76,18 +80,51 @@ export function useGoogleCalendar() {
       const authUrl = (data as any)?.authUrl as string | undefined;
       if (!authUrl) throw new Error('No authUrl returned');
 
-      // Open Google's OAuth flow in-app. The web /google-callback page
-      // handles the token exchange; we dismiss when the user returns.
+      // Start polling for connection status every 1.5s. As soon as the
+      // server confirms the token was stored, dismiss the in-app browser.
+      const pollStarted = Date.now();
+      let connectedDetected = false;
+      pollTimer = setInterval(async () => {
+        // Safety: stop polling after 3 minutes (user abandoned the flow).
+        if (Date.now() - pollStarted > 3 * 60 * 1000) {
+          if (pollTimer) clearInterval(pollTimer);
+          return;
+        }
+        try {
+          const { data: poll } = await supabase.functions.invoke(
+            'google-calendar-events',
+            { headers: { Authorization: `Bearer ${accessToken}` } },
+          );
+          if ((poll as any)?.connected) {
+            connectedDetected = true;
+            if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+            // Programmatic dismissal of the in-app browser (iOS).
+            try { WebBrowser.dismissBrowser(); } catch {}
+            try { (WebBrowser as any).dismissAuthSession?.(); } catch {}
+          }
+        } catch {
+          // ignore transient errors while polling
+        }
+      }, 1500);
+
+      // Open Google's OAuth flow. openAuthSessionAsync still gives the
+      // best UX (modal + cookie isolation) and will dismiss either via
+      // the parade:// scheme or via our dismissAuthSession call above.
       await WebBrowser.openAuthSessionAsync(authUrl, 'parade://calendar-connected', {
         showInRecents: false,
       });
 
-      // Whether the user completed or dismissed, re-check status.
+      // Whether the user completed or cancelled, re-check status.
       await checkConnection();
+      if (connectedDetected) {
+        // Already connected — surface success haptic.
+        setIsConnected(true);
+      }
     } catch (err: any) {
       console.error('[google-calendar] connect failed', err);
       setError(err?.message ?? 'Failed to connect');
     } finally {
+      if (pollTimer) clearInterval(pollTimer);
       setIsConnecting(false);
     }
   }, [accessToken, checkConnection]);
