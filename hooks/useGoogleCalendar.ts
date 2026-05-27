@@ -115,33 +115,16 @@ export function useGoogleCalendar() {
         }
       }, 1500);
 
-      // Open Google's OAuth flow in the SYSTEM Safari (Linking.openURL)
-      // rather than an in-app browser. The user briefly leaves Parade,
-      // signs in, and the PWA /google-callback page redirects to
-      // parade://calendar-connected — iOS's custom-scheme handler then
-      // reopens Parade automatically. We listen for AppState to flip
-      // back to "active" and re-check status when that happens.
-      const sub = AppState.addEventListener('change', (state) => {
-        if (state === 'active') {
-          console.log('[google-calendar] app resumed — rechecking status');
-          checkConnection();
-          sub.remove();
-        }
+      // Open Google's OAuth flow via ASWebAuthenticationSession. The ONLY
+      // reliable auto-dismiss path on iOS is its scheme-match callback —
+      // dismissAuthSession()/cancel() and dismissBrowser() are both
+      // silently ignored while the OAuth WebView is mid-flow. The PWA's
+      // /google-callback page synthesizes an anchor click to parade://
+      // (NOT window.location.href, which iOS WKWebView blocks for custom
+      // schemes), which triggers iOS to intercept and close the sheet.
+      await WebBrowser.openAuthSessionAsync(authUrl, 'parade://calendar-connected', {
+        showInRecents: false,
       });
-      await Linking.openURL(authUrl);
-      // Wait for the user to come back. We don't await anything visual
-      // here — both AppState and the polling timer drive the UI update.
-      await new Promise<void>((resolve) => {
-        const checkDone = setInterval(() => {
-          if (connectedDetected) { clearInterval(checkDone); resolve(); }
-          // Hard stop after 4 min
-          if (Date.now() - pollStarted > 4 * 60 * 1000) {
-            clearInterval(checkDone);
-            resolve();
-          }
-        }, 750);
-      });
-      sub.remove();
 
       // Whether the user completed or cancelled, re-check status.
       await checkConnection();

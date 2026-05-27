@@ -93,28 +93,13 @@ export function useNylasCalendar() {
           }
         }, 1500);
 
-        // Open Nylas in system Safari (Linking.openURL). nylas-callback
-        // 302s to parade://calendar-connected on success, which iOS's
-        // scheme handler uses to reopen Parade. AppState 'active' is
-        // our cue to re-check connection status.
-        const sub = AppState.addEventListener('change', (state) => {
-          if (state === 'active') {
-            console.log('[nylas] app resumed — rechecking status');
-            checkConnection();
-            sub.remove();
-          }
+        // Use ASWebAuthenticationSession — the only modal Apple
+        // auto-dismisses on a scheme match. Nylas's callback edge
+        // function already returns a real HTTP 302 to parade://, which
+        // iOS intercepts cleanly (no anchor-click hack needed here).
+        await WebBrowser.openAuthSessionAsync(authUrl, 'parade://calendar-connected', {
+          showInRecents: false,
         });
-        await Linking.openURL(authUrl);
-        await new Promise<void>((resolve) => {
-          const checkDone = setInterval(() => {
-            if (connectedDetected) { clearInterval(checkDone); resolve(); }
-            if (Date.now() - pollStarted > 4 * 60 * 1000) {
-              clearInterval(checkDone);
-              resolve();
-            }
-          }, 750);
-        });
-        sub.remove();
         await checkConnection();
         if (connectedDetected) setIsConnected(true);
       } catch (err: any) {
