@@ -7,7 +7,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Defs, LinearGradient as SvgLinearGradient, Stop, Rect } from 'react-native-svg';
 import { Bell, Plus, MapPin } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useCallback, useState, useEffect, useMemo } from 'react';
@@ -195,19 +195,32 @@ export default function HomeTab() {
       >
         {/* ── Greeting hero (gradient banner) ─────────────────────────────── */}
         <View className="px-4 pt-3 pb-4">
-          <LinearGradient
-            colors={['#23744D', '#2F8A5C', '#FFFFFF']}
-            locations={[0, 0.55, 1]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
+          <View
             style={{
               borderRadius: 24,
+              overflow: 'hidden',
               shadowColor: '#040A2A',
               shadowOpacity: 0.12,
               shadowRadius: 12,
               shadowOffset: { width: 0, height: 4 },
             }}
           >
+            {/* SVG gradient background — uses react-native-svg (already bundled) */}
+            <Svg
+              style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+              width="100%"
+              height="100%"
+              preserveAspectRatio="none"
+            >
+              <Defs>
+                <SvgLinearGradient id="heroGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <Stop offset="0%"   stopColor="#23744D" stopOpacity="1" />
+                  <Stop offset="55%"  stopColor="#2F8A5C" stopOpacity="1" />
+                  <Stop offset="100%" stopColor="#FFFFFF" stopOpacity="1" />
+                </SvgLinearGradient>
+              </Defs>
+              <Rect x="0" y="0" width="100%" height="100%" fill="url(#heroGrad)" />
+            </Svg>
             <View className="flex-row items-center justify-between px-5 py-4">
               {/* Left: greeting + date/location */}
               <View className="flex-1 pr-3">
@@ -294,7 +307,7 @@ export default function HomeTab() {
                 </Pressable>
               </View>
             </View>
-          </LinearGradient>
+          </View>
         </View>
 
         {/* ── Week-at-a-glance stat pills ─────────────────────────────────── */}
