@@ -90,6 +90,10 @@ function AppLayoutInner() {
         name="new-trip-proposal"
         options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
       />
+      <Stack.Screen
+        name="edit-intention"
+        options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+      />
     </Stack>
   );
 }

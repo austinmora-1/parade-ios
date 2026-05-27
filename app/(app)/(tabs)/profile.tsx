@@ -26,6 +26,7 @@ import { usePlannerStore } from '@/stores/plannerStore';
 import { Avatar } from '@/components/primitives/Avatar';
 import { Skeleton } from '@/components/primitives/Skeleton';
 import { formatDisplayName } from '@/lib/utils';
+import { WeeklyIntentionCard } from '@/components/profile/WeeklyIntentionCard';
 
 // ─── Profile query ────────────────────────────────────────────────────────────
 
@@ -37,7 +38,7 @@ function useProfile(userId: string | undefined) {
       const { data, error } = await supabase
         .from('profiles')
         .select(
-          'user_id, display_name, first_name, last_name, avatar_url, bio, created_at',
+          'user_id, display_name, first_name, last_name, avatar_url, bio, created_at, current_vibe, neighborhood, home_address',
         )
         .eq('user_id', userId!)
         .single();
@@ -189,6 +190,11 @@ export default function ProfileTab() {
               <StatItem value={upcomingCount} label="Upcoming" />
             </View>
           </View>
+        </View>
+
+        {/* ── Weekly intention + vibe ───────────────────────────────────── */}
+        <View className="px-5 pt-4">
+          <WeeklyIntentionCard currentVibe={(profile as any)?.current_vibe ?? null} />
         </View>
 
         {/* ── Edit profile CTA ──────────────────────────────────────────── */}
