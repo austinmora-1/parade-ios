@@ -179,10 +179,9 @@ function HourStepper({
   max?:     number;
 }) {
   const formatHour = (h: number) => {
-    if (h === 0)  return '12 AM';
-    if (h === 12) return '12 PM';
-    if (h < 12)   return `${h} AM`;
-    return `${h - 12} PM`;
+    const period = h < 12 ? 'AM' : 'PM';
+    const display = h % 12 === 0 ? 12 : h % 12;
+    return `${display}:00 ${period}`;
   };
   return (
     <View className="flex-1 flex-row items-center justify-between">
@@ -201,7 +200,7 @@ function HourStepper({
         >
           <Text className="font-sans text-sm font-semibold text-foreground">−</Text>
         </Pressable>
-        <Text className="font-display text-sm text-foreground w-14 text-center">
+        <Text className="font-display text-sm text-foreground w-20 text-center">
           {formatHour(value)}
         </Text>
         <Pressable
