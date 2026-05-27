@@ -355,6 +355,18 @@ export default function SettingsPage() {
     setShowAvail(v);
     persist('show_availability', v, () => setShowAvail(!v));
   };
+  const onToggleShowLocation = (v: boolean) => {
+    setShowLocation(v);
+    persist('show_location', v, () => setShowLocation(!v));
+  };
+  const onToggleShowVibe = (v: boolean) => {
+    setShowVibe(v);
+    persist('show_vibe_status', v, () => setShowVibe(!v));
+  };
+  const onToggleAllowHang = (v: boolean) => {
+    setAllowHang(v);
+    persist('allow_all_hang_requests', v, () => setAllowHang(!v));
+  };
 
   return (
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
@@ -426,6 +438,27 @@ export default function SettingsPage() {
                 value={showAvail}
                 onValueChange={onToggleShowAvail}
                 disabled={savingKey === 'show_availability'}
+              />
+              <ToggleRow
+                title="Show Location"
+                subtitle="Friends can see your home base + current city"
+                value={showLocation}
+                onValueChange={onToggleShowLocation}
+                disabled={savingKey === 'show_location'}
+              />
+              <ToggleRow
+                title="Show Vibe"
+                subtitle="Friends can see your current vibe + weekly intentions"
+                value={showVibe}
+                onValueChange={onToggleShowVibe}
+                disabled={savingKey === 'show_vibe_status'}
+              />
+              <ToggleRow
+                title="Allow Pings From All Friends"
+                subtitle="Off → only your close friends can ping you for hangouts"
+                value={allowHang}
+                onValueChange={onToggleAllowHang}
+                disabled={savingKey === 'allow_all_hang_requests'}
                 isLast
               />
             </SectionCard>
