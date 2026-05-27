@@ -92,8 +92,16 @@ export function useNylasCalendar() {
           }
         }, 1500);
 
-        await WebBrowser.openAuthSessionAsync(authUrl, 'parade://calendar-connected', {
-          showInRecents: false,
+        // SFSafariViewController via openBrowserAsync — supports reliable
+        // programmatic dismissal via WebBrowser.dismissBrowser() (the
+        // ASWebAuthSession dismissAuthSession path is ignored on many iOS
+        // builds, leaving the sheet open even after the connection lands).
+        await WebBrowser.openBrowserAsync(authUrl, {
+          showInRecents:      false,
+          dismissButtonStyle: 'cancel',
+          presentationStyle:  WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
+          toolbarColor:       '#23744D',
+          controlsColor:      '#FFFFFF',
         });
         await checkConnection();
         if (connectedDetected) setIsConnected(true);

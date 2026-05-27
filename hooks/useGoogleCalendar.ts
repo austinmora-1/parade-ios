@@ -114,11 +114,17 @@ export function useGoogleCalendar() {
         }
       }, 1500);
 
-      // Open Google's OAuth flow. openAuthSessionAsync still gives the
-      // best UX (modal + cookie isolation) and will dismiss either via
-      // the parade:// scheme or via our dismissAuthSession call above.
-      await WebBrowser.openAuthSessionAsync(authUrl, 'parade://calendar-connected', {
-        showInRecents: false,
+      // Open Google's OAuth flow via SFSafariViewController. We use
+      // openBrowserAsync (NOT openAuthSessionAsync) because dismissBrowser()
+      // reliably closes SFSafariViewController, whereas ASWebAuthSession's
+      // dismissAuthSession() is silently ignored on many iOS builds.
+      await WebBrowser.openBrowserAsync(authUrl, {
+        showInRecents:        false,
+        dismissButtonStyle:   'cancel',
+        presentationStyle:    WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
+        // Match the parade-green tab bar tint for a native feel.
+        toolbarColor:         '#23744D',
+        controlsColor:        '#FFFFFF',
       });
 
       // Whether the user completed or cancelled, re-check status.
