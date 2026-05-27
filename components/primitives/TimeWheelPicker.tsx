@@ -15,7 +15,7 @@
  *   />
  */
 import { useEffect, useRef, useState } from 'react';
-import { Modal, View, Text, ScrollView, Pressable } from 'react-native';
+import { Modal, View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import * as Haptics from 'expo-haptics';
 
 const ROW_HEIGHT = 44;
@@ -119,15 +119,18 @@ export function TimeWheelPicker({
     <Modal
       visible={visible}
       transparent
-      animationType="fade"
+      animationType="slide"
       onRequestClose={onCancel}
     >
-      <Pressable
-        onPress={onCancel}
-        className="flex-1 items-center justify-end bg-black/40"
-      >
+      <View className="flex-1 justify-end">
+        {/* Backdrop — absolute behind the sheet so it only receives taps
+            outside the sheet. The sheet itself is a plain View so the
+            ScrollView inside it keeps the touch responder. */}
         <Pressable
-          onPress={(e) => e.stopPropagation()}
+          onPress={onCancel}
+          style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.4)' }]}
+        />
+        <View
           className="w-full bg-white rounded-t-3xl pb-6"
           style={{
             shadowColor: '#040A2A',
@@ -227,8 +230,8 @@ export function TimeWheelPicker({
               })}
             </ScrollView>
           </View>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
