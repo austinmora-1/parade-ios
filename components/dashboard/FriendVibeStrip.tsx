@@ -6,8 +6,6 @@
  */
 import { ScrollView, View, Text, Pressable } from 'react-native';
 import { router } from 'expo-router';
-import { useMemo } from 'react';
-import { format, startOfWeek, addDays } from 'date-fns';
 import { MapPin } from 'lucide-react-native';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { useFriendDashboardData } from '@/hooks/useFriendDashboardData';
@@ -15,35 +13,16 @@ import { Avatar } from '@/components/primitives/Avatar';
 import { Skeleton } from '@/components/primitives/Skeleton';
 import { formatDisplayName } from '@/lib/utils';
 
-/** Dates (yyyy-MM-dd) for Mon–Sun of the current week */
-function currentWeekDateStrs(): string[] {
-  const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
-  return Array.from({ length: 7 }, (_, i) =>
-    format(addDays(weekStart, i), 'yyyy-MM-dd'),
-  );
-}
-
 export function FriendVibeStrip() {
-  const friends      = usePlannerStore((s) => s.friends);
-  const availability = usePlannerStore((s) => s.availability);
+  const friends = usePlannerStore((s) => s.friends);
   const { data: friendData, isLoading } = useFriendDashboardData();
 
   const connected = friends.filter((f) => f.status === 'connected' && f.friendUserId);
-  const weekDates = currentWeekDateStrs();
-
-  /** Set of yyyy-MM-dd where the *current user* has ≥1 free slot this week */
-  const myFreeDates = useMemo(() => {
-    const set = new Set<string>();
-    for (const day of availability) {
-      const dateStr = format(day.date, 'yyyy-MM-dd');
-      if (!weekDates.includes(dateStr)) continue;
-      const hasFree = Object.values(day.slots).some((v) => v === true);
-      if (hasFree) set.add(dateStr);
-    }
-    return set;
-  }, [availability, weekDates.join(',')]);
 
   if (connected.length === 0) return null;
+  // If filtering eliminated everyone (different cities / no mutual slots),
+  // hide the section so the dashboard doesn't show an empty header.
+  if (!isLoading && (friendData?.length ?? 0) === 0) return null;
 
   return (
     <View className="gap-3">
@@ -82,25 +61,16 @@ export function FriendVibeStrip() {
           showsHorizontalScrollIndicator={false}
           contentContainerClassName="gap-2.5 px-0.5 pb-1"
         >
-          {connected.map((friend) => {
-            const vibeData = friendData?.find((d) => d.userId === friend.friendUserId);
+          {(friendData ?? []).map((vibeData) => {
+            const friend = connected.find((f) => f.friendUserId === vibeData.userId);
+            if (!friend) return null;
             const displayName = formatDisplayName({
-              firstName: vibeData?.firstName,
-              lastName: vibeData?.lastName,
-              displayName: vibeData?.displayName ?? friend.name,
+              firstName: vibeData.firstName,
+              lastName: vibeData.lastName,
+              displayName: vibeData.displayName ?? friend.name,
             });
             const firstName = displayName.split(' ')[0];
-
-            // Friend's free slots & overlap with me
-            const friendFreeThisWeek = (vibeData?.freeDates ?? []).filter((d) =>
-              weekDates.includes(d),
-            );
-            const mutualDays = friendFreeThisWeek.filter((d) =>
-              myFreeDates.has(d),
-            ).length;
-            const slotCount = vibeData?.freeSlotCount ?? 0;
-            const tone: 'mutual' | 'one-sided' | 'none' =
-              mutualDays > 0 ? 'mutual' : slotCount > 0 ? 'one-sided' : 'none';
+            const slotCount = vibeData.freeSlotCount;
 
             return (
               <Pressable
@@ -110,14 +80,14 @@ export function FriendVibeStrip() {
                 style={{ width: 220 }}
               >
                 <Avatar
-                  url={vibeData?.avatarUrl ?? friend.avatar}
+                  url={vibeData.avatarUrl ?? friend.avatar}
                   displayName={friend.name}
                   size="md"
                 />
 
-                {/* City + Name + slot count */}
+                {/* City + Name + overlap slot count */}
                 <View className="flex-1 gap-0.5">
-                  {vibeData?.city ? (
+                  {vibeData.city ? (
                     <View className="flex-row items-center gap-1">
                       <MapPin size={9} color="#929298" strokeWidth={2} />
                       <Text
@@ -129,25 +99,19 @@ export function FriendVibeStrip() {
                     </View>
                   ) : null}
                   <Text
-                    className="font-sans font-semibold text-evergreen text-sm"
+                    className="text-evergreen"
+                    style={{
+                      fontFamily: 'Fraunces_700Bold',
+                      fontSize: 17,
+                      lineHeight: 20,
+                    }}
                     numberOfLines={1}
                   >
                     {firstName}
                   </Text>
-                  {tone === 'none' ? (
-                    <Text className="font-sans text-[11px] text-muted-foreground">
-                      busy this week
-                    </Text>
-                  ) : (
-                    <Text
-                      className={`font-sans text-[11px] font-semibold ${
-                        tone === 'mutual' ? 'text-primary' : 'text-marigold'
-                      }`}
-                    >
-                      {slotCount} slot{slotCount === 1 ? '' : 's'}
-                      {tone === 'mutual' ? ` · ${mutualDays} w/ you` : ''}
-                    </Text>
-                  )}
+                  <Text className="font-sans text-[11px] font-semibold text-primary">
+                    {slotCount} slot{slotCount === 1 ? '' : 's'} w/ you
+                  </Text>
                 </View>
               </Pressable>
             );
