@@ -9,14 +9,57 @@
  */
 import { Tabs } from 'expo-router';
 import { Home, CalendarDays, Users, User } from 'lucide-react-native';
-import { Platform } from 'react-native';
+import { Platform, View, Image } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
 
 const PARADE_GREEN  = '#23744D';
 const ELEPHANT_GRAY = '#929298';
 const SIDEBAR_CHALK = '#FAF3E6';
 const BORDER        = '#DED4C3';
 
+/** Tiny avatar fetch for the bottom-nav profile tab icon. */
+function useTabAvatarUrl(): string | null {
+  const { user } = useAuth();
+  const { data } = useQuery({
+    enabled: !!user?.id,
+    queryKey: ['tab-avatar', user?.id],
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('avatar_url')
+        .eq('user_id', user!.id)
+        .maybeSingle();
+      return (data?.avatar_url as string | null | undefined) ?? null;
+    },
+  });
+  return data ?? null;
+}
+
+function ProfileTabIcon({ color, focused, avatarUrl }: { color: string; focused: boolean; avatarUrl: string | null }) {
+  if (!avatarUrl) {
+    return <User color={color} size={22} strokeWidth={focused ? 2.2 : 1.8} />;
+  }
+  return (
+    <View
+      style={{
+        width: 26,
+        height: 26,
+        borderRadius: 13,
+        overflow: 'hidden',
+        borderWidth: focused ? 2 : 1,
+        borderColor: focused ? PARADE_GREEN : 'rgba(146,146,152,0.5)',
+      }}
+    >
+      <Image source={{ uri: avatarUrl }} style={{ width: '100%', height: '100%' }} />
+    </View>
+  );
+}
+
 export default function TabsLayout() {
+  const avatarUrl = useTabAvatarUrl();
   return (
     <Tabs
       screenOptions={{
@@ -71,7 +114,7 @@ export default function TabsLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, focused }) => (
-            <User color={color} size={22} strokeWidth={focused ? 2.2 : 1.8} />
+            <ProfileTabIcon color={color} focused={focused} avatarUrl={avatarUrl} />
           ),
         }}
       />

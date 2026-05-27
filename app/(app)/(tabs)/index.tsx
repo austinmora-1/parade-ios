@@ -7,6 +7,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Bell, Plus, MapPin } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useCallback, useState, useEffect, useMemo } from 'react';
@@ -14,7 +15,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, addDays, startOfWeek } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { Avatar } from '@/components/primitives/Avatar';
 import { Skeleton } from '@/components/primitives/Skeleton';
 import { formatDisplayName } from '@/lib/utils';
 import { usePlannerStore } from '@/stores/plannerStore';
@@ -193,69 +193,109 @@ export default function HomeTab() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#23744D" />
         }
       >
-        {/* ── Header ──────────────────────────────────────────────────────── */}
-        <View className="flex-row items-center justify-between px-5 pt-4 pb-3">
-          <View className="flex-row items-center gap-3">
-            <Avatar
-              url={profile?.avatar_url}
-              firstName={profile?.first_name}
-              displayName={profile?.display_name}
-              size="sm"
-            />
-            <Text
-              style={{ fontFamily: 'BungeeShade_400Regular' }}
-              className="text-2xl text-parade-green"
-            >
-              parade
-            </Text>
-          </View>
-
-          {/* Bell with unread dot */}
-          <Pressable
-            onPress={() => router.push('/(app)/notifications')}
-            className="w-10 h-10 rounded-full bg-evergreen/8 items-center justify-center"
-            hitSlop={8}
+        {/* ── Greeting hero (gradient banner) ─────────────────────────────── */}
+        <View className="px-4 pt-3 pb-4">
+          <LinearGradient
+            colors={['#23744D', '#2F8A5C', '#FFFFFF']}
+            locations={[0, 0.55, 1]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={{
+              borderRadius: 24,
+              shadowColor: '#040A2A',
+              shadowOpacity: 0.12,
+              shadowRadius: 12,
+              shadowOffset: { width: 0, height: 4 },
+            }}
           >
-            <Bell size={20} color="#2F4A3E" strokeWidth={1.75} />
-            {hasUnread && (
-              <View className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-ember" />
-            )}
-          </Pressable>
-        </View>
+            <View className="flex-row items-center justify-between px-5 py-4">
+              {/* Left: greeting + date/location */}
+              <View className="flex-1 pr-3">
+                {profileLoading ? (
+                  <View className="gap-2">
+                    <Skeleton width="70%" height={26} rounded="rounded-lg" />
+                    <Skeleton width="50%" height={14} />
+                  </View>
+                ) : (
+                  <>
+                    <Text
+                      className="text-white"
+                      style={{
+                        fontFamily: 'Fraunces_700Bold',
+                        fontSize: 24,
+                        lineHeight: 28,
+                      }}
+                      numberOfLines={1}
+                    >
+                      {greeting(firstName || 'there')}
+                    </Text>
+                    <View className="flex-row items-center gap-3 mt-1.5">
+                      <Text
+                        className="text-white/85"
+                        style={{
+                          fontFamily: 'Inter_400Regular',
+                          fontSize: 12,
+                        }}
+                      >
+                        {new Date().toLocaleDateString('en-US', {
+                          weekday: 'long',
+                          month: 'long',
+                          day: 'numeric',
+                        })}
+                      </Text>
+                      <Pressable
+                        onPress={() => router.push('/(app)/set-location')}
+                        hitSlop={4}
+                        className="flex-row items-center gap-1 active:opacity-70"
+                      >
+                        <MapPin size={11} color="#FFFFFF" strokeWidth={2} />
+                        <Text
+                          className="text-white"
+                          style={{
+                            fontFamily: 'Inter_600SemiBold',
+                            fontSize: 12,
+                          }}
+                          numberOfLines={1}
+                        >
+                          {profile?.home_address || 'Set location'}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </>
+                )}
+              </View>
 
-        {/* ── Greeting ────────────────────────────────────────────────────── */}
-        {profileLoading ? (
-          <View className="px-5 pt-2 pb-4 gap-2">
-            <Skeleton width="55%" height={24} rounded="rounded-lg" />
-            <Skeleton width="35%" height={13} />
-          </View>
-        ) : (
-          <View className="px-5 pt-2 pb-4 gap-1.5">
-            <Text className="font-sans font-semibold text-evergreen text-2xl">
-              {greeting(firstName || 'there')}
-            </Text>
-            <View className="flex-row items-center gap-3">
-              <Text className="font-sans text-sm text-foreground/60">
-                {new Date().toLocaleDateString('en-US', {
-                  weekday: 'long',
-                  month: 'long',
-                  day: 'numeric',
-                })}
-              </Text>
-              {/* City pill — tap to open set-location modal */}
-              <Pressable
-                onPress={() => router.push('/(app)/set-location')}
-                hitSlop={4}
-                className="flex-row items-center gap-1 active:opacity-60"
-              >
-                <MapPin size={11} color="#23744D" strokeWidth={2} />
-                <Text className="font-sans text-xs font-semibold text-primary">
-                  {profile?.home_address || 'Set location'}
-                </Text>
-              </Pressable>
+              {/* Right: Bell + FAB */}
+              <View className="flex-row items-center gap-2">
+                <Pressable
+                  onPress={() => router.push('/(app)/notifications')}
+                  className="w-10 h-10 rounded-full bg-white/20 items-center justify-center active:opacity-70"
+                  hitSlop={6}
+                >
+                  <Bell size={18} color="#FFFFFF" strokeWidth={2} />
+                  {hasUnread && (
+                    <View className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-ember" />
+                  )}
+                </Pressable>
+                <Pressable
+                  onPress={() => router.push('/(app)/what-planning')}
+                  className="w-11 h-11 rounded-full items-center justify-center active:opacity-80"
+                  hitSlop={6}
+                  style={{
+                    backgroundColor: '#FFFFFF',
+                    shadowColor: '#040A2A',
+                    shadowOpacity: 0.18,
+                    shadowRadius: 8,
+                    shadowOffset: { width: 0, height: 3 },
+                    elevation: 6,
+                  }}
+                >
+                  <Plus size={22} color="#23744D" strokeWidth={2.5} />
+                </Pressable>
+              </View>
             </View>
-          </View>
-        )}
+          </LinearGradient>
+        </View>
 
         {/* ── Week-at-a-glance stat pills ─────────────────────────────────── */}
         {!storeLoading && (stats.upcomingCount > 0 || stats.friendsFreeWeekend > 0) && (
@@ -298,27 +338,6 @@ export default function HomeTab() {
           <UpcomingPlansWidget />
         </View>
       </ScrollView>
-
-      {/* ── Floating Action Button: opens What-Are-You-Planning sheet ──── */}
-      <Pressable
-        onPress={() => router.push('/(app)/what-planning')}
-        className="absolute right-5 bottom-6 active:opacity-80"
-        style={{
-          width: 56,
-          height: 56,
-          borderRadius: 28,
-          backgroundColor: '#23744D',
-          alignItems: 'center',
-          justifyContent: 'center',
-          shadowColor: '#040A2A',
-          shadowOpacity: 0.25,
-          shadowRadius: 12,
-          shadowOffset: { width: 0, height: 6 },
-          elevation: 8,
-        }}
-      >
-        <Plus size={26} color="#FFFFFF" strokeWidth={2.5} />
-      </Pressable>
     </SafeAreaView>
   );
 }

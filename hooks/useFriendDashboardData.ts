@@ -15,8 +15,12 @@ export interface FriendVibe {
   lastName: string | null;
   avatarUrl: string | null;
   currentVibe: string | null;
+  /** Short city/neighborhood label, e.g. "Brooklyn" or "Austin, TX". */
+  city: string | null;
   /** dates (yyyy-MM-dd) where this friend has at least one 'free' slot */
   freeDates: string[];
+  /** Total free slots this week (sum across all days). */
+  freeSlotCount: number;
 }
 
 export function useFriendDashboardData() {
@@ -38,7 +42,7 @@ export function useFriendDashboardData() {
       const [profilesRes, availRes] = await Promise.all([
         supabase
           .from('profiles')
-          .select('user_id, display_name, first_name, last_name, avatar_url, current_vibe')
+          .select('user_id, display_name, first_name, last_name, avatar_url, current_vibe, neighborhood, home_address')
           .in('user_id', friendUserIds),
         supabase
           .from('availability')
@@ -53,27 +57,46 @@ export function useFriendDashboardData() {
 
       // Build a map of userId → dates where they have any free slot
       const freeMap: Record<string, Set<string>> = {};
+      // Also count total free slots per user this week
+      const slotCount: Record<string, number> = {};
       for (const row of avail) {
         const slots = [
           row.early_morning, row.late_morning, row.early_afternoon,
           row.late_afternoon, row.evening, row.late_night,
         ];
-        const hasFree = slots.some((s) => s === true || (s as any) === 'free');
-        if (hasFree) {
+        const freeSlotsToday = slots.filter(
+          (s) => s === true || (s as any) === 'free',
+        ).length;
+        if (freeSlotsToday > 0) {
           if (!freeMap[row.user_id]) freeMap[row.user_id] = new Set();
           freeMap[row.user_id].add(row.date);
+          slotCount[row.user_id] = (slotCount[row.user_id] ?? 0) + freeSlotsToday;
         }
       }
 
-      return profiles.map((p) => ({
-        userId: p.user_id,
-        displayName: p.display_name,
-        firstName: p.first_name,
-        lastName: p.last_name,
-        avatarUrl: p.avatar_url,
-        currentVibe: p.current_vibe,
-        freeDates: Array.from(freeMap[p.user_id] ?? []).sort(),
-      }));
+      return profiles.map((p) => {
+        // Derive a compact city label: prefer neighborhood, else take the
+        // first comma-separated chunk of home_address.
+        let city: string | null = null;
+        const nb = (p as any).neighborhood as string | null | undefined;
+        const home = (p as any).home_address as string | null | undefined;
+        if (nb && nb.trim()) city = nb.trim();
+        else if (home && home.trim()) {
+          const first = home.split(',')[0]?.trim();
+          city = first || null;
+        }
+        return {
+          userId: p.user_id,
+          displayName: p.display_name,
+          firstName: p.first_name,
+          lastName: p.last_name,
+          avatarUrl: p.avatar_url,
+          currentVibe: p.current_vibe,
+          city,
+          freeDates: Array.from(freeMap[p.user_id] ?? []).sort(),
+          freeSlotCount: slotCount[p.user_id] ?? 0,
+        };
+      });
     },
   });
 }

@@ -12,6 +12,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
+import { Fraunces_700Bold } from '@expo-google-fonts/fraunces/700Bold';
 import { Fraunces_900Black } from '@expo-google-fonts/fraunces/900Black';
 import { Inter_400Regular } from '@expo-google-fonts/inter/400Regular';
 import { Inter_500Medium } from '@expo-google-fonts/inter/500Medium';
@@ -32,6 +33,7 @@ const queryClient = new QueryClient({
 
 export default Sentry.wrap(function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
+    Fraunces_700Bold,
     Fraunces_900Black,
     Inter_400Regular,
     Inter_500Medium,

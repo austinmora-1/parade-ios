@@ -8,6 +8,7 @@ import { ScrollView, View, Text, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import { useMemo } from 'react';
 import { format, startOfWeek, addDays } from 'date-fns';
+import { MapPin } from 'lucide-react-native';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { useFriendDashboardData } from '@/hooks/useFriendDashboardData';
 import { Avatar } from '@/components/primitives/Avatar';
@@ -62,13 +63,14 @@ export function FriendVibeStrip() {
           {[0, 1, 2].map((i) => (
             <View
               key={i}
-              className="bg-white border border-border/30 rounded-2xl px-3 py-3 flex-row items-center gap-3 shadow-sm"
-              style={{ width: 200 }}
+              className="bg-white border border-border/30 rounded-[28px] px-3.5 py-3 flex-row items-center gap-3 shadow-sm"
+              style={{ width: 220 }}
             >
-              <Skeleton width={40} height={40} rounded="rounded-full" />
+              <Skeleton width={44} height={44} rounded="rounded-full" />
               <View className="flex-1 gap-1.5">
-                <Skeleton width={72} height={12} />
-                <Skeleton width={88} height={10} />
+                <Skeleton width={64} height={10} />
+                <Skeleton width={88} height={12} />
+                <Skeleton width={50} height={10} />
               </View>
             </View>
           ))}
@@ -89,36 +91,23 @@ export function FriendVibeStrip() {
             });
             const firstName = displayName.split(' ')[0];
 
-            // Friend's free dates in current week
+            // Friend's free slots & overlap with me
             const friendFreeThisWeek = (vibeData?.freeDates ?? []).filter((d) =>
               weekDates.includes(d),
             );
-
-            // Days where BOTH are free — the actually-useful number
             const mutualDays = friendFreeThisWeek.filter((d) =>
               myFreeDates.has(d),
             ).length;
-
-            // Subtitle precedence: mutual overlap > friend-only free > busy
-            let subtitle: string;
-            let badge: { count: number; tone: 'mutual' | 'one-sided' } | null = null;
-
-            if (mutualDays > 0) {
-              subtitle = `${mutualDays} day${mutualDays > 1 ? 's' : ''} free with you`;
-              badge = { count: mutualDays, tone: 'mutual' };
-            } else if (friendFreeThisWeek.length > 0) {
-              subtitle = `free ${friendFreeThisWeek.length} day${friendFreeThisWeek.length > 1 ? 's' : ''} (no overlap)`;
-              badge = { count: friendFreeThisWeek.length, tone: 'one-sided' };
-            } else {
-              subtitle = 'busy this week';
-            }
+            const slotCount = vibeData?.freeSlotCount ?? 0;
+            const tone: 'mutual' | 'one-sided' | 'none' =
+              mutualDays > 0 ? 'mutual' : slotCount > 0 ? 'one-sided' : 'none';
 
             return (
               <Pressable
                 key={friend.id}
                 onPress={() => router.push(`/(app)/friend/${friend.friendUserId}`)}
-                className="bg-white border border-border/30 rounded-2xl px-3 py-3 flex-row items-center gap-3 shadow-sm"
-                style={{ width: 200 }}
+                className="bg-white border border-border/30 rounded-[28px] px-3.5 py-3 flex-row items-center gap-3 shadow-sm active:opacity-80"
+                style={{ width: 220 }}
               >
                 <Avatar
                   url={vibeData?.avatarUrl ?? friend.avatar}
@@ -126,38 +115,40 @@ export function FriendVibeStrip() {
                   size="md"
                 />
 
-                {/* Name + status */}
+                {/* City + Name + slot count */}
                 <View className="flex-1 gap-0.5">
+                  {vibeData?.city ? (
+                    <View className="flex-row items-center gap-1">
+                      <MapPin size={9} color="#929298" strokeWidth={2} />
+                      <Text
+                        className="font-sans text-[10px] text-muted-foreground uppercase tracking-wider"
+                        numberOfLines={1}
+                      >
+                        {vibeData.city}
+                      </Text>
+                    </View>
+                  ) : null}
                   <Text
                     className="font-sans font-semibold text-evergreen text-sm"
                     numberOfLines={1}
                   >
                     {firstName}
                   </Text>
-                  <Text
-                    className="font-sans text-xs text-muted-foreground"
-                    numberOfLines={1}
-                  >
-                    {subtitle}
-                  </Text>
-                </View>
-
-                {/* Count badge: bright green for mutual, muted for one-sided */}
-                {badge && (
-                  <View
-                    className={`rounded-full px-2 py-0.5 ${
-                      badge.tone === 'mutual' ? 'bg-primary/10' : 'bg-muted'
-                    }`}
-                  >
+                  {tone === 'none' ? (
+                    <Text className="font-sans text-[11px] text-muted-foreground">
+                      busy this week
+                    </Text>
+                  ) : (
                     <Text
-                      className={`font-sans text-xs font-semibold ${
-                        badge.tone === 'mutual' ? 'text-primary' : 'text-muted-foreground'
+                      className={`font-sans text-[11px] font-semibold ${
+                        tone === 'mutual' ? 'text-primary' : 'text-marigold'
                       }`}
                     >
-                      {badge.count}
+                      {slotCount} slot{slotCount === 1 ? '' : 's'}
+                      {tone === 'mutual' ? ` · ${mutualDays} w/ you` : ''}
                     </Text>
-                  </View>
-                )}
+                  )}
+                </View>
               </Pressable>
             );
           })}
