@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Custom iMessage extension Info.plist.
+
+  GENERATE_INFOPLIST_FILE=YES (set by @bacons/apple-targets) merges the
+  CFBundle* keys from build settings on top of this file, so we only declare
+  the NSExtension dict here.
+
+  NSExtensionPrincipalClass points at our Swift MSMessagesAppViewController
+  subclass (MessagesViewController) instead of Apple's StickerBrowserViewController,
+  which is what makes this a custom interactive iMessage app rather than a
+  sticker pack.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSExtension</key>
+	<dict>
+		<key>NSExtensionPointIdentifier</key>
+		<string>com.apple.message-payload-provider</string>
+		<key>NSExtensionPrincipalClass</key>
+		<string>$(PRODUCT_MODULE_NAME).MessagesViewController</string>
+	</dict>
+</dict>
+</plist>

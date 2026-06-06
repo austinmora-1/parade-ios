@@ -4,6 +4,9 @@ const APP_NAME = 'Parade';
 const BUNDLE_ID = 'app.parade.ios';
 const APPLE_TEAM_ID = '9THMCL38AJ';
 const ASSOCIATED_DOMAIN = 'helloparade.app';
+// Shared App Group for the main app + iMessage extension. Register this
+// identifier in the Apple Developer portal before a device build.
+const APP_GROUP = 'group.app.parade.ios';
 
 const PERMISSION_COPY = {
   calendar:
@@ -33,10 +36,17 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   assetBundlePatterns: ['**/*'],
   ios: {
     bundleIdentifier: BUNDLE_ID,
+    appleTeamId: APPLE_TEAM_ID,
     supportsTablet: false,
     usesAppleSignIn: true,
     associatedDomains: [`applinks:${ASSOCIATED_DOMAIN}`],
     config: { usesNonExemptEncryption: false },
+    // App Group shared with the iMessage extension so both can read the
+    // Supabase session (Phase B). Must also be registered in the Apple
+    // Developer portal alongside the extension App ID.
+    entitlements: {
+      'com.apple.security.application-groups': [APP_GROUP],
+    },
     infoPlist: {
       NSCalendarsUsageDescription: PERMISSION_COPY.calendar,
       NSPhotoLibraryUsageDescription: PERMISSION_COPY.photos,
@@ -78,6 +88,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       { calendarPermission: PERMISSION_COPY.calendar },
     ],
     'expo-splash-screen',
+    // Adds native Apple targets (the iMessage extension under targets/imessage)
+    // during prebuild. See targets/imessage/expo-target.config.js.
+    '@bacons/apple-targets',
   ],
   extra: {
     appleTeamId: APPLE_TEAM_ID,

@@ -49,3 +49,6 @@ sentry-wizard
 # generated native folders
 /ios
 /android
+
+# @bacons/apple-targets plugin-generated entitlements (regenerated on prebuild)
+targets/**/generated.entitlements
