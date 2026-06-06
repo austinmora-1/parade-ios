@@ -77,7 +77,12 @@ const INTEREST_OPTIONS = [
 ];
 
 const DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-const DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
+// Full lowercase day names match what the planner store / availability
+// defaults expect (see createDefaultAvailability in mapAvailability.ts).
+// Using 3-letter abbrevs here silently broke the work-day mask and made
+// every slot default to "free" → which collided with calendar sync data
+// and caused the Home dashboard to show no overlap.
+const DAY_KEYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
 
 const TIME_SLOT_OPTIONS = [
   { id: 'early-morning',   label: 'Early AM' },
@@ -464,6 +469,11 @@ export default function SettingsPage() {
         .update(pendingChanges as any)
         .eq('user_id', user.id);
       if (error) throw error;
+      // Refresh the planner store so changes to default_work_days /
+      // work hours propagate into newly-generated default availability
+      // immediately (Home dashboard pulls from this store).
+      await loadProfileAndAvailability();
+      await refetch();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       setPendingChanges({});
     } catch (err: any) {
@@ -473,7 +483,7 @@ export default function SettingsPage() {
     } finally {
       setSavingAll(false);
     }
-  }, [user?.id, pendingChanges]);
+  }, [user?.id, pendingChanges, loadProfileAndAvailability, refetch]);
 
   // ── Array-toggle helpers for chip-style fields ──────────────────────────
   const toggleArrayValue = useCallback(
