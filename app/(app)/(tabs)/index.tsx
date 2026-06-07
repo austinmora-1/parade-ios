@@ -115,6 +115,10 @@ export default function HomeTab() {
 
   const [refreshing, setRefreshing] = useState(false);
   const [walkthroughTriggered, setWalkthroughTriggered] = useState(false);
+  // Measured hero size so the SVG gradient can fill it with explicit pixel
+  // dimensions (percentage heights in react-native-svg resolve unreliably and
+  // were leaving the bottom edge of the banner uncovered).
+  const [heroSize, setHeroSize] = useState({ width: 0, height: 0 });
 
   // Bootstrap the planner store on first mount
   useEffect(() => {
@@ -196,6 +200,14 @@ export default function HomeTab() {
         {/* ── Greeting hero (gradient banner) ─────────────────────────────── */}
         <View className="px-4 pt-3 pb-4">
           <View
+            onLayout={(e) => {
+              const { width, height } = e.nativeEvent.layout;
+              setHeroSize((prev) =>
+                prev.width === width && prev.height === height
+                  ? prev
+                  : { width, height },
+              );
+            }}
             style={{
               borderRadius: 24,
               overflow: 'hidden',
@@ -205,22 +217,32 @@ export default function HomeTab() {
               shadowOffset: { width: 0, height: 4 },
             }}
           >
-            {/* SVG gradient background — uses react-native-svg (already bundled) */}
-            <Svg
-              style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-              width="100%"
-              height="100%"
-              preserveAspectRatio="none"
-            >
-              <Defs>
-                <SvgLinearGradient id="heroGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <Stop offset="0%"   stopColor="#23744D" stopOpacity="1" />
-                  <Stop offset="55%"  stopColor="#2F8A5C" stopOpacity="1" />
-                  <Stop offset="100%" stopColor="#FFFFFF" stopOpacity="1" />
-                </SvgLinearGradient>
-              </Defs>
-              <Rect x="0" y="0" width="100%" height="100%" fill="url(#heroGrad)" />
-            </Svg>
+            {/* SVG gradient background — explicit pixel dims from onLayout so
+                it always covers the full banner (percentage heights were
+                clipping the bottom edge). */}
+            {heroSize.width > 0 && heroSize.height > 0 && (
+              <Svg
+                style={{ position: 'absolute', top: 0, left: 0 }}
+                width={heroSize.width}
+                height={heroSize.height}
+                preserveAspectRatio="none"
+              >
+                <Defs>
+                  <SvgLinearGradient id="heroGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <Stop offset="0%"   stopColor="#23744D" stopOpacity="1" />
+                    <Stop offset="55%"  stopColor="#2F8A5C" stopOpacity="1" />
+                    <Stop offset="100%" stopColor="#FFFFFF" stopOpacity="1" />
+                  </SvgLinearGradient>
+                </Defs>
+                <Rect
+                  x="0"
+                  y="0"
+                  width={heroSize.width}
+                  height={heroSize.height}
+                  fill="url(#heroGrad)"
+                />
+              </Svg>
+            )}
             <View className="flex-row items-center justify-between px-5 py-4">
               {/* Left: greeting + date/location */}
               <View className="flex-1 pr-3">
@@ -235,10 +257,12 @@ export default function HomeTab() {
                       className="text-white"
                       style={{
                         fontFamily: 'Fraunces_700Bold',
-                        fontSize: 24,
-                        lineHeight: 28,
+                        fontSize: 19,
+                        lineHeight: 24,
                       }}
                       numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.8}
                     >
                       {greeting(firstName || 'there')}
                     </Text>

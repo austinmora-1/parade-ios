@@ -12,6 +12,7 @@ import { format, addDays } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { resolveEffectiveCity, isFriendInMyCity } from '@/lib/effectiveCity';
+import { isSocialSlot } from '@/lib/socialSlots';
 import type { TimeSlot } from '@/types/planner';
 
 const SLOT_KEYS: { col: string; slot: TimeSlot }[] = [
@@ -150,12 +151,16 @@ export function useFriendDashboardData() {
             if (!avRow) continue;
 
             const mySlots = mySlotsByDate[date];
+            const dObj = new Date(`${date}T12:00:00`);
             let dayContributed = false;
             for (const { col, slot } of SLOT_KEYS) {
               const friendFree = !!(avRow as any)[col];
               if (!friendFree) continue;
               const meFree = mySlots ? !!mySlots[slot] : false;
               if (!meFree) continue;
+              // Only count overlap that falls in a realistic social window
+              // (evenings any day, or anything on weekends).
+              if (!isSocialSlot(dObj, slot)) continue;
               overlap.push({ date, slot });
               dayContributed = true;
             }

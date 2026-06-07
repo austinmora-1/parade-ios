@@ -16,7 +16,10 @@ import { usePlannerStore } from '@/stores/plannerStore';
 import { useFriendDashboardData } from '@/hooks/useFriendDashboardData';
 import { Avatar } from '@/components/primitives/Avatar';
 import { Skeleton } from '@/components/primitives/Skeleton';
+import { isSocialSlot, twoHourWindowLabel, SLOT_START_HOUR } from '@/lib/socialSlots';
 import type { TimeSlot } from '@/types/planner';
+
+const MAX_WINDOWS = 8;
 
 // ─── Time slot helpers ────────────────────────────────────────────────────────
 
@@ -24,41 +27,6 @@ const SLOT_ORDER: TimeSlot[] = [
   'early-morning', 'late-morning', 'early-afternoon',
   'late-afternoon', 'evening', 'late-night',
 ];
-
-const SLOT_START: Record<TimeSlot, string> = {
-  'early-morning':   '6am',
-  'late-morning':    '9am',
-  'early-afternoon': '12pm',
-  'late-afternoon':  '3pm',
-  'evening':         '6pm',
-  'late-night':      '10pm',
-};
-
-const SLOT_END: Record<TimeSlot, string> = {
-  'early-morning':   '9am',
-  'late-morning':    '12pm',
-  'early-afternoon': '3pm',
-  'late-afternoon':  '6pm',
-  'evening':         '10pm',
-  'late-night':      'late',
-};
-
-/**
- * Combine multiple time slots into a single human-readable span.
- * e.g. ['early-afternoon', 'late-afternoon', 'evening'] → "12pm–10pm"
- * Single slot: "6–10pm"
- */
-function combinedRange(slots: TimeSlot[]): string {
-  if (slots.length === 0) return '';
-  const sorted = [...slots].sort(
-    (a, b) => SLOT_ORDER.indexOf(a) - SLOT_ORDER.indexOf(b),
-  );
-  if (sorted.length === 1) {
-    // "6–10pm" style with shared suffix where possible
-    return `${SLOT_START[sorted[0]]}–${SLOT_END[sorted[0]]}`;
-  }
-  return `${SLOT_START[sorted[0]]}–${SLOT_END[sorted[sorted.length - 1]]}`;
-}
 
 function dayLabel(date: Date): string {
   if (isToday(date))   return 'Today';
@@ -71,9 +39,9 @@ function dayLabel(date: Date): string {
 interface FreeWindow {
   date: Date;
   dateStr: string;
+  slot: TimeSlot;
   label: string;
-  timeRange: string;
-  slots: TimeSlot[];
+  timeRange: string;            // 2-hour window, e.g. "6–8pm"
   overlappingFriendIds: string[];
 }
 
@@ -97,32 +65,41 @@ export function FreeWindowCard() {
       );
       if (!dayAvail) continue;
 
+      // One window per available SOCIAL slot (evenings + weekends),
+      // each shown as a single ≤2-hour window rather than a merged span.
       const freeSlots = (Object.entries(dayAvail.slots) as [TimeSlot, boolean][])
-        .filter(([, isFree]) => isFree)
-        .map(([slot]) => slot);
+        .filter(([slot, isFree]) => isFree && isSocialSlot(d, slot))
+        .map(([slot]) => slot)
+        .sort((a, b) => SLOT_ORDER.indexOf(a) - SLOT_ORDER.indexOf(b));
 
       if (freeSlots.length === 0) continue;
 
       const overlappingIds = (friendData ?? [])
-        .filter((f) => f.freeDates.includes(dateStr))
+        .filter((f) => f.overlapSlots.some(
+          (o) => o.date === dateStr,
+        ))
         .map((f) => f.userId);
 
-      results.push({
-        date:    d,
-        dateStr,
-        label:   dayLabel(d),
-        timeRange: combinedRange(freeSlots),
-        slots:   freeSlots,
-        overlappingFriendIds: overlappingIds,
-      });
+      for (const slot of freeSlots) {
+        results.push({
+          date:    d,
+          dateStr,
+          slot,
+          label:   dayLabel(d),
+          timeRange: twoHourWindowLabel(slot),
+          overlappingFriendIds: overlappingIds,
+        });
+      }
     }
 
-    // Sort: most friend overlap first, then soonest date
-    return results.sort(
+    // Sort: most friend overlap first, then soonest date, then earliest slot.
+    results.sort(
       (a, b) =>
         b.overlappingFriendIds.length - a.overlappingFriendIds.length ||
-        a.date.getTime() - b.date.getTime(),
+        a.date.getTime() - b.date.getTime() ||
+        SLOT_START_HOUR[a.slot] - SLOT_START_HOUR[b.slot],
     );
+    return results.slice(0, MAX_WINDOWS);
   }, [availability, friendData]);
 
   return (
@@ -181,7 +158,7 @@ export function FreeWindowCard() {
 
             return (
               <Pressable
-                key={w.dateStr}
+                key={`${w.dateStr}-${w.slot}`}
                 onPress={() => router.push(`/(app)/day/${w.dateStr}`)}
                 className="bg-white border border-border/30 rounded-2xl p-4 gap-1.5 shadow-sm"
                 style={{ width: 176 }}
