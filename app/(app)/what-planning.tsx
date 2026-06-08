@@ -92,7 +92,7 @@ export default function WhatPlanningScreen() {
           iconBg="rgba(35,116,77,0.12)"
           title="Find time with friends"
           subtitle="Pick friends, see when everyone's free, and lock in a plan."
-          onPress={() => go('/(app)/new-plan')}
+          onPress={() => go('/(app)/find-time')}
         />
 
         <PathRow
