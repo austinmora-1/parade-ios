@@ -16,6 +16,9 @@
 module.exports = (config) => ({
   type: 'imessage',
   name: 'ParadeMessages',
+  // Drawer / extension icon (same confetti-P mark as the app).
+  // Path is relative to this target directory.
+  icon: './icon.png',
   // Leading dot → appended to the main app bundle id → app.parade.ios.imessage
   bundleIdentifier: '.imessage',
   deploymentTarget: '16.0',

@@ -50,5 +50,6 @@ sentry-wizard
 /ios
 /android
 
-# @bacons/apple-targets plugin-generated entitlements (regenerated on prebuild)
+# @bacons/apple-targets plugin-generated artifacts (regenerated on prebuild)
 targets/**/generated.entitlements
+targets/**/Assets.xcassets
