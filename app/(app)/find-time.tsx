@@ -27,10 +27,11 @@ import { useState, useMemo, useCallback } from 'react';
 import { format, addDays, parseISO } from 'date-fns';
 import * as Haptics from 'expo-haptics';
 import {
-  X, Check, ChevronLeft, ChevronRight, UserPlus, Users as UsersIcon,
+  X, Check, ChevronLeft, ChevronRight, UserPlus, Users as UsersIcon, Search,
 } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlannerStore } from '@/stores/plannerStore';
+import { usePods } from '@/hooks/usePods';
 import { useFriendDashboardData } from '@/hooks/useFriendDashboardData';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar } from '@/components/primitives/Avatar';
@@ -106,6 +107,7 @@ export default function FindTimeScreen() {
   const addPlan = usePlannerStore((s) => s.addPlan);
   const forceRefresh = usePlannerStore((s) => s.forceRefresh);
   const { data: friendData } = useFriendDashboardData();
+  const { data: pods } = usePods();
 
   const connectedFriends = useMemo(
     () => friends.filter((f) => f.status === 'connected' && f.friendUserId),
@@ -118,6 +120,7 @@ export default function FindTimeScreen() {
   const [selectedFriendIds, setSelectedFriendIds] = useState<Set<string>>(new Set());
   const [guests, setGuests] = useState<string[]>([]);
   const [guestDraft, setGuestDraft] = useState('');
+  const [query, setQuery] = useState('');
 
   // Step 2
   const [selectedSlots, setSelectedSlots] = useState<{ date: string; slot: TimeSlot }[]>([]);
@@ -176,6 +179,28 @@ export default function FindTimeScreen() {
       return next;
     });
   }, []);
+
+  // Filter friends by search query
+  const filteredFriends = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return connectedFriends;
+    return connectedFriends.filter((f) => f.name.toLowerCase().includes(q));
+  }, [connectedFriends, query]);
+
+  // Toggle a whole pod's members at once
+  const togglePod = useCallback((podMemberIds: string[]) => {
+    Haptics.selectionAsync();
+    const members = podMemberIds.filter((id) =>
+      connectedFriends.some((f) => f.friendUserId === id),
+    );
+    if (members.length === 0) return;
+    setSelectedFriendIds((prev) => {
+      const allSelected = members.every((id) => prev.has(id));
+      const next = new Set(prev);
+      members.forEach((id) => (allSelected ? next.delete(id) : next.add(id)));
+      return next;
+    });
+  }, [connectedFriends]);
 
   const toggleSlot = useCallback((s: { date: string; slot: TimeSlot }) => {
     Haptics.selectionAsync();
@@ -314,37 +339,14 @@ export default function FindTimeScreen() {
         {/* ── STEP 1: WHO ─────────────────────────────────────────────── */}
         {step === 1 && (
           <ScrollView className="flex-1" contentContainerClassName="px-5 py-4 gap-5" keyboardShouldPersistTaps="handled">
-            {connectedFriends.length > 0 && (
-              <View>
-                <FieldLabel>Your friends</FieldLabel>
-                <View className="bg-white rounded-2xl border border-border/30 shadow-sm overflow-hidden">
-                  {connectedFriends.map((f, i) => {
-                    const checked = selectedFriendIds.has(f.friendUserId!);
-                    return (
-                      <View key={f.id}>
-                        <Pressable onPress={() => toggleFriend(f.friendUserId!)} className="flex-row items-center px-4 py-3 gap-3 active:bg-muted/30">
-                          <Avatar url={f.avatar} displayName={f.name} size="sm" />
-                          <Text className="flex-1 font-sans text-sm font-medium text-foreground" numberOfLines={1}>{f.name}</Text>
-                          <View style={{ width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, borderColor: checked ? '#23744D' : 'rgba(146,146,152,0.4)', backgroundColor: checked ? '#23744D' : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
-                            {checked && <Check size={14} color="#FFFFFF" strokeWidth={2.5} />}
-                          </View>
-                        </Pressable>
-                        {i < connectedFriends.length - 1 && <View className="h-px bg-border/30 mx-4" />}
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
-            )}
-
-            {/* Guests */}
+            {/* Invite someone new — pinned to top */}
             <View>
-              <FieldLabel>Invite someone not on Parade</FieldLabel>
+              <FieldLabel>Invite someone new</FieldLabel>
               <View className="flex-row gap-2">
                 <TextInput
                   value={guestDraft}
                   onChangeText={setGuestDraft}
-                  placeholder="Their name"
+                  placeholder="Name of someone not on Parade"
                   placeholderTextColor="#929298"
                   className="flex-1 bg-white rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
                   onSubmitEditing={addGuest}
@@ -366,9 +368,114 @@ export default function FindTimeScreen() {
               )}
             </View>
 
-            {connectedFriends.length === 0 && guests.length === 0 && (
+            {/* Pods — quick multi-select */}
+            {(pods ?? []).length > 0 && (
+              <View>
+                <FieldLabel>Pods</FieldLabel>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2 px-0.5 pb-1">
+                  {(pods ?? []).map((pod) => {
+                    const members = pod.memberIds.filter((id) =>
+                      connectedFriends.some((f) => f.friendUserId === id),
+                    );
+                    const active = members.length > 0 && members.every((id) => selectedFriendIds.has(id));
+                    return (
+                      <Pressable
+                        key={pod.id}
+                        onPress={() => togglePod(pod.memberIds)}
+                        className={`flex-row items-center gap-1.5 rounded-full px-3 py-2 border active:opacity-70 ${active ? 'bg-primary border-primary' : 'bg-white border-border/40'}`}
+                      >
+                        <Text style={{ fontSize: 13 }}>{pod.emoji ?? '💜'}</Text>
+                        <Text className={`font-sans text-xs font-semibold ${active ? 'text-white' : 'text-foreground'}`}>{pod.name}</Text>
+                        <Text className={`font-sans text-[10px] ${active ? 'text-white/70' : 'text-muted-foreground'}`}>{members.length}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* Friends — search + 3-up avatar grid */}
+            {connectedFriends.length > 0 && (
+              <View>
+                <View className="flex-row items-center justify-between mb-2 px-0.5">
+                  <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    Friends
+                  </Text>
+                  {selectedFriendIds.size > 0 && (
+                    <Text className="font-sans text-[11px] font-semibold text-primary">{selectedFriendIds.size} selected</Text>
+                  )}
+                </View>
+
+                {/* Search bar */}
+                <View className="flex-row items-center gap-2 bg-white rounded-xl border border-border/40 px-3 mb-3 shadow-sm">
+                  <Search size={16} color="#929298" strokeWidth={2} />
+                  <TextInput
+                    value={query}
+                    onChangeText={setQuery}
+                    placeholder="Search friends"
+                    placeholderTextColor="#929298"
+                    className="flex-1 py-2.5 font-sans text-sm text-foreground"
+                    autoCorrect={false}
+                  />
+                  {query.length > 0 && (
+                    <Pressable onPress={() => setQuery('')} hitSlop={6}>
+                      <X size={14} color="#929298" strokeWidth={2} />
+                    </Pressable>
+                  )}
+                </View>
+
+                {/* 3-per-row grid */}
+                {filteredFriends.length === 0 ? (
+                  <Text className="font-sans text-xs text-muted-foreground px-1">No friends match “{query}”.</Text>
+                ) : (
+                  <View className="flex-row flex-wrap" style={{ rowGap: 16, justifyContent: 'space-between' }}>
+                    {filteredFriends.map((f) => {
+                      const checked = selectedFriendIds.has(f.friendUserId!);
+                      const firstName = f.name.split(' ')[0];
+                      return (
+                        <Pressable
+                          key={f.id}
+                          onPress={() => toggleFriend(f.friendUserId!)}
+                          className="items-center active:opacity-70"
+                          style={{ width: '31%' }}
+                        >
+                          <View
+                            style={{
+                              borderRadius: 999,
+                              borderWidth: 2.5,
+                              borderColor: checked ? '#23744D' : 'transparent',
+                              padding: 2,
+                            }}
+                          >
+                            <Avatar url={f.avatar} displayName={f.name} size="lg" />
+                            {checked && (
+                              <View
+                                style={{
+                                  position: 'absolute', bottom: 0, right: 0,
+                                  width: 22, height: 22, borderRadius: 11,
+                                  backgroundColor: '#23744D',
+                                  borderWidth: 2, borderColor: '#F7F2EA',
+                                  alignItems: 'center', justifyContent: 'center',
+                                }}
+                              >
+                                <Check size={12} color="#FFFFFF" strokeWidth={3} />
+                              </View>
+                            )}
+                          </View>
+                          <Text className="font-sans text-xs text-foreground mt-1.5 text-center" numberOfLines={1}>
+                            {firstName}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
+            )}
+
+            {connectedFriends.length === 0 && (
               <Text className="font-sans text-xs text-muted-foreground px-1">
-                No friends yet — add a guest above, or continue solo to just block your own time.
+                No friends yet — invite someone above, or continue solo to just block your own time.
               </Text>
             )}
           </ScrollView>
