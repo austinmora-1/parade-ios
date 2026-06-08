@@ -104,6 +104,7 @@ export default function FindTimeScreen() {
   const { user } = useAuth();
   const friends = usePlannerStore((s) => s.friends);
   const availability = usePlannerStore((s) => s.availability);
+  const plans = usePlannerStore((s) => s.plans);
   const addPlan = usePlannerStore((s) => s.addPlan);
   const forceRefresh = usePlannerStore((s) => s.forceRefresh);
   const { data: friendData } = useFriendDashboardData();
@@ -180,12 +181,31 @@ export default function FindTimeScreen() {
     });
   }, []);
 
-  // Filter friends by search query
+  // How many plans the user shares with each friend (friendUserId → count)
+  const planFrequency = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const p of plans) {
+      for (const part of p.participants ?? []) {
+        if (part.friendUserId) {
+          counts[part.friendUserId] = (counts[part.friendUserId] ?? 0) + 1;
+        }
+      }
+    }
+    return counts;
+  }, [plans]);
+
+  // Filter by search query, then sort by shared-plan frequency (most first)
   const filteredFriends = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return connectedFriends;
-    return connectedFriends.filter((f) => f.name.toLowerCase().includes(q));
-  }, [connectedFriends, query]);
+    const list = q
+      ? connectedFriends.filter((f) => f.name.toLowerCase().includes(q))
+      : [...connectedFriends];
+    return list.sort((a, b) => {
+      const fa = planFrequency[a.friendUserId ?? ''] ?? 0;
+      const fb = planFrequency[b.friendUserId ?? ''] ?? 0;
+      return fb - fa || a.name.localeCompare(b.name);
+    });
+  }, [connectedFriends, query, planFrequency]);
 
   // Toggle a whole pod's members at once
   const togglePod = useCallback((podMemberIds: string[]) => {
@@ -338,93 +358,103 @@ export default function FindTimeScreen() {
       <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         {/* ── STEP 1: WHO ─────────────────────────────────────────────── */}
         {step === 1 && (
-          <ScrollView className="flex-1" contentContainerClassName="px-5 py-4 gap-5" keyboardShouldPersistTaps="handled">
-            {/* Invite someone new — pinned to top */}
-            <View>
-              <FieldLabel>Invite someone new</FieldLabel>
-              <View className="flex-row gap-2">
-                <TextInput
-                  value={guestDraft}
-                  onChangeText={setGuestDraft}
-                  placeholder="Name of someone not on Parade"
-                  placeholderTextColor="#929298"
-                  className="flex-1 bg-white rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
-                  onSubmitEditing={addGuest}
-                  returnKeyType="done"
-                />
-                <Pressable onPress={addGuest} disabled={!guestDraft.trim()} className={`rounded-xl px-4 items-center justify-center ${guestDraft.trim() ? 'bg-primary' : 'bg-muted'}`}>
-                  <UserPlus size={18} color={guestDraft.trim() ? '#FFFFFF' : '#929298'} strokeWidth={2} />
-                </Pressable>
+          <View className="flex-1">
+            {/* ── Static top section (does not scroll) ─────────────────── */}
+            <View className="px-5 pt-4 gap-4">
+              {/* Invite someone new */}
+              <View>
+                <FieldLabel>Invite someone new</FieldLabel>
+                <View className="flex-row gap-2">
+                  <TextInput
+                    value={guestDraft}
+                    onChangeText={setGuestDraft}
+                    placeholder="Name of someone not on Parade"
+                    placeholderTextColor="#929298"
+                    className="flex-1 bg-white rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
+                    onSubmitEditing={addGuest}
+                    returnKeyType="done"
+                  />
+                  <Pressable onPress={addGuest} disabled={!guestDraft.trim()} className={`rounded-xl px-4 items-center justify-center ${guestDraft.trim() ? 'bg-primary' : 'bg-muted'}`}>
+                    <UserPlus size={18} color={guestDraft.trim() ? '#FFFFFF' : '#929298'} strokeWidth={2} />
+                  </Pressable>
+                </View>
+                {guests.length > 0 && (
+                  <View className="flex-row flex-wrap gap-2 mt-2.5">
+                    {guests.map((g, i) => (
+                      <Pressable key={`${g}-${i}`} onPress={() => setGuests(guests.filter((_, idx) => idx !== i))} className="flex-row items-center gap-1.5 bg-marigold/10 rounded-full pl-3 pr-2 py-1.5 active:opacity-70">
+                        <Text className="font-sans text-xs font-semibold text-marigold">{g}</Text>
+                        <X size={12} color="#DFA53A" strokeWidth={2.5} />
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
               </View>
-              {guests.length > 0 && (
-                <View className="flex-row flex-wrap gap-2 mt-2.5">
-                  {guests.map((g, i) => (
-                    <Pressable key={`${g}-${i}`} onPress={() => setGuests(guests.filter((_, idx) => idx !== i))} className="flex-row items-center gap-1.5 bg-marigold/10 rounded-full pl-3 pr-2 py-1.5 active:opacity-70">
-                      <Text className="font-sans text-xs font-semibold text-marigold">{g}</Text>
-                      <X size={12} color="#DFA53A" strokeWidth={2.5} />
-                    </Pressable>
-                  ))}
+
+              {/* Pods — quick multi-select */}
+              {(pods ?? []).length > 0 && (
+                <View>
+                  <FieldLabel>Pods</FieldLabel>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2 px-0.5 pb-1">
+                    {(pods ?? []).map((pod) => {
+                      const members = pod.memberIds.filter((id) =>
+                        connectedFriends.some((f) => f.friendUserId === id),
+                      );
+                      const active = members.length > 0 && members.every((id) => selectedFriendIds.has(id));
+                      return (
+                        <Pressable
+                          key={pod.id}
+                          onPress={() => togglePod(pod.memberIds)}
+                          className={`flex-row items-center gap-1.5 rounded-full px-3 py-2 border active:opacity-70 ${active ? 'bg-primary border-primary' : 'bg-white border-border/40'}`}
+                        >
+                          <Text style={{ fontSize: 13 }}>{pod.emoji ?? '💜'}</Text>
+                          <Text className={`font-sans text-xs font-semibold ${active ? 'text-white' : 'text-foreground'}`}>{pod.name}</Text>
+                          <Text className={`font-sans text-[10px] ${active ? 'text-white/70' : 'text-muted-foreground'}`}>{members.length}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              )}
+
+              {/* Friends header + search */}
+              {connectedFriends.length > 0 && (
+                <View>
+                  <View className="flex-row items-center justify-between mb-2 px-0.5">
+                    <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                      Friends
+                    </Text>
+                    {selectedFriendIds.size > 0 && (
+                      <Text className="font-sans text-[11px] font-semibold text-primary">{selectedFriendIds.size} selected</Text>
+                    )}
+                  </View>
+                  <View className="flex-row items-center gap-2 bg-white rounded-xl border border-border/40 px-3 shadow-sm">
+                    <Search size={16} color="#929298" strokeWidth={2} />
+                    <TextInput
+                      value={query}
+                      onChangeText={setQuery}
+                      placeholder="Search friends"
+                      placeholderTextColor="#929298"
+                      className="flex-1 py-2.5 font-sans text-sm text-foreground"
+                      autoCorrect={false}
+                    />
+                    {query.length > 0 && (
+                      <Pressable onPress={() => setQuery('')} hitSlop={6}>
+                        <X size={14} color="#929298" strokeWidth={2} />
+                      </Pressable>
+                    )}
+                  </View>
                 </View>
               )}
             </View>
 
-            {/* Pods — quick multi-select */}
-            {(pods ?? []).length > 0 && (
-              <View>
-                <FieldLabel>Pods</FieldLabel>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2 px-0.5 pb-1">
-                  {(pods ?? []).map((pod) => {
-                    const members = pod.memberIds.filter((id) =>
-                      connectedFriends.some((f) => f.friendUserId === id),
-                    );
-                    const active = members.length > 0 && members.every((id) => selectedFriendIds.has(id));
-                    return (
-                      <Pressable
-                        key={pod.id}
-                        onPress={() => togglePod(pod.memberIds)}
-                        className={`flex-row items-center gap-1.5 rounded-full px-3 py-2 border active:opacity-70 ${active ? 'bg-primary border-primary' : 'bg-white border-border/40'}`}
-                      >
-                        <Text style={{ fontSize: 13 }}>{pod.emoji ?? '💜'}</Text>
-                        <Text className={`font-sans text-xs font-semibold ${active ? 'text-white' : 'text-foreground'}`}>{pod.name}</Text>
-                        <Text className={`font-sans text-[10px] ${active ? 'text-white/70' : 'text-muted-foreground'}`}>{members.length}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-            )}
-
-            {/* Friends — search + 3-up avatar grid */}
-            {connectedFriends.length > 0 && (
-              <View>
-                <View className="flex-row items-center justify-between mb-2 px-0.5">
-                  <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                    Friends
-                  </Text>
-                  {selectedFriendIds.size > 0 && (
-                    <Text className="font-sans text-[11px] font-semibold text-primary">{selectedFriendIds.size} selected</Text>
-                  )}
-                </View>
-
-                {/* Search bar */}
-                <View className="flex-row items-center gap-2 bg-white rounded-xl border border-border/40 px-3 mb-3 shadow-sm">
-                  <Search size={16} color="#929298" strokeWidth={2} />
-                  <TextInput
-                    value={query}
-                    onChangeText={setQuery}
-                    placeholder="Search friends"
-                    placeholderTextColor="#929298"
-                    className="flex-1 py-2.5 font-sans text-sm text-foreground"
-                    autoCorrect={false}
-                  />
-                  {query.length > 0 && (
-                    <Pressable onPress={() => setQuery('')} hitSlop={6}>
-                      <X size={14} color="#929298" strokeWidth={2} />
-                    </Pressable>
-                  )}
-                </View>
-
-                {/* 3-per-row grid */}
+            {/* ── Scrollable friend grid (only this scrolls) ───────────── */}
+            {connectedFriends.length > 0 ? (
+              <ScrollView
+                className="flex-1 mt-3"
+                contentContainerClassName="px-5 pb-4"
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
+              >
                 {filteredFriends.length === 0 ? (
                   <Text className="font-sans text-xs text-muted-foreground px-1">No friends match “{query}”.</Text>
                 ) : (
@@ -470,15 +500,13 @@ export default function FindTimeScreen() {
                     })}
                   </View>
                 )}
-              </View>
-            )}
-
-            {connectedFriends.length === 0 && (
-              <Text className="font-sans text-xs text-muted-foreground px-1">
+              </ScrollView>
+            ) : (
+              <Text className="font-sans text-xs text-muted-foreground px-6 pt-3">
                 No friends yet — invite someone above, or continue solo to just block your own time.
               </Text>
             )}
-          </ScrollView>
+          </View>
         )}
 
         {/* ── STEP 2: WHEN ────────────────────────────────────────────── */}
