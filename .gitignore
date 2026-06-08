@@ -52,4 +52,6 @@ sentry-wizard
 
 # @bacons/apple-targets plugin-generated artifacts (regenerated on prebuild)
 targets/**/generated.entitlements
-targets/**/Assets.xcassets
+# NOTE: targets/imessage/Assets.xcassets is hand-authored (the iMessage App
+# Icon set), NOT plugin-generated, so it IS committed. We no longer set an
+# `icon` field, so the plugin won't generate/overwrite a catalog there.

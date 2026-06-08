@@ -16,9 +16,11 @@
 module.exports = (config) => ({
   type: 'imessage',
   name: 'ParadeMessages',
-  // Drawer / extension icon (same confetti-P mark as the app).
-  // Path is relative to this target directory.
-  icon: './icon.png',
+  // NOTE: no `icon` field. The plugin's icon generator only emits a SQUARE
+  // "AppIcon" set, but iMessage extensions require an icon set literally
+  // named "iMessage App Icon" with non-square sizes (the plugin hardcodes
+  // ASSETCATALOG_COMPILER_APPICON_NAME = "iMessage App Icon"). We hand-author
+  // that set under Assets.xcassets/ instead — committed, not generated.
   // Leading dot → appended to the main app bundle id → app.parade.ios.imessage
   bundleIdentifier: '.imessage',
   deploymentTarget: '16.0',
