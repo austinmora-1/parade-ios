@@ -24,6 +24,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useState, useMemo, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { format, addDays, parseISO } from 'date-fns';
 import * as Haptics from 'expo-haptics';
 import {
@@ -32,12 +33,24 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { usePods } from '@/hooks/usePods';
-import { useFriendDashboardData } from '@/hooks/useFriendDashboardData';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar } from '@/components/primitives/Avatar';
 import { LocationAutocomplete } from '@/components/primitives/LocationAutocomplete';
 import { isSocialSlot, twoHourWindowLabel, SLOT_START_HOUR } from '@/lib/socialSlots';
+import { resolveEffectiveCity, isFriendInMyCity } from '@/lib/effectiveCity';
 import type { TimeSlot } from '@/types/planner';
+
+const OVERLAP_DAYS = 182; // ~6 months
+const SLOT_COLS: { col: string; slot: TimeSlot }[] = [
+  { col: 'early_morning', slot: 'early-morning' },
+  { col: 'late_morning', slot: 'late-morning' },
+  { col: 'early_afternoon', slot: 'early-afternoon' },
+  { col: 'late_afternoon', slot: 'late-afternoon' },
+  { col: 'evening', slot: 'evening' },
+  { col: 'late-night' as any, slot: 'late-night' },
+];
+// note: late_night column name uses underscore
+SLOT_COLS[5].col = 'late_night';
 
 const ACTIVITIES = [
   { id: 'drinks', label: 'Drinks', emoji: '🍹' },
@@ -103,11 +116,10 @@ function FieldLabel({ children }: { children: string }) {
 export default function FindTimeScreen() {
   const { user } = useAuth();
   const friends = usePlannerStore((s) => s.friends);
-  const availability = usePlannerStore((s) => s.availability);
   const plans = usePlannerStore((s) => s.plans);
+  const homeAddress = usePlannerStore((s) => s.homeAddress);
   const addPlan = usePlannerStore((s) => s.addPlan);
   const forceRefresh = usePlannerStore((s) => s.forceRefresh);
-  const { data: friendData } = useFriendDashboardData();
   const { data: pods } = usePods();
 
   const connectedFriends = useMemo(
@@ -134,43 +146,80 @@ export default function FindTimeScreen() {
   const [saving, setSaving] = useState(false);
 
   // ── Group availability (step 2) ───────────────────────────────────────────
-  const groupSlots = useMemo<GroupSlot[]>(() => {
-    const weekDates = Array.from({ length: 14 }, (_, i) =>
-      format(addDays(new Date(), i), 'yyyy-MM-dd'),
-    );
-    // My free social slots
-    const mine: { date: string; slot: TimeSlot }[] = [];
-    for (const day of availability) {
-      const dateStr = format(day.date, 'yyyy-MM-dd');
-      if (!weekDates.includes(dateStr)) continue;
-      const dObj = new Date(`${dateStr}T12:00:00`);
-      for (const [slot, free] of Object.entries(day.slots) as [TimeSlot, boolean][]) {
-        if (free && isSocialSlot(dObj, slot)) mine.push({ date: dateStr, slot });
+  // Strict co-located overlap over the next ~6 months: a slot only shows if
+  // I'm free AND every selected friend is free AND we're all in the same city
+  // that day. Fetched on demand when entering step 2.
+  const selectedArr = useMemo(() => [...selectedFriendIds].sort(), [selectedFriendIds]);
+
+  const { data: groupSlots = [], isLoading: overlapLoading } = useQuery({
+    enabled: step === 2 && !!user?.id,
+    queryKey: ['find-time-overlap', user?.id, selectedArr.join(','), homeAddress ?? ''],
+    staleTime: 60_000,
+    queryFn: async (): Promise<GroupSlot[]> => {
+      const start = format(new Date(), 'yyyy-MM-dd');
+      const end = format(addDays(new Date(), OVERLAP_DAYS), 'yyyy-MM-dd');
+      const ids = [user!.id, ...selectedArr];
+
+      const [{ data: avail }, { data: profs }] = await Promise.all([
+        (supabase as any)
+          .from('availability')
+          .select('user_id, date, early_morning, late_morning, early_afternoon, late_afternoon, evening, late_night, location_status, trip_location')
+          .in('user_id', ids)
+          .gte('date', start)
+          .lte('date', end),
+        (supabase as any)
+          .from('profiles')
+          .select('user_id, home_address')
+          .in('user_id', ids),
+      ]);
+
+      const rowByUserDate = new Map<string, any>();
+      for (const r of (avail ?? [])) rowByUserDate.set(`${r.user_id}|${r.date}`, r);
+      const homeByUser = new Map<string, string | null>();
+      for (const p of (profs ?? [])) homeByUser.set(p.user_id, p.home_address ?? null);
+      const myHome = homeByUser.get(user!.id) ?? homeAddress ?? null;
+
+      const results: GroupSlot[] = [];
+      for (let i = 0; i < OVERLAP_DAYS; i++) {
+        const d = addDays(new Date(), i);
+        const dateStr = format(d, 'yyyy-MM-dd');
+        const dObj = new Date(`${dateStr}T12:00:00`);
+        const myRow = rowByUserDate.get(`${user!.id}|${dateStr}`);
+
+        // Co-location: every selected friend must be in my city this date.
+        const coLocated = selectedArr.every((fid) => {
+          const fRow = rowByUserDate.get(`${fid}|${dateStr}`);
+          return isFriendInMyCity({
+            date: dateStr,
+            myAvailability: myRow
+              ? { date: dateStr, location_status: myRow.location_status, trip_location: myRow.trip_location }
+              : null,
+            myHomeAddress: myHome,
+            friendAvailability: fRow
+              ? { date: dateStr, location_status: fRow.location_status, trip_location: fRow.trip_location }
+              : null,
+            friendHomeAddress: homeByUser.get(fid) ?? null,
+          });
+        });
+        if (selectedArr.length > 0 && !coLocated) continue;
+
+        for (const { col, slot } of SLOT_COLS) {
+          if (!isSocialSlot(dObj, slot)) continue;
+          // Me free: explicit row → slot value; no row → free by default.
+          const meFree = myRow ? !!myRow[col] : true;
+          if (!meFree) continue;
+          // Every selected friend must have an explicit free row (never assume).
+          const allFriendsFree = selectedArr.every((fid) => {
+            const fRow = rowByUserDate.get(`${fid}|${dateStr}`);
+            return fRow ? !!fRow[col] : false;
+          });
+          if (selectedArr.length > 0 && !allFriendsFree) continue;
+          results.push({ date: dateStr, slot, freeFriendIds: [...selectedArr] });
+        }
       }
-    }
-    // Per selected friend, set of their free (date|slot) keys (mutual+social w/ me)
-    const friendFreeKeys = new Map<string, Set<string>>();
-    for (const fid of selectedFriendIds) {
-      const fv = friendData?.find((d) => d.userId === fid);
-      const keys = new Set((fv?.overlapSlots ?? []).map(slotKey));
-      friendFreeKeys.set(fid, keys);
-    }
-    const results = mine.map((m) => {
-      const k = slotKey(m);
-      const freeFriendIds = [...selectedFriendIds].filter((fid) =>
-        friendFreeKeys.get(fid)?.has(k),
-      );
-      return { ...m, freeFriendIds };
-    });
-    // Rank: most friends free → soonest date → earliest slot
-    results.sort(
-      (a, b) =>
-        b.freeFriendIds.length - a.freeFriendIds.length ||
-        a.date.localeCompare(b.date) ||
-        SLOT_START_HOUR[a.slot] - SLOT_START_HOUR[b.slot],
-    );
-    return results.slice(0, 14);
-  }, [availability, selectedFriendIds, friendData]);
+      return results.slice(0, 30);
+    },
+  });
 
   const toggleFriend = useCallback((fid: string) => {
     Haptics.selectionAsync();
@@ -513,13 +562,39 @@ export default function FindTimeScreen() {
         {step === 2 && (
           <ScrollView className="flex-1" contentContainerClassName="px-5 py-4 gap-2" keyboardShouldPersistTaps="handled">
             <Text className="font-sans text-xs text-muted-foreground px-1 pb-1">
-              {participantCount > 0
-                ? 'Times when you and your people are free. Pick one — or several to let them vote.'
+              {selectedFriendIds.size > 0
+                ? "Times in the next 6 months when you and everyone you picked are free and in the same city. Pick one — or several to let them vote."
                 : 'Your open evenings & weekends. Pick one or more.'}
             </Text>
-            {groupSlots.length === 0 ? (
-              <View className="bg-white rounded-2xl border border-dashed border-border/40 px-4 py-6 items-center">
-                <Text className="font-sans text-sm text-muted-foreground">No open social time in the next 2 weeks</Text>
+
+            {overlapLoading ? (
+              <View className="items-center py-10">
+                <ActivityIndicator color="#23744D" />
+                <Text className="font-sans text-xs text-muted-foreground mt-3">Finding overlaps…</Text>
+              </View>
+            ) : groupSlots.length === 0 ? (
+              /* No co-located overlap in 6 months → suggest a visit */
+              <View className="bg-white rounded-2xl border border-dashed border-border/40 px-5 py-6 items-center gap-2 mt-2">
+                <Text style={{ fontSize: 28 }}>🗺️</Text>
+                <Text className="font-display text-base text-foreground text-center">
+                  No overlapping free time in the same city
+                </Text>
+                <Text className="font-sans text-xs text-muted-foreground text-center leading-relaxed">
+                  {selectedFriendIds.size > 0
+                    ? "You and your friends aren't free in the same place over the next 6 months. Want to plan a visit instead?"
+                    : 'No open social time in the next 6 months.'}
+                </Text>
+                {selectedFriendIds.size > 0 && (
+                  <Pressable
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      router.replace('/(app)/new-trip-proposal');
+                    }}
+                    className="mt-2 bg-primary rounded-2xl px-5 py-3 active:opacity-80"
+                  >
+                    <Text className="font-sans text-sm font-semibold text-white">Plan a visit</Text>
+                  </Pressable>
+                )}
               </View>
             ) : (
               groupSlots.map((gs) => {
@@ -537,8 +612,7 @@ export default function FindTimeScreen() {
                       </Text>
                       <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">
                         {SLOT_LABEL[gs.slot]}
-                        {participantCount > 0 &&
-                          ` · ${gs.freeFriendIds.length}/${selectedFriendIds.size} free`}
+                        {selectedFriendIds.size > 0 && ' · everyone free'}
                       </Text>
                     </View>
                     <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: selected ? '#23744D' : 'rgba(146,146,152,0.4)', backgroundColor: selected ? '#23744D' : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
