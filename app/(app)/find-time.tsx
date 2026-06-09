@@ -37,7 +37,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Avatar } from '@/components/primitives/Avatar';
 import { LocationAutocomplete } from '@/components/primitives/LocationAutocomplete';
 import { isSocialSlot, twoHourWindowLabel, SLOT_START_HOUR } from '@/lib/socialSlots';
-import { resolveEffectiveCity, isFriendInMyCity } from '@/lib/effectiveCity';
+import { resolveEffectiveCity, citiesMatch, normalizeCity } from '@/lib/effectiveCity';
 import type { TimeSlot } from '@/types/planner';
 
 const OVERLAP_DAYS = 182; // ~6 months
@@ -160,7 +160,7 @@ export default function FindTimeScreen() {
       const end = format(addDays(new Date(), OVERLAP_DAYS), 'yyyy-MM-dd');
       const ids = [user!.id, ...selectedArr];
 
-      const [{ data: avail }, { data: profs }] = await Promise.all([
+      const [{ data: avail }, { data: profs }, { data: trips }] = await Promise.all([
         (supabase as any)
           .from('availability')
           .select('user_id, date, early_morning, late_morning, early_afternoon, late_afternoon, evening, late_night, location_status, trip_location')
@@ -171,49 +171,75 @@ export default function FindTimeScreen() {
           .from('profiles')
           .select('user_id, home_address')
           .in('user_id', ids),
+        // Trips carry the destination city for away days — availability rows
+        // only flip slots busy and don't record where you are.
+        (supabase as any)
+          .from('trips')
+          .select('user_id, location, start_date, end_date')
+          .in('user_id', ids)
+          .lte('start_date', end)
+          .gte('end_date', start),
       ]);
 
       const rowByUserDate = new Map<string, any>();
       for (const r of (avail ?? [])) rowByUserDate.set(`${r.user_id}|${r.date}`, r);
       const homeByUser = new Map<string, string | null>();
       for (const p of (profs ?? [])) homeByUser.set(p.user_id, p.home_address ?? null);
+      const tripsByUser = new Map<string, { start: string; end: string; location: string | null }[]>();
+      for (const t of (trips ?? [])) {
+        const arr = tripsByUser.get(t.user_id) ?? [];
+        arr.push({ start: t.start_date, end: t.end_date, location: t.location });
+        tripsByUser.set(t.user_id, arr);
+      }
       const myHome = homeByUser.get(user!.id) ?? homeAddress ?? null;
+
+      const tripFor = (uid: string, dateStr: string) =>
+        (tripsByUser.get(uid) ?? []).find((t) => t.start <= dateStr && dateStr <= t.end) ?? null;
+
+      // Effective city: a covering trip's destination wins; else availability
+      // (away→trip_location) / home_address.
+      const cityFor = (uid: string, dateStr: string): string => {
+        const trip = tripFor(uid, dateStr);
+        if (trip?.location) return normalizeCity(trip.location);
+        const row = rowByUserDate.get(`${uid}|${dateStr}`);
+        return resolveEffectiveCity({
+          date: dateStr,
+          availability: row
+            ? { date: dateStr, location_status: row.location_status, trip_location: row.trip_location }
+            : null,
+          homeAddress: homeByUser.get(uid) ?? (uid === user!.id ? myHome : null),
+        });
+      };
+
+      // Free: on a trip → available at the destination (the trip-busy flags
+      // describe home, not the destination). Otherwise default-free unless an
+      // explicit row marks the slot busy.
+      const freeFor = (uid: string, dateStr: string, col: string): boolean => {
+        if (tripFor(uid, dateStr)) return true;
+        const row = rowByUserDate.get(`${uid}|${dateStr}`);
+        return row ? !!row[col] : true;
+      };
 
       const results: GroupSlot[] = [];
       for (let i = 0; i < OVERLAP_DAYS; i++) {
-        const d = addDays(new Date(), i);
-        const dateStr = format(d, 'yyyy-MM-dd');
+        const dateStr = format(addDays(new Date(), i), 'yyyy-MM-dd');
         const dObj = new Date(`${dateStr}T12:00:00`);
-        const myRow = rowByUserDate.get(`${user!.id}|${dateStr}`);
 
-        // Co-location: every selected friend must be in my city this date.
-        const coLocated = selectedArr.every((fid) => {
-          const fRow = rowByUserDate.get(`${fid}|${dateStr}`);
-          return isFriendInMyCity({
-            date: dateStr,
-            myAvailability: myRow
-              ? { date: dateStr, location_status: myRow.location_status, trip_location: myRow.trip_location }
-              : null,
-            myHomeAddress: myHome,
-            friendAvailability: fRow
-              ? { date: dateStr, location_status: fRow.location_status, trip_location: fRow.trip_location }
-              : null,
-            friendHomeAddress: homeByUser.get(fid) ?? null,
+        if (selectedArr.length > 0) {
+          const myCity = cityFor(user!.id, dateStr);
+          if (!myCity) continue;
+          const coLocated = selectedArr.every((fid) => {
+            const fc = cityFor(fid, dateStr);
+            return !!fc && citiesMatch(myCity, fc);
           });
-        });
-        if (selectedArr.length > 0 && !coLocated) continue;
+          if (!coLocated) continue;
+        }
 
         for (const { col, slot } of SLOT_COLS) {
           if (!isSocialSlot(dObj, slot)) continue;
-          // Me free: explicit row → slot value; no row → free by default.
-          const meFree = myRow ? !!myRow[col] : true;
-          if (!meFree) continue;
-          // Every selected friend must have an explicit free row (never assume).
-          const allFriendsFree = selectedArr.every((fid) => {
-            const fRow = rowByUserDate.get(`${fid}|${dateStr}`);
-            return fRow ? !!fRow[col] : false;
-          });
-          if (selectedArr.length > 0 && !allFriendsFree) continue;
+          if (!freeFor(user!.id, dateStr, col)) continue;
+          const allFree = selectedArr.every((fid) => freeFor(fid, dateStr, col));
+          if (selectedArr.length > 0 && !allFree) continue;
           results.push({ date: dateStr, slot, freeFriendIds: [...selectedArr] });
         }
       }
