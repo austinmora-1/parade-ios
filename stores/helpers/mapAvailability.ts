@@ -4,7 +4,7 @@ import type { DefaultAvailabilitySettings } from './types';
 
 /** Map time slots to hour ranges */
 export const TIME_SLOT_HOURS: Record<TimeSlot, { start: number; end: number }> = {
-  'early-morning': { start: 6, end: 9 },
+  'early-morning': { start: 7, end: 9 },
   'late-morning': { start: 9, end: 12 },
   'early-afternoon': { start: 12, end: 15 },
   'late-afternoon': { start: 15, end: 18 },

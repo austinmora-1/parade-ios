@@ -85,10 +85,10 @@ const DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const DAY_KEYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
 
 const TIME_SLOT_OPTIONS = [
-  { id: 'early-morning',   label: 'Early AM' },
-  { id: 'late-morning',    label: 'Morning' },
-  { id: 'early-afternoon', label: 'Afternoon' },
-  { id: 'late-afternoon',  label: 'Late PM' },
+  { id: 'early-morning',   label: 'Early morning' },
+  { id: 'late-morning',    label: 'Late morning' },
+  { id: 'early-afternoon', label: 'Early afternoon' },
+  { id: 'late-afternoon',  label: 'Late afternoon' },
   { id: 'evening',         label: 'Evening' },
   { id: 'late-night',      label: 'Late night' },
 ];

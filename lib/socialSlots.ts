@@ -8,11 +8,11 @@
  * Used by both "Who's around this week" (overlap counting) and
  * "Recommended" (window suggestions) so they agree on what's worth surfacing.
  */
-import type { TimeSlot } from '@/types/planner';
+import { TIME_SLOT_LABELS, type TimeSlot } from '@/types/planner';
 
-/** Hour each slot begins, used to render a 2-hour window. */
+/** Hour each slot begins — used for sorting. */
 export const SLOT_START_HOUR: Record<TimeSlot, number> = {
-  'early-morning':   6,
+  'early-morning':   7,
   'late-morning':    9,
   'early-afternoon': 12,
   'late-afternoon':  15,
@@ -29,21 +29,9 @@ export function isSocialSlot(date: Date, slot: TimeSlot): boolean {
 }
 
 /**
- * Format a 2-hour window starting at the slot's start hour.
- * e.g. 'evening' (18) → "6–8pm", 'late-night' (22) → "10pm–12am".
+ * Canonical time range for a slot, e.g. 'evening' → "6-10pm".
+ * Single source of truth = TIME_SLOT_LABELS.
  */
-export function twoHourWindowLabel(slot: TimeSlot): string {
-  const start = SLOT_START_HOUR[slot];
-  const end = start + 2;
-  const fmt = (h: number) => {
-    const hh = h % 24;
-    const period = hh < 12 || hh === 24 ? 'am' : 'pm';
-    const h12 = hh % 12 === 0 ? 12 : hh % 12;
-    return { h12, period };
-  };
-  const s = fmt(start);
-  const e = fmt(end);
-  return s.period === e.period
-    ? `${s.h12}–${e.h12}${e.period}`
-    : `${s.h12}${s.period}–${e.h12}${e.period}`;
+export function slotRangeLabel(slot: TimeSlot): string {
+  return TIME_SLOT_LABELS[slot].time;
 }

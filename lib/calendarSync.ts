@@ -22,12 +22,12 @@ import type { TimeSlot } from '@/types/planner';
 // ─── Slot definitions ────────────────────────────────────────────────────────
 
 const SLOT_HOURS: Record<TimeSlot, [number, number]> = {
-  'early-morning':   [6, 9],
+  'early-morning':   [7, 9],
   'late-morning':    [9, 12],
   'early-afternoon': [12, 15],
   'late-afternoon':  [15, 18],
   'evening':         [18, 22],
-  'late-night':      [22, 24],
+  'late-night':      [22, 26],
 };
 const ALL_SLOTS = Object.keys(SLOT_HOURS) as TimeSlot[];
 

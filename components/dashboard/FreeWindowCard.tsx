@@ -16,7 +16,7 @@ import { usePlannerStore } from '@/stores/plannerStore';
 import { useFriendDashboardData } from '@/hooks/useFriendDashboardData';
 import { Avatar } from '@/components/primitives/Avatar';
 import { Skeleton } from '@/components/primitives/Skeleton';
-import { isSocialSlot, twoHourWindowLabel, SLOT_START_HOUR } from '@/lib/socialSlots';
+import { isSocialSlot, slotRangeLabel, SLOT_START_HOUR } from '@/lib/socialSlots';
 import type { TimeSlot } from '@/types/planner';
 
 const MAX_WINDOWS = 8;
@@ -86,7 +86,7 @@ export function FreeWindowCard() {
           dateStr,
           slot,
           label:   dayLabel(d),
-          timeRange: twoHourWindowLabel(slot),
+          timeRange: slotRangeLabel(slot),
           overlappingFriendIds: overlappingIds,
         });
       }

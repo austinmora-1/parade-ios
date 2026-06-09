@@ -36,12 +36,12 @@ const SLOT_LABELS: Record<string, string> = {
 };
 
 const SLOT_TIME: Record<string, string> = {
-  early_morning:    '6–9am',
+  early_morning:    '7–9am',
   late_morning:     '9am–12pm',
   early_afternoon:  '12–3pm',
   late_afternoon:   '3–6pm',
   evening:          '6–10pm',
-  late_night:       '10pm+',
+  late_night:       '10pm–2am',
 };
 
 /** Activity → left-border accent color (matches dashboard + plans tab) */

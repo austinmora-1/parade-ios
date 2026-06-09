@@ -29,12 +29,12 @@ import { useProposeChange } from '@/hooks/usePlanChangeRequests';
 import type { TimeSlot } from '@/types/planner';
 
 const SLOTS: { id: TimeSlot; label: string; range: string }[] = [
-  { id: 'early-morning',   label: 'Early',     range: '6–9am' },
-  { id: 'late-morning',    label: 'Morning',   range: '9am–12pm' },
-  { id: 'early-afternoon', label: 'Afternoon', range: '12–3pm' },
-  { id: 'late-afternoon',  label: 'Late PM',   range: '3–6pm' },
-  { id: 'evening',         label: 'Evening',   range: '6–10pm' },
-  { id: 'late-night',      label: 'Late',      range: '10pm+' },
+  { id: 'early-morning',   label: 'Early morning',   range: '7–9am' },
+  { id: 'late-morning',    label: 'Late morning',    range: '9am–12pm' },
+  { id: 'early-afternoon', label: 'Early afternoon', range: '12–3pm' },
+  { id: 'late-afternoon',  label: 'Late afternoon',  range: '3–6pm' },
+  { id: 'evening',         label: 'Evening',         range: '6–10pm' },
+  { id: 'late-night',      label: 'Late night',      range: '10pm–2am' },
 ];
 
 function dateLabel(d: Date): string {

@@ -36,7 +36,7 @@ import { usePods } from '@/hooks/usePods';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar } from '@/components/primitives/Avatar';
 import { LocationAutocomplete } from '@/components/primitives/LocationAutocomplete';
-import { isSocialSlot, twoHourWindowLabel, SLOT_START_HOUR } from '@/lib/socialSlots';
+import { isSocialSlot, slotRangeLabel, SLOT_START_HOUR } from '@/lib/socialSlots';
 import { resolveEffectiveCity, citiesMatch, normalizeCity } from '@/lib/effectiveCity';
 import type { TimeSlot } from '@/types/planner';
 
@@ -733,7 +733,7 @@ export default function FindTimeScreen() {
                               >
                                 <View className="flex-1">
                                   <Text className="font-sans text-sm font-semibold text-foreground">{SLOT_LABEL[slot]}</Text>
-                                  <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">{twoHourWindowLabel(slot)}</Text>
+                                  <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">{slotRangeLabel(slot)}</Text>
                                 </View>
                                 <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: selected ? '#23744D' : 'rgba(146,146,152,0.4)', backgroundColor: selected ? '#23744D' : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
                                   {selected && <Check size={13} color="#FFFFFF" strokeWidth={2.5} />}
@@ -813,7 +813,7 @@ export default function FindTimeScreen() {
               </View>
               <Text className="font-sans text-xs text-muted-foreground">
                 {selectedSlots.length === 1
-                  ? `${format(new Date(`${selectedSlots[0].date}T12:00:00`), 'EEE, MMM d')} · ${twoHourWindowLabel(selectedSlots[0].slot)}`
+                  ? `${format(new Date(`${selectedSlots[0].date}T12:00:00`), 'EEE, MMM d')} · ${slotRangeLabel(selectedSlots[0].slot)}`
                   : `${selectedSlots.length} time options — participants vote`}
               </Text>
             </View>
