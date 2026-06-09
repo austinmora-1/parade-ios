@@ -23,12 +23,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format, addDays, parseISO } from 'date-fns';
 import * as Haptics from 'expo-haptics';
 import {
-  X, Check, ChevronLeft, ChevronRight, UserPlus, Users as UsersIcon, Search,
+  X, Check, ChevronLeft, ChevronRight, ChevronDown, UserPlus, Users as UsersIcon, Search,
 } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlannerStore } from '@/stores/plannerStore';
@@ -296,6 +296,67 @@ export default function FindTimeScreen() {
       return next;
     });
   }, [connectedFriends]);
+
+  // Group overlap slots into month → day → slots for the collapsible tree
+  const grouped = useMemo(() => {
+    const byMonth = new Map<string, Map<string, TimeSlot[]>>();
+    for (const gs of groupSlots) {
+      const mKey = gs.date.slice(0, 7); // yyyy-MM
+      if (!byMonth.has(mKey)) byMonth.set(mKey, new Map());
+      const days = byMonth.get(mKey)!;
+      if (!days.has(gs.date)) days.set(gs.date, []);
+      days.get(gs.date)!.push(gs.slot);
+    }
+    return [...byMonth.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([mKey, daysMap]) => {
+        const days = [...daysMap.entries()]
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([date, slots]) => ({
+            date,
+            slots: slots.sort((x, y) => SLOT_START_HOUR[x] - SLOT_START_HOUR[y]),
+          }));
+        return {
+          key: mKey,
+          label: format(new Date(`${mKey}-01T12:00:00`), 'MMMM yyyy'),
+          days,
+          dayCount: days.length,
+        };
+      });
+  }, [groupSlots]);
+
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
+
+  // Auto-expand the soonest month + its first day whenever the result set
+  // changes (e.g. different friends selected → fresh query).
+  const initRef = useRef('');
+  useEffect(() => {
+    const sig = grouped.map((m) => m.key).join(',');
+    if (grouped.length && initRef.current !== sig) {
+      initRef.current = sig;
+      setExpandedMonths(new Set([grouped[0].key]));
+      setExpandedDays(new Set(grouped[0].days[0] ? [grouped[0].days[0].date] : []));
+    }
+  }, [grouped]);
+
+  const toggleMonth = useCallback((key: string) => {
+    Haptics.selectionAsync();
+    setExpandedMonths((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }, []);
+
+  const toggleDay = useCallback((date: string) => {
+    Haptics.selectionAsync();
+    setExpandedDays((prev) => {
+      const next = new Set(prev);
+      next.has(date) ? next.delete(date) : next.add(date);
+      return next;
+    });
+  }, []);
 
   const toggleSlot = useCallback((s: { date: string; slot: TimeSlot }) => {
     Haptics.selectionAsync();
@@ -623,28 +684,78 @@ export default function FindTimeScreen() {
                 )}
               </View>
             ) : (
-              groupSlots.map((gs) => {
-                const selected = selectedSlots.some((p) => slotKey(p) === slotKey(gs));
-                const d = new Date(`${gs.date}T12:00:00`);
+              grouped.map((m) => {
+                const mExpanded = expandedMonths.has(m.key);
+                const mPicked = selectedSlots.filter((s) => s.date.startsWith(m.key)).length;
                 return (
-                  <Pressable
-                    key={slotKey(gs)}
-                    onPress={() => toggleSlot({ date: gs.date, slot: gs.slot })}
-                    className={`rounded-2xl border px-4 py-3 flex-row items-center gap-3 ${selected ? 'bg-primary/10 border-primary/50' : 'bg-white border-border/30'} shadow-sm active:opacity-80`}
-                  >
-                    <View className="flex-1">
-                      <Text className="font-display text-base text-foreground">
-                        {format(d, 'EEE, MMM d')} · {twoHourWindowLabel(gs.slot)}
-                      </Text>
-                      <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">
-                        {SLOT_LABEL[gs.slot]}
-                        {selectedFriendIds.size > 0 && ' · everyone free'}
-                      </Text>
-                    </View>
-                    <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: selected ? '#23744D' : 'rgba(146,146,152,0.4)', backgroundColor: selected ? '#23744D' : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
-                      {selected && <Check size={14} color="#FFFFFF" strokeWidth={2.5} />}
-                    </View>
-                  </Pressable>
+                  <View key={m.key} className="gap-1.5">
+                    {/* Month tier */}
+                    <Pressable
+                      onPress={() => toggleMonth(m.key)}
+                      className="flex-row items-center justify-between bg-white rounded-2xl border border-border/30 px-4 py-3 shadow-sm active:opacity-80"
+                    >
+                      <View className="flex-row items-center gap-2">
+                        <ChevronDown size={16} color="#929298" strokeWidth={2} style={{ transform: [{ rotate: mExpanded ? '0deg' : '-90deg' }] }} />
+                        <Text className="font-display text-base text-foreground">{m.label}</Text>
+                      </View>
+                      <View className="flex-row items-center gap-2">
+                        {mPicked > 0 && (
+                          <View className="bg-primary rounded-full px-2 py-0.5">
+                            <Text className="font-sans text-[10px] font-semibold text-white">{mPicked} picked</Text>
+                          </View>
+                        )}
+                        <Text className="font-sans text-xs text-muted-foreground">
+                          {m.dayCount} {m.dayCount === 1 ? 'day' : 'days'}
+                        </Text>
+                      </View>
+                    </Pressable>
+
+                    {/* Day tier */}
+                    {mExpanded && m.days.map((day) => {
+                      const dExpanded = expandedDays.has(day.date);
+                      const dPicked = selectedSlots.filter((s) => s.date === day.date).length;
+                      const dObj = new Date(`${day.date}T12:00:00`);
+                      return (
+                        <View key={day.date} className="ml-3 gap-1.5">
+                          <Pressable
+                            onPress={() => toggleDay(day.date)}
+                            className="flex-row items-center justify-between bg-white rounded-xl border border-border/30 px-3.5 py-2.5 active:opacity-80"
+                          >
+                            <View className="flex-row items-center gap-2">
+                              <ChevronDown size={14} color="#929298" strokeWidth={2} style={{ transform: [{ rotate: dExpanded ? '0deg' : '-90deg' }] }} />
+                              <Text className="font-sans text-sm font-semibold text-foreground">{format(dObj, 'EEE, MMM d')}</Text>
+                            </View>
+                            <View className="flex-row items-center gap-2">
+                              {dPicked > 0 && <View className="w-2 h-2 rounded-full bg-primary" />}
+                              <Text className="font-sans text-xs text-muted-foreground">
+                                {day.slots.length} {day.slots.length === 1 ? 'time' : 'times'}
+                              </Text>
+                            </View>
+                          </Pressable>
+
+                          {/* Slot tier */}
+                          {dExpanded && day.slots.map((slot) => {
+                            const selected = selectedSlots.some((p) => p.date === day.date && p.slot === slot);
+                            return (
+                              <Pressable
+                                key={slot}
+                                onPress={() => toggleSlot({ date: day.date, slot })}
+                                className={`ml-3 rounded-xl border px-3.5 py-2.5 flex-row items-center gap-3 ${selected ? 'bg-primary/10 border-primary/50' : 'bg-white border-border/30'} active:opacity-80`}
+                              >
+                                <View className="flex-1">
+                                  <Text className="font-display text-sm text-foreground">{twoHourWindowLabel(slot)}</Text>
+                                  <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">{SLOT_LABEL[slot]}</Text>
+                                </View>
+                                <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: selected ? '#23744D' : 'rgba(146,146,152,0.4)', backgroundColor: selected ? '#23744D' : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
+                                  {selected && <Check size={13} color="#FFFFFF" strokeWidth={2.5} />}
+                                </View>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      );
+                    })}
+                  </View>
                 );
               })
             )}
