@@ -23,7 +23,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format, addDays, parseISO } from 'date-fns';
 import * as Haptics from 'expo-haptics';
@@ -325,20 +325,9 @@ export default function FindTimeScreen() {
       });
   }, [groupSlots]);
 
+  // Everything starts collapsed — the user sees just the months at a glance.
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
-
-  // Auto-expand the soonest month + its first day whenever the result set
-  // changes (e.g. different friends selected → fresh query).
-  const initRef = useRef('');
-  useEffect(() => {
-    const sig = grouped.map((m) => m.key).join(',');
-    if (grouped.length && initRef.current !== sig) {
-      initRef.current = sig;
-      setExpandedMonths(new Set([grouped[0].key]));
-      setExpandedDays(new Set(grouped[0].days[0] ? [grouped[0].days[0].date] : []));
-    }
-  }, [grouped]);
 
   const toggleMonth = useCallback((key: string) => {
     Haptics.selectionAsync();
@@ -743,8 +732,8 @@ export default function FindTimeScreen() {
                                 className={`ml-3 rounded-xl border px-3.5 py-2.5 flex-row items-center gap-3 ${selected ? 'bg-primary/10 border-primary/50' : 'bg-white border-border/30'} active:opacity-80`}
                               >
                                 <View className="flex-1">
-                                  <Text className="font-display text-sm text-foreground">{twoHourWindowLabel(slot)}</Text>
-                                  <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">{SLOT_LABEL[slot]}</Text>
+                                  <Text className="font-sans text-sm font-semibold text-foreground">{SLOT_LABEL[slot]}</Text>
+                                  <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">{twoHourWindowLabel(slot)}</Text>
                                 </View>
                                 <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: selected ? '#23744D' : 'rgba(146,146,152,0.4)', backgroundColor: selected ? '#23744D' : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
                                   {selected && <Check size={13} color="#FFFFFF" strokeWidth={2.5} />}
