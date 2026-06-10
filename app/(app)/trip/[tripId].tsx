@@ -31,6 +31,7 @@ import { setTripAvailability } from '@/lib/tripBusy';
 import { resetCalendarSyncCache, syncCalendarBusyTimes } from '@/lib/calendarSync';
 import * as ExpoCalendar from 'expo-calendar';
 import { TripActivitiesSection } from '@/components/trip/TripActivitiesSection';
+import { TC } from '@/lib/theme';
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
@@ -189,7 +190,7 @@ export default function TripDetailScreen() {
           hitSlop={8}
           className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
         >
-          <ChevronLeft size={22} color="#2F4F3F" strokeWidth={2} />
+          <ChevronLeft size={22} color={TC.icon} strokeWidth={2} />
         </Pressable>
         <Text
           className="font-display text-base text-foreground flex-1"
@@ -204,7 +205,7 @@ export default function TripDetailScreen() {
             hitSlop={8}
             className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
           >
-            <MoreHorizontal size={20} color="#2F4F3F" strokeWidth={2} />
+            <MoreHorizontal size={20} color={TC.icon} strokeWidth={2} />
           </Pressable>
         )}
       </View>
@@ -225,7 +226,7 @@ export default function TripDetailScreen() {
           }
         >
           {/* Hero card — white with parade-green accent + Plane icon */}
-          <View className="bg-white rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm">
+          <View className="bg-card rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm">
             <View style={{ width: 4, backgroundColor: '#23744D' }} />
             <View className="flex-1 px-5 py-4 gap-1.5">
               <View className="flex-row items-center gap-1.5">
@@ -256,7 +257,7 @@ export default function TripDetailScreen() {
           </View>
 
           {/* Details card */}
-          <View className="bg-white rounded-2xl border border-border/30 shadow-sm overflow-hidden">
+          <View className="bg-card rounded-2xl border border-border/30 shadow-sm overflow-hidden">
             <DetailRow icon={<Calendar size={15} color="#929298" strokeWidth={1.75} />} label="Dates">
               {dateLabel || '—'}
             </DetailRow>

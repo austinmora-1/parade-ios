@@ -51,11 +51,11 @@ export function TripActivitiesSection({ proposalId }: { proposalId: string }) {
       </View>
 
       {isLoading ? (
-        <View className="bg-white rounded-2xl border border-border/30 px-4 py-5 items-center shadow-sm">
+        <View className="bg-card rounded-2xl border border-border/30 px-4 py-5 items-center shadow-sm">
           <ActivityIndicator color="#23744D" />
         </View>
       ) : (activities ?? []).length === 0 ? (
-        <View className="bg-white rounded-2xl border border-dashed border-border/40 px-4 py-5 items-center gap-1">
+        <View className="bg-card rounded-2xl border border-dashed border-border/40 px-4 py-5 items-center gap-1">
           <Text className="font-sans text-sm text-muted-foreground">
             No suggestions yet
           </Text>
@@ -64,7 +64,7 @@ export function TripActivitiesSection({ proposalId }: { proposalId: string }) {
           </Text>
         </View>
       ) : (
-        <View className="bg-white rounded-2xl border border-border/30 shadow-sm overflow-hidden">
+        <View className="bg-card rounded-2xl border border-border/30 shadow-sm overflow-hidden">
           {(activities ?? []).map((a, i) => {
             const voted = a.myRank !== null;
             return (
@@ -125,7 +125,7 @@ export function TripActivitiesSection({ proposalId }: { proposalId: string }) {
       )}
 
       {/* Suggest input */}
-      <View className="flex-row items-center bg-white rounded-2xl border border-border/40 px-3 gap-2 shadow-sm">
+      <View className="flex-row items-center bg-card rounded-2xl border border-border/40 px-3 gap-2 shadow-sm">
         <TextInput
           value={draft}
           onChangeText={setDraft}

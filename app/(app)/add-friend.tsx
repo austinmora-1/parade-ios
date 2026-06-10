@@ -27,6 +27,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Avatar } from '@/components/primitives/Avatar';
 import { Skeleton } from '@/components/primitives/Skeleton';
 import { formatDisplayName } from '@/lib/utils';
+import { TC } from '@/lib/theme';
 
 interface ProfileMatch {
   user_id:      string;
@@ -135,7 +136,7 @@ export default function AddFriendScreen() {
           hitSlop={8}
           className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
         >
-          <X size={20} color="#2F4F3F" strokeWidth={2} />
+          <X size={20} color={TC.icon} strokeWidth={2} />
         </Pressable>
         <Text className="font-display text-base text-foreground">Add friends</Text>
         <View className="w-9" />
@@ -147,7 +148,7 @@ export default function AddFriendScreen() {
       >
         {/* ── Search input ──────────────────────────────────────────────── */}
         <View className="px-5 pt-4 pb-3">
-          <View className="flex-row items-center bg-white rounded-xl border border-border/30 px-3 gap-2 shadow-sm">
+          <View className="flex-row items-center bg-card rounded-xl border border-border/30 px-3 gap-2 shadow-sm">
             <Search size={15} color="#929298" strokeWidth={1.75} />
             <TextInput
               value={query}
@@ -186,7 +187,7 @@ export default function AddFriendScreen() {
               {[0, 1, 2].map((i) => (
                 <View
                   key={i}
-                  className="flex-row items-center bg-white rounded-xl px-3 py-2.5 border border-border/20 gap-3 shadow-sm"
+                  className="flex-row items-center bg-card rounded-xl px-3 py-2.5 border border-border/20 gap-3 shadow-sm"
                 >
                   <Skeleton width={40} height={40} rounded="rounded-full" />
                   <View className="flex-1 gap-1.5">
@@ -227,7 +228,7 @@ export default function AddFriendScreen() {
                 return (
                   <View
                     key={p.user_id}
-                    className="flex-row items-center bg-white rounded-xl px-3 py-2.5 border border-border/20 gap-3 shadow-sm"
+                    className="flex-row items-center bg-card rounded-xl px-3 py-2.5 border border-border/20 gap-3 shadow-sm"
                   >
                     <Avatar
                       url={p.avatar_url}
@@ -297,7 +298,7 @@ export default function AddFriendScreen() {
 
           {/* ── Share invite link card ────────────────────────────────────── */}
           <View className="px-5 mt-6">
-            <View className="bg-white rounded-2xl border border-border/30 p-5 gap-3 shadow-sm">
+            <View className="bg-card rounded-2xl border border-border/30 p-5 gap-3 shadow-sm">
               <View className="flex-row items-center gap-2">
                 <Share2 size={16} color="#23744D" strokeWidth={2} />
                 <Text className="font-display text-base text-foreground">

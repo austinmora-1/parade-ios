@@ -43,6 +43,8 @@ import { usePlannerStore } from '@/stores/plannerStore';
 import { supabase } from '@/integrations/supabase/client';
 import { TIME_SLOT_LABELS } from '@/types/planner';
 import type { Plan, DayAvailability, TimeSlot } from '@/types/planner';
+import { activityAccent } from '@/lib/activityColors';
+import { TC } from '@/lib/theme';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -55,18 +57,6 @@ const SLOT_SHORT: Record<string, string> = {
   'evening':         '6pm',
   'late-night':      '10pm',
 };
-
-/** Activity → left-border accent color (matches PWA activity palette) */
-const ACTIVITY_COLOR: Record<string, string> = {
-  drinks: '#D46549', food: '#D46549', coffee: '#C47030', brunch: '#D46549',
-  'happy-hour': '#D46549', hike: '#9CB094', run: '#9CB094', gym: '#9CB094',
-  sports: '#9CB094', movie: '#7744BB', concert: '#6E9BC2', game: '#7744BB',
-  travel: '#23744D', beach: '#23744D', park: '#23744D', meetup: '#23744D',
-};
-const DEFAULT_ACCENT = '#23744D';
-function activityAccent(activity?: string): string {
-  return ACTIVITY_COLOR[activity ?? ''] ?? DEFAULT_ACCENT;
-}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -132,7 +122,7 @@ function WeekendHeroCard({
 }) {
   return (
     <View
-      className="bg-white rounded-2xl border border-primary/20 p-4 gap-3 mx-5 shadow-sm"
+      className="bg-card rounded-2xl border border-primary/20 p-4 gap-3 mx-5 shadow-sm"
     >
       {/* Header */}
       <View className="flex-row items-center gap-2">
@@ -185,7 +175,7 @@ function WeekendHeroCard({
                 className="font-display leading-none"
                 style={{
                   fontSize: 28,
-                  color: isToday(day) ? '#23744D' : '#2F4F3F',
+                  color: isToday(day) ? '#23744D' : TC.icon,
                 }}
               >
                 {format(day, 'd')}
@@ -249,7 +239,7 @@ function WeekdayRow({
   return (
     <Pressable
       onPress={() => router.push(`/(app)/day/${dateStr}`)}
-      className="bg-white rounded-2xl px-3 py-3 flex-row items-center gap-3 shadow-sm active:opacity-80"
+      className="bg-card rounded-2xl px-3 py-3 flex-row items-center gap-3 shadow-sm active:opacity-80"
       style={today ? { borderWidth: 2, borderColor: '#23744D' } : { borderWidth: 1, borderColor: 'rgba(0,0,0,0.08)' }}
     >
       {/* DateDial — matches PWA font-display day name + number */}
@@ -260,7 +250,7 @@ function WeekdayRow({
           {format(day, 'EEE')}
         </Text>
         <Text
-          style={{ fontFamily: 'Fraunces_900Black', fontSize: 22, lineHeight: 26, color: today ? '#23744D' : '#2F4F3F' }}
+          style={{ fontFamily: 'Fraunces_900Black', fontSize: 22, lineHeight: 26, color: today ? '#23744D' : TC.icon }}
         >
           {format(day, 'd')}
         </Text>
@@ -390,7 +380,7 @@ function TripCard({ trip }: { trip: any }) {
   return (
     <Pressable
       onPress={() => router.push(`/(app)/trip/${trip.id}`)}
-      className="bg-white rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm active:opacity-80"
+      className="bg-card rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm active:opacity-80"
     >
       <View style={{ width: 4, backgroundColor: '#23744D' }} />
       <View className="flex-1 px-4 py-3 gap-0.5">
@@ -442,7 +432,7 @@ function UpcomingPlanCard({ plan }: { plan: Plan }) {
   return (
     <Pressable
       onPress={() => router.push(`/(app)/plan/${plan.id}`)}
-      className="bg-white rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm active:opacity-80"
+      className="bg-card rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm active:opacity-80"
     >
       {/* Left accent bar */}
       <View style={{ width: 4, backgroundColor: accentColor }} />
@@ -673,7 +663,7 @@ export default function PlansTab() {
             {(trips ?? []).length > 0 ? (
               (trips ?? []).map((trip) => <TripCard key={trip.id} trip={trip} />)
             ) : (
-              <View className="bg-white rounded-2xl border border-dashed border-border/40 px-4 py-5 items-center gap-1">
+              <View className="bg-card rounded-2xl border border-dashed border-border/40 px-4 py-5 items-center gap-1">
                 <Text className="font-sans text-sm text-muted-foreground">
                   No upcoming trips
                 </Text>
@@ -687,7 +677,7 @@ export default function PlansTab() {
           {/* Empty state */}
           {!isLoading && upcomingPlans.length === 0 && (
             <View className="px-5">
-              <View className="bg-white rounded-2xl border border-dashed border-border/40 px-4 py-8 items-center gap-2">
+              <View className="bg-card rounded-2xl border border-dashed border-border/40 px-4 py-8 items-center gap-2">
                 <Text className="text-3xl">📅</Text>
                 <Text className="font-sans text-sm text-muted-foreground">
                   No upcoming plans this week

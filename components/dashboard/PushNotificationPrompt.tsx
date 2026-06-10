@@ -84,7 +84,7 @@ export function PushNotificationPrompt() {
   if (!hasConfirmedPlan) return null;
 
   return (
-    <View className="flex-row items-center bg-white rounded-2xl border border-primary/30 px-4 py-3.5 gap-3 shadow-sm">
+    <View className="flex-row items-center bg-card rounded-2xl border border-primary/30 px-4 py-3.5 gap-3 shadow-sm">
       <View
         className="w-10 h-10 rounded-xl items-center justify-center"
         style={{ backgroundColor: 'rgba(35,116,77,0.12)' }}

@@ -10,14 +10,24 @@
 import { Tabs } from 'expo-router';
 import { Home, CalendarDays, Users, User } from 'lucide-react-native';
 import { Platform, View, Image } from 'react-native';
+import { useColorScheme } from 'nativewind';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 
-const PARADE_GREEN  = '#23744D';
-const ELEPHANT_GRAY = '#929298';
-const SIDEBAR_CHALK = '#FAF3E6';
-const BORDER        = '#DED4C3';
+const LIGHT = {
+  active:   '#23744D',  // parade green
+  inactive: '#929298',  // elephant gray
+  surface:  '#FAF3E6',  // sidebar chalk
+  border:   '#DED4C3',
+};
+const DARK = {
+  active:   '#3B9B68',  // brighter parade green
+  inactive: '#7F8983',
+  surface:  '#141916',  // deep forest surface
+  border:   '#2A322D',
+};
+const PARADE_GREEN = LIGHT.active;
 
 /** Tiny avatar fetch for the bottom-nav profile tab icon. */
 function useTabAvatarUrl(): string | null {
@@ -60,20 +70,22 @@ function ProfileTabIcon({ color, focused, avatarUrl }: { color: string; focused:
 
 export default function TabsLayout() {
   const avatarUrl = useTabAvatarUrl();
+  const { colorScheme } = useColorScheme();
+  const c = colorScheme === 'dark' ? DARK : LIGHT;
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: SIDEBAR_CHALK,
-          borderTopColor: BORDER,
+          backgroundColor: c.surface,
+          borderTopColor: c.border,
           borderTopWidth: 1,
           paddingTop: 6,
           paddingBottom: Platform.OS === 'ios' ? 24 : 10,
           height: Platform.OS === 'ios' ? 84 : 64,
         },
-        tabBarActiveTintColor:   PARADE_GREEN,
-        tabBarInactiveTintColor: ELEPHANT_GRAY,
+        tabBarActiveTintColor:   c.active,
+        tabBarInactiveTintColor: c.inactive,
         tabBarLabelStyle: {
           fontFamily: 'Inter_400Regular',
           fontSize: 10,

@@ -42,6 +42,7 @@ import { LocationAutocomplete } from '@/components/primitives/LocationAutocomple
 import { usePods } from '@/hooks/usePods';
 import { Eye, Users as UsersIcon, Lock } from 'lucide-react-native';
 import type { TimeSlot } from '@/types/planner';
+import { TC } from '@/lib/theme';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -104,7 +105,7 @@ function Chip({
       className={`rounded-xl px-3 py-2.5 border active:opacity-70 ${
         selected
           ? 'bg-primary border-primary'
-          : 'bg-white border-border/40'
+          : 'bg-card border-border/40'
       }`}
     >
       <View className="flex-row items-center gap-1.5">{children}</View>
@@ -382,7 +383,7 @@ export default function NewPlanScreen() {
           hitSlop={8}
           className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
         >
-          <X size={20} color="#2F4F3F" strokeWidth={2} />
+          <X size={20} color={TC.icon} strokeWidth={2} />
         </Pressable>
         <Text className="font-display text-base text-foreground">
           {isEditMode
@@ -440,7 +441,7 @@ export default function NewPlanScreen() {
               onChangeText={(t) => { setTitle(t); setError(null); }}
               placeholder="e.g. Drinks at Sway Bar"
               placeholderTextColor="#929298"
-              className="bg-white rounded-xl border border-border/40 px-4 py-3 font-display text-base text-foreground shadow-sm"
+              className="bg-card rounded-xl border border-border/40 px-4 py-3 font-display text-base text-foreground shadow-sm"
               maxLength={100}
               autoFocus
             />
@@ -572,7 +573,7 @@ export default function NewPlanScreen() {
               onChangeText={setNotes}
               placeholder="Any extra details…"
               placeholderTextColor="#929298"
-              className="bg-white rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
+              className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
               maxLength={500}
               multiline
               numberOfLines={3}
@@ -614,7 +615,7 @@ export default function NewPlanScreen() {
                   Add alternatives so participants can vote on the time.
                 </Text>
               ) : (
-                <View className="bg-white rounded-2xl border border-border/30 shadow-sm overflow-hidden">
+                <View className="bg-card rounded-2xl border border-border/30 shadow-sm overflow-hidden">
                   {extraOptions.map((opt, i) => (
                     <View key={i}>
                       <View className="px-4 py-3 flex-row items-center gap-2">
@@ -657,7 +658,7 @@ export default function NewPlanScreen() {
                   selected={visibility === 'private'}
                   onPress={() => { Haptics.selectionAsync(); setVisibility('private'); }}
                 >
-                  <Lock size={12} color={visibility === 'private' ? '#FFFFFF' : '#2F4F3F'} strokeWidth={2.2} />
+                  <Lock size={12} color={visibility === 'private' ? '#FFFFFF' : TC.icon} strokeWidth={2.2} />
                   <Text className={`font-sans text-xs font-semibold ${
                     visibility === 'private' ? 'text-white' : 'text-foreground'
                   }`}>
@@ -668,7 +669,7 @@ export default function NewPlanScreen() {
                   selected={visibility === 'friends'}
                   onPress={() => { Haptics.selectionAsync(); setVisibility('friends'); }}
                 >
-                  <UsersIcon size={12} color={visibility === 'friends' ? '#FFFFFF' : '#2F4F3F'} strokeWidth={2.2} />
+                  <UsersIcon size={12} color={visibility === 'friends' ? '#FFFFFF' : TC.icon} strokeWidth={2.2} />
                   <Text className={`font-sans text-xs font-semibold ${
                     visibility === 'friends' ? 'text-white' : 'text-foreground'
                   }`}>
@@ -754,7 +755,7 @@ export default function NewPlanScreen() {
                   </Text>
                 )}
               </View>
-              <View className="bg-white rounded-2xl border border-border/30 shadow-sm overflow-hidden">
+              <View className="bg-card rounded-2xl border border-border/30 shadow-sm overflow-hidden">
                 {connectedFriends.map((f, i) => {
                   const checked = invitedIds.has(f.friendUserId!);
                   return (

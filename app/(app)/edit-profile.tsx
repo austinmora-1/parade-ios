@@ -33,6 +33,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar } from '@/components/primitives/Avatar';
 import { LocationAutocomplete } from '@/components/primitives/LocationAutocomplete';
+import { TC } from '@/lib/theme';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -330,7 +331,7 @@ export default function EditProfileScreen() {
           hitSlop={8}
           className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
         >
-          <X size={20} color="#2F4F3F" strokeWidth={2} />
+          <X size={20} color={TC.icon} strokeWidth={2} />
         </Pressable>
         <Text className="font-display text-base text-foreground">Edit profile</Text>
         <Pressable
@@ -429,7 +430,7 @@ export default function EditProfileScreen() {
                     onChangeText={(t) => { setDisplayName(t); setError(null); }}
                     placeholder="e.g. austin"
                     placeholderTextColor="#929298"
-                    className="bg-white rounded-xl border border-border/40 px-4 py-3 pr-10 font-sans text-sm text-foreground shadow-sm"
+                    className="bg-card rounded-xl border border-border/40 px-4 py-3 pr-10 font-sans text-sm text-foreground shadow-sm"
                     maxLength={40}
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -501,7 +502,7 @@ export default function EditProfileScreen() {
                     onChangeText={setFirstName}
                     placeholder="First"
                     placeholderTextColor="#929298"
-                    className="bg-white rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
+                    className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
                     maxLength={40}
                   />
                 </View>
@@ -512,7 +513,7 @@ export default function EditProfileScreen() {
                     onChangeText={setLastName}
                     placeholder="Last"
                     placeholderTextColor="#929298"
-                    className="bg-white rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
+                    className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
                     maxLength={40}
                   />
                 </View>
@@ -533,7 +534,7 @@ export default function EditProfileScreen() {
                   onChangeText={setBio}
                   placeholder="A line or two about you"
                   placeholderTextColor="#929298"
-                  className="bg-white rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
+                  className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
                   maxLength={500}
                   multiline
                   style={{ minHeight: 96, textAlignVertical: 'top' }}
@@ -562,7 +563,7 @@ export default function EditProfileScreen() {
                   onChangeText={setNeighborhood}
                   placeholder="e.g. Mission, Williamsburg"
                   placeholderTextColor="#929298"
-                  className="bg-white rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
+                  className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
                   maxLength={80}
                 />
               </View>
@@ -581,7 +582,7 @@ export default function EditProfileScreen() {
                           setVibe(selected ? null : v.id);
                         }}
                         className={`rounded-xl px-3 py-2.5 border flex-row items-center gap-1.5 active:opacity-70 ${
-                          selected ? 'bg-primary border-primary' : 'bg-white border-border/40'
+                          selected ? 'bg-primary border-primary' : 'bg-card border-border/40'
                         }`}
                       >
                         <Text style={{ fontSize: 14 }}>{v.emoji}</Text>

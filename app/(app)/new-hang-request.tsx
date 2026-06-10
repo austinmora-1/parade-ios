@@ -33,6 +33,7 @@ import { useSendHangRequest } from '@/hooks/useHangRequests';
 import { Avatar } from '@/components/primitives/Avatar';
 import { formatDisplayName } from '@/lib/utils';
 import type { TimeSlot } from '@/types/planner';
+import { TC } from '@/lib/theme';
 
 const SLOTS: { id: TimeSlot; label: string; range: string }[] = [
   { id: 'early-morning',   label: 'Early morning',   range: '7–9am' },
@@ -66,7 +67,7 @@ function Chip({ selected, onPress, children }: {
     <Pressable
       onPress={onPress}
       className={`rounded-xl px-3 py-2.5 border active:opacity-70 ${
-        selected ? 'bg-primary border-primary' : 'bg-white border-border/40'
+        selected ? 'bg-primary border-primary' : 'bg-card border-border/40'
       }`}
     >
       <View className="flex-row items-center gap-1.5">{children}</View>
@@ -158,7 +159,7 @@ export default function NewHangRequestScreen() {
           hitSlop={8}
           className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
         >
-          <X size={20} color="#2F4F3F" strokeWidth={2} />
+          <X size={20} color={TC.icon} strokeWidth={2} />
         </Pressable>
         <Text className="font-display text-base text-foreground">Send a ping</Text>
         <Pressable
@@ -197,7 +198,7 @@ export default function NewHangRequestScreen() {
           {!friendIdParam && (
             <View>
               <FieldLabel>Send to</FieldLabel>
-              <View className="bg-white rounded-2xl border border-border/30 shadow-sm overflow-hidden">
+              <View className="bg-card rounded-2xl border border-border/30 shadow-sm overflow-hidden">
                 {connectedFriends.length === 0 ? (
                   <View className="px-4 py-5 items-center">
                     <Text className="font-sans text-sm text-muted-foreground">
@@ -250,7 +251,7 @@ export default function NewHangRequestScreen() {
                 const f = connectedFriends.find((x) => x.friendUserId === friendIdParam);
                 if (!f) return null;
                 return (
-                  <View className="flex-row items-center bg-white rounded-xl border border-border/30 px-3 py-2.5 gap-3 shadow-sm">
+                  <View className="flex-row items-center bg-card rounded-xl border border-border/30 px-3 py-2.5 gap-3 shadow-sm">
                     <Avatar url={f.avatar} displayName={f.name} size="sm" />
                     <Text className="flex-1 font-sans text-sm font-medium text-foreground">
                       {f.name}
@@ -333,7 +334,7 @@ export default function NewHangRequestScreen() {
               onChangeText={setMessage}
               placeholder="Drinks at that new place? ☕"
               placeholderTextColor="#929298"
-              className="bg-white rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
+              className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
               maxLength={200}
               multiline
               numberOfLines={3}

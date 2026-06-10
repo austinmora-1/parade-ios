@@ -32,6 +32,7 @@ import {
   POD_EMOJIS,
 } from '@/hooks/usePods';
 import { Avatar } from '@/components/primitives/Avatar';
+import { TC } from '@/lib/theme';
 
 function FieldLabel({ children }: { children: string }) {
   return (
@@ -147,7 +148,7 @@ export default function NewPodScreen() {
           hitSlop={8}
           className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
         >
-          <X size={20} color="#2F4F3F" strokeWidth={2} />
+          <X size={20} color={TC.icon} strokeWidth={2} />
         </Pressable>
         <Text className="font-display text-base text-foreground">
           {isEdit ? 'Edit pod' : 'New pod'}
@@ -192,7 +193,7 @@ export default function NewPodScreen() {
                       key={e}
                       onPress={() => { Haptics.selectionAsync(); setEmoji(e); }}
                       className={`w-12 h-12 rounded-xl items-center justify-center border ${
-                        selected ? 'border-primary bg-primary/10' : 'border-border/40 bg-white'
+                        selected ? 'border-primary bg-primary/10' : 'border-border/40 bg-card'
                       }`}
                     >
                       <Text style={{ fontSize: 22 }}>{e}</Text>
@@ -210,7 +211,7 @@ export default function NewPodScreen() {
                 onChangeText={setName}
                 placeholder="e.g. Close friends, Run club, Brunch crew"
                 placeholderTextColor="#929298"
-                className="bg-white rounded-xl border border-border/40 px-4 py-3 font-display text-base text-foreground shadow-sm"
+                className="bg-card rounded-xl border border-border/40 px-4 py-3 font-display text-base text-foreground shadow-sm"
                 maxLength={40}
                 autoFocus={!isEdit}
               />
@@ -229,7 +230,7 @@ export default function NewPodScreen() {
                     </Text>
                   )}
                 </View>
-                <View className="bg-white rounded-2xl border border-border/30 shadow-sm overflow-hidden">
+                <View className="bg-card rounded-2xl border border-border/30 shadow-sm overflow-hidden">
                   {connectedFriends.map((f, i) => {
                     const checked = memberIds.has(f.friendUserId!);
                     return (
@@ -266,7 +267,7 @@ export default function NewPodScreen() {
                 </View>
               </View>
             ) : (
-              <View className="bg-white rounded-2xl border border-dashed border-border/40 px-4 py-5 items-center gap-1">
+              <View className="bg-card rounded-2xl border border-dashed border-border/40 px-4 py-5 items-center gap-1">
                 <Text className="font-sans text-sm text-muted-foreground">
                   No friends yet
                 </Text>

@@ -130,7 +130,7 @@ export function PlanCommentsSection({ planId }: { planId: string }) {
       {isLoading ? (
         <ActivityIndicator color="#23744D" />
       ) : (
-        <View className="bg-white rounded-2xl border border-border/30 shadow-sm overflow-hidden">
+        <View className="bg-card rounded-2xl border border-border/30 shadow-sm overflow-hidden">
           {(comments ?? []).length === 0 ? (
             <View className="px-4 py-5 items-center">
               <Text className="font-sans text-xs text-muted-foreground">
@@ -173,7 +173,7 @@ export function PlanCommentsSection({ planId }: { planId: string }) {
       )}
 
       {/* Compose row */}
-      <View className="flex-row items-center bg-white rounded-2xl border border-border/40 px-3 gap-2 shadow-sm">
+      <View className="flex-row items-center bg-card rounded-2xl border border-border/40 px-3 gap-2 shadow-sm">
         <TextInput
           value={draft}
           onChangeText={setDraft}

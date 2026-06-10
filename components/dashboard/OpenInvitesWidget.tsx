@@ -16,16 +16,7 @@ import { usePlannerStore } from '@/stores/plannerStore';
 import { supabase } from '@/integrations/supabase/client';
 import { TIME_SLOT_LABELS } from '@/types/planner';
 import type { Plan, TimeSlot } from '@/types/planner';
-
-// ─── Activity color (shared pattern with other widgets) ─────────────────────
-
-const ACTIVITY_COLOR: Record<string, string> = {
-  drinks: '#D46549', food: '#D46549', coffee: '#C47030', brunch: '#D46549',
-  'happy-hour': '#D46549', hike: '#9CB094', run: '#9CB094', gym: '#9CB094',
-  sports: '#9CB094', movie: '#7744BB', concert: '#6E9BC2', game: '#7744BB',
-  travel: '#23744D', beach: '#23744D', park: '#23744D', meetup: '#23744D',
-};
-const DEFAULT_ACCENT = '#23744D';
+import { activityAccent } from '@/lib/activityColors';
 
 function planDayLabel(date: Date): string {
   if (isToday(date))    return 'Today';
@@ -51,7 +42,7 @@ function OpenInviteCard({
   loading: 'accepted' | 'declined' | null;
 }) {
   const planDate    = plan.date instanceof Date ? plan.date : new Date(plan.date);
-  const accentColor = ACTIVITY_COLOR[plan.activity as string] ?? DEFAULT_ACCENT;
+  const accentColor = activityAccent(plan.activity as string | undefined);
   const slotLabel   = TIME_SLOT_LABELS[plan.timeSlot as TimeSlot]?.time ?? '';
   const locationStr =
     typeof plan.location === 'string'
@@ -61,7 +52,7 @@ function OpenInviteCard({
   return (
     <Pressable
       onPress={onTap}
-      className="bg-white rounded-2xl border border-border/30 overflow-hidden shadow-sm active:opacity-80"
+      className="bg-card rounded-2xl border border-border/30 overflow-hidden shadow-sm active:opacity-80"
     >
       <View className="flex-row">
         {/* Left activity accent bar */}

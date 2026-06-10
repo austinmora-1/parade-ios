@@ -27,6 +27,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { LocationAutocomplete } from '@/components/primitives/LocationAutocomplete';
 import { format } from 'date-fns';
+import { TC } from '@/lib/theme';
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
@@ -122,7 +123,7 @@ export default function SetLocationScreen() {
           hitSlop={8}
           className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
         >
-          <X size={20} color="#2F4F3F" strokeWidth={2} />
+          <X size={20} color={TC.icon} strokeWidth={2} />
         </Pressable>
         <Text className="font-display text-base text-foreground">Where are you?</Text>
         <Pressable
@@ -178,7 +179,7 @@ export default function SetLocationScreen() {
                   Haptics.selectionAsync();
                   setSaveAsHome((v) => !v);
                 }}
-                className="flex-row items-center bg-white rounded-2xl border border-border/30 px-4 py-3.5 gap-3 shadow-sm active:opacity-80"
+                className="flex-row items-center bg-card rounded-2xl border border-border/30 px-4 py-3.5 gap-3 shadow-sm active:opacity-80"
               >
                 <View
                   style={{
@@ -210,7 +211,7 @@ export default function SetLocationScreen() {
                   Haptics.selectionAsync();
                   setMarkAway((v) => !v);
                 }}
-                className="flex-row items-center bg-white rounded-2xl border border-border/30 px-4 py-3.5 gap-3 shadow-sm active:opacity-80"
+                className="flex-row items-center bg-card rounded-2xl border border-border/30 px-4 py-3.5 gap-3 shadow-sm active:opacity-80"
               >
                 <View
                   style={{

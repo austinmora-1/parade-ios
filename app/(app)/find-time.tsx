@@ -39,6 +39,7 @@ import { LocationAutocomplete } from '@/components/primitives/LocationAutocomple
 import { isSocialSlot, slotRangeLabel, SLOT_START_HOUR } from '@/lib/socialSlots';
 import { resolveEffectiveCity, citiesMatch, normalizeCity } from '@/lib/effectiveCity';
 import type { TimeSlot } from '@/types/planner';
+import { TC } from '@/lib/theme';
 
 const OVERLAP_DAYS = 182; // ~6 months
 const SLOT_COLS: { col: string; slot: TimeSlot }[] = [
@@ -470,7 +471,7 @@ export default function FindTimeScreen() {
       {/* Header */}
       <View className="flex-row items-center justify-between px-3 py-2 border-b border-border/20">
         <Pressable onPress={goBack} hitSlop={8} className="w-9 h-9 rounded-full items-center justify-center active:opacity-70">
-          {step === 1 ? <X size={20} color="#2F4F3F" strokeWidth={2} /> : <ChevronLeft size={22} color="#2F4F3F" strokeWidth={2} />}
+          {step === 1 ? <X size={20} color={TC.icon} strokeWidth={2} /> : <ChevronLeft size={22} color={TC.icon} strokeWidth={2} />}
         </Pressable>
         <StepDots step={step} />
         <View className="w-9 h-9" />
@@ -495,7 +496,7 @@ export default function FindTimeScreen() {
                     onChangeText={setGuestDraft}
                     placeholder="Name of someone not on Parade"
                     placeholderTextColor="#929298"
-                    className="flex-1 bg-white rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
+                    className="flex-1 bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
                     onSubmitEditing={addGuest}
                     returnKeyType="done"
                   />
@@ -529,7 +530,7 @@ export default function FindTimeScreen() {
                         <Pressable
                           key={pod.id}
                           onPress={() => togglePod(pod.memberIds)}
-                          className={`flex-row items-center gap-1.5 rounded-full px-3 py-2 border active:opacity-70 ${active ? 'bg-primary border-primary' : 'bg-white border-border/40'}`}
+                          className={`flex-row items-center gap-1.5 rounded-full px-3 py-2 border active:opacity-70 ${active ? 'bg-primary border-primary' : 'bg-card border-border/40'}`}
                         >
                           <Text style={{ fontSize: 13 }}>{pod.emoji ?? '💜'}</Text>
                           <Text className={`font-sans text-xs font-semibold ${active ? 'text-white' : 'text-foreground'}`}>{pod.name}</Text>
@@ -552,7 +553,7 @@ export default function FindTimeScreen() {
                       <Text className="font-sans text-[11px] font-semibold text-primary">{selectedFriendIds.size} selected</Text>
                     )}
                   </View>
-                  <View className="flex-row items-center gap-2 bg-white rounded-xl border border-border/40 px-3 shadow-sm">
+                  <View className="flex-row items-center gap-2 bg-card rounded-xl border border-border/40 px-3 shadow-sm">
                     <Search size={16} color="#929298" strokeWidth={2} />
                     <TextInput
                       value={query}
@@ -650,7 +651,7 @@ export default function FindTimeScreen() {
               </View>
             ) : groupSlots.length === 0 ? (
               /* No co-located overlap in 6 months → suggest a visit */
-              <View className="bg-white rounded-2xl border border-dashed border-border/40 px-5 py-6 items-center gap-2 mt-2">
+              <View className="bg-card rounded-2xl border border-dashed border-border/40 px-5 py-6 items-center gap-2 mt-2">
                 <Text style={{ fontSize: 28 }}>🗺️</Text>
                 <Text className="font-display text-base text-foreground text-center">
                   No overlapping free time in the same city
@@ -681,7 +682,7 @@ export default function FindTimeScreen() {
                     {/* Month tier */}
                     <Pressable
                       onPress={() => toggleMonth(m.key)}
-                      className="flex-row items-center justify-between bg-white rounded-2xl border border-border/30 px-4 py-3 shadow-sm active:opacity-80"
+                      className="flex-row items-center justify-between bg-card rounded-2xl border border-border/30 px-4 py-3 shadow-sm active:opacity-80"
                     >
                       <View className="flex-row items-center gap-2">
                         <ChevronDown size={16} color="#929298" strokeWidth={2} style={{ transform: [{ rotate: mExpanded ? '0deg' : '-90deg' }] }} />
@@ -708,7 +709,7 @@ export default function FindTimeScreen() {
                         <View key={day.date} className="ml-3 gap-1.5">
                           <Pressable
                             onPress={() => toggleDay(day.date)}
-                            className="flex-row items-center justify-between bg-white rounded-xl border border-border/30 px-3.5 py-2.5 active:opacity-80"
+                            className="flex-row items-center justify-between bg-card rounded-xl border border-border/30 px-3.5 py-2.5 active:opacity-80"
                           >
                             <View className="flex-row items-center gap-2">
                               <ChevronDown size={14} color="#929298" strokeWidth={2} style={{ transform: [{ rotate: dExpanded ? '0deg' : '-90deg' }] }} />
@@ -729,7 +730,7 @@ export default function FindTimeScreen() {
                               <Pressable
                                 key={slot}
                                 onPress={() => toggleSlot({ date: day.date, slot })}
-                                className={`ml-3 rounded-xl border px-3.5 py-2.5 flex-row items-center gap-3 ${selected ? 'bg-primary/10 border-primary/50' : 'bg-white border-border/30'} active:opacity-80`}
+                                className={`ml-3 rounded-xl border px-3.5 py-2.5 flex-row items-center gap-3 ${selected ? 'bg-primary/10 border-primary/50' : 'bg-card border-border/30'} active:opacity-80`}
                               >
                                 <View className="flex-1">
                                   <Text className="font-sans text-sm font-semibold text-foreground">{SLOT_LABEL[slot]}</Text>
@@ -761,7 +762,7 @@ export default function FindTimeScreen() {
                 onChangeText={setTitle}
                 placeholder="e.g. Drinks at Sway Bar"
                 placeholderTextColor="#929298"
-                className="bg-white rounded-xl border border-border/40 px-4 py-3 font-display text-base text-foreground shadow-sm"
+                className="bg-card rounded-xl border border-border/40 px-4 py-3 font-display text-base text-foreground shadow-sm"
                 maxLength={100}
                 autoFocus
               />
@@ -773,7 +774,7 @@ export default function FindTimeScreen() {
                 {ACTIVITIES.map((a) => {
                   const selected = activity === a.id;
                   return (
-                    <Pressable key={a.id} onPress={() => { Haptics.selectionAsync(); setActivity(a.id); }} className={`rounded-xl px-3 py-2.5 border flex-row items-center gap-1.5 active:opacity-70 ${selected ? 'bg-primary border-primary' : 'bg-white border-border/40'}`}>
+                    <Pressable key={a.id} onPress={() => { Haptics.selectionAsync(); setActivity(a.id); }} className={`rounded-xl px-3 py-2.5 border flex-row items-center gap-1.5 active:opacity-70 ${selected ? 'bg-primary border-primary' : 'bg-card border-border/40'}`}>
                       <Text style={{ fontSize: 14 }}>{a.emoji}</Text>
                       <Text className={`font-sans text-xs font-medium ${selected ? 'text-white' : 'text-foreground'}`}>{a.label}</Text>
                     </Pressable>
@@ -794,7 +795,7 @@ export default function FindTimeScreen() {
                 onChangeText={setNotes}
                 placeholder="Any extra details…"
                 placeholderTextColor="#929298"
-                className="bg-white rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
+                className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
                 maxLength={500}
                 multiline
                 style={{ minHeight: 72, textAlignVertical: 'top' }}
@@ -802,7 +803,7 @@ export default function FindTimeScreen() {
             </View>
 
             {/* Summary */}
-            <View className="bg-white rounded-2xl border border-border/30 shadow-sm p-4 gap-2">
+            <View className="bg-card rounded-2xl border border-border/30 shadow-sm p-4 gap-2">
               <View className="flex-row items-center gap-2">
                 <UsersIcon size={14} color="#23744D" strokeWidth={2} />
                 <Text className="font-sans text-xs text-foreground">

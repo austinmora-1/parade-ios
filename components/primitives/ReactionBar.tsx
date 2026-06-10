@@ -44,7 +44,7 @@ export function EmojiReactionSheet({ visible, onClose, onPick }: PickerProps) {
       >
         <Pressable
           onPress={(e) => e.stopPropagation()}
-          className="bg-white rounded-3xl px-4 py-4 shadow-lg"
+          className="bg-card rounded-3xl px-4 py-4 shadow-lg"
         >
           <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground text-center mb-3">
             React with…
@@ -122,7 +122,7 @@ export function ReactionBar({ target, targetId, align = 'left', compact = false,
             className={`flex-row items-center gap-1 rounded-full border ${
               r.mine
                 ? 'bg-primary/10 border-primary/30'
-                : 'bg-white border-border/40'
+                : 'bg-card border-border/40'
             } active:opacity-70`}
             style={{ paddingHorizontal: pillPadH, paddingVertical: pillPadV }}
           >
@@ -142,7 +142,7 @@ export function ReactionBar({ target, targetId, align = 'left', compact = false,
           <Pressable
             onPress={handleAddPress}
             hitSlop={6}
-            className="flex-row items-center justify-center rounded-full border border-border/40 bg-white active:opacity-70"
+            className="flex-row items-center justify-center rounded-full border border-border/40 bg-card active:opacity-70"
             style={{
               paddingHorizontal: pillPadH,
               paddingVertical: pillPadV + 1,

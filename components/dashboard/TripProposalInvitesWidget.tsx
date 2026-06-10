@@ -32,7 +32,7 @@ export function TripProposalInvitesWidget() {
           <Pressable
             key={inv.inviteId}
             onPress={() => router.push(`/(app)/trip-proposal/${inv.proposalId}` as any)}
-            className="bg-white rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm active:opacity-80"
+            className="bg-card rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm active:opacity-80"
           >
             <View style={{ width: 4, backgroundColor: '#23744D' }} />
             <View className="flex-1 px-4 py-3 gap-1">

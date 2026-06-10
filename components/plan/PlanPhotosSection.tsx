@@ -263,14 +263,14 @@ export function PlanPhotosSection({ planId }: { planId: string }) {
       </View>
 
       {isLoading ? (
-        <View className="bg-white rounded-2xl border border-border/30 px-4 py-5 items-center shadow-sm">
+        <View className="bg-card rounded-2xl border border-border/30 px-4 py-5 items-center shadow-sm">
           <ActivityIndicator color="#23744D" />
         </View>
       ) : (photos ?? []).length === 0 ? (
         <Pressable
           onPress={handleAdd}
           disabled={uploading}
-          className="bg-white rounded-2xl border border-dashed border-border/40 px-4 py-5 items-center gap-1 active:opacity-70"
+          className="bg-card rounded-2xl border border-dashed border-border/40 px-4 py-5 items-center gap-1 active:opacity-70"
         >
           <Text style={{ fontSize: 24 }}>📷</Text>
           <Text className="font-sans text-sm text-muted-foreground">

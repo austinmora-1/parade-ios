@@ -131,7 +131,7 @@ export function TimeWheelPicker({
           style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.4)' }]}
         />
         <View
-          className="w-full bg-white rounded-t-3xl pb-6"
+          className="w-full bg-card rounded-t-3xl pb-6"
           style={{
             shadowColor: '#040A2A',
             shadowOpacity: 0.18,

@@ -25,6 +25,7 @@ import {
   UserPlus,
   ChevronRight,
 } from 'lucide-react-native';
+import { TC } from '@/lib/theme';
 
 interface PathProps {
   icon: React.ReactNode;
@@ -39,7 +40,7 @@ function PathRow({ icon, iconBg, title, subtitle, onPress }: PathProps) {
   return (
     <Pressable
       onPress={onPress}
-      className="flex-row items-center bg-white rounded-2xl border border-border/30 px-4 py-4 gap-3 shadow-sm active:opacity-80"
+      className="flex-row items-center bg-card rounded-2xl border border-border/30 px-4 py-4 gap-3 shadow-sm active:opacity-80"
     >
       <View
         className="w-11 h-11 rounded-xl items-center justify-center"
@@ -78,7 +79,7 @@ export default function WhatPlanningScreen() {
           hitSlop={8}
           className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
         >
-          <X size={20} color="#2F4F3F" strokeWidth={2} />
+          <X size={20} color={TC.icon} strokeWidth={2} />
         </Pressable>
       </View>
 

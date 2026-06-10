@@ -143,7 +143,7 @@ export function LocationAutocomplete({
   return (
     <View>
       <View
-        className={`bg-white rounded-xl border border-border/40 px-3 flex-row items-center gap-2 shadow-sm ${className}`}
+        className={`bg-card rounded-xl border border-border/40 px-3 flex-row items-center gap-2 shadow-sm ${className}`}
       >
         <MapPin size={15} color="#929298" strokeWidth={1.75} />
         <TextInput
@@ -177,7 +177,7 @@ export function LocationAutocomplete({
       {/* Suggestions dropdown — anchored below the input */}
       {showDropdown && (
         <View
-          className="bg-white rounded-xl border border-border/30 mt-1.5 overflow-hidden shadow-sm"
+          className="bg-card rounded-xl border border-border/30 mt-1.5 overflow-hidden shadow-sm"
           style={{ maxHeight: 240 }}
         >
           {loading && suggestions.length === 0 ? (

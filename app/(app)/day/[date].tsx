@@ -23,6 +23,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlannerStore } from '@/stores/plannerStore';
 import type { TimeSlot } from '@/types/planner';
+import { activityAccent } from '@/lib/activityColors';
+import { TC } from '@/lib/theme';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -43,17 +45,6 @@ const SLOT_TIME: Record<string, string> = {
   evening:          '6–10pm',
   late_night:       '10pm–2am',
 };
-
-/** Activity → left-border accent color (matches dashboard + plans tab) */
-const ACTIVITY_COLOR: Record<string, string> = {
-  drinks: '#D46549', food: '#D46549', coffee: '#C47030', brunch: '#D46549',
-  'happy-hour': '#D46549', hike: '#9CB094', run: '#9CB094', gym: '#9CB094',
-  sports: '#9CB094', movie: '#7744BB', concert: '#6E9BC2', game: '#7744BB',
-  travel: '#23744D', beach: '#23744D', park: '#23744D', meetup: '#23744D',
-};
-function activityAccent(activity?: string): string {
-  return ACTIVITY_COLOR[activity ?? ''] ?? '#23744D';
-}
 
 /** DB column underscore_case → TimeSlot kebab-case */
 function colToTimeSlot(col: string): TimeSlot {
@@ -202,7 +193,7 @@ export default function DayDetailScreen() {
           hitSlop={8}
           className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
         >
-          <ChevronLeft size={22} color="#2F4F3F" strokeWidth={2} />
+          <ChevronLeft size={22} color={TC.icon} strokeWidth={2} />
         </Pressable>
         <View className="flex-1">
           <Text className="font-display text-base text-foreground">
@@ -236,7 +227,7 @@ export default function DayDetailScreen() {
               </Pressable>
             </View>
 
-            <View className="bg-white rounded-2xl border border-border/30 shadow-sm overflow-hidden">
+            <View className="bg-card rounded-2xl border border-border/30 shadow-sm overflow-hidden">
               {slots.map(([slotCol, label], i) => {
                 const free = slotIsFree(slotCol);
                 const isSaving = saving.has(slotCol);
@@ -319,7 +310,7 @@ export default function DayDetailScreen() {
                 <Pressable
                   key={plan.id}
                   onPress={() => router.push(`/(app)/plan/${plan.id}`)}
-                  className="bg-white rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm active:opacity-80"
+                  className="bg-card rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm active:opacity-80"
                 >
                   <View style={{ width: 4, backgroundColor: activityAccent(plan.activity) }} />
                   <View className="flex-1 px-4 py-3 gap-1">

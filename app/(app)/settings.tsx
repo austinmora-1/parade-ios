@@ -45,6 +45,7 @@ import { syncCalendarBusyTimes, getLastSyncTime } from '@/lib/calendarSync';
 import { useGoogleCalendar } from '@/hooks/useGoogleCalendar';
 import { useNylasCalendar } from '@/hooks/useNylasCalendar';
 import { formatDistanceToNow } from 'date-fns';
+import { TC } from '@/lib/theme';
 
 // ─── Profile settings query ──────────────────────────────────────────────────
 
@@ -104,7 +105,7 @@ function SectionCard({
 }) {
   return (
     <View
-      className={`mx-5 bg-white rounded-xl overflow-hidden shadow-sm ${
+      className={`mx-5 bg-card rounded-xl overflow-hidden shadow-sm ${
         destructive ? 'border border-destructive/20' : 'border border-border/30'
       }`}
     >
@@ -257,7 +258,7 @@ function CalendarProviderRow({
       }`}
     >
       <View className="flex-row items-center gap-2.5 flex-1">
-        <View className="w-9 h-9 rounded-xl items-center justify-center bg-white border border-border/40">
+        <View className="w-9 h-9 rounded-xl items-center justify-center bg-card border border-border/40">
           {icon}
         </View>
         <View className="flex-1">
@@ -638,7 +639,7 @@ export default function SettingsPage() {
           hitSlop={8}
           className="w-9 h-9 items-center justify-center rounded-full active:opacity-70"
         >
-          <ChevronLeft size={22} color="#2F4F3F" strokeWidth={2} />
+          <ChevronLeft size={22} color={TC.icon} strokeWidth={2} />
         </Pressable>
         <View className="flex-1">
           <Text className="font-display text-base text-foreground">Settings</Text>
@@ -771,7 +772,7 @@ export default function SettingsPage() {
                           toggleArrayValue('interests', interests, setInterests, opt)
                         }
                         className={`rounded-full px-2.5 py-1 border ${
-                          selected ? 'bg-primary border-primary' : 'bg-white border-border/40'
+                          selected ? 'bg-primary border-primary' : 'bg-card border-border/40'
                         } active:opacity-70`}
                       >
                         <Text
@@ -812,7 +813,7 @@ export default function SettingsPage() {
                           )
                         }
                         className={`flex-1 h-9 rounded-xl border items-center justify-center active:opacity-70 ${
-                          selected ? 'bg-primary border-primary' : 'bg-white border-border/40'
+                          selected ? 'bg-primary border-primary' : 'bg-card border-border/40'
                         }`}
                       >
                         <Text
@@ -874,7 +875,7 @@ export default function SettingsPage() {
                           )
                         }
                         className={`flex-1 h-9 rounded-xl border items-center justify-center active:opacity-70 ${
-                          selected ? 'bg-primary border-primary' : 'bg-white border-border/40'
+                          selected ? 'bg-primary border-primary' : 'bg-card border-border/40'
                         }`}
                       >
                         <Text
@@ -913,7 +914,7 @@ export default function SettingsPage() {
                           )
                         }
                         className={`rounded-full px-2.5 py-1 border ${
-                          selected ? 'bg-primary border-primary' : 'bg-white border-border/40'
+                          selected ? 'bg-primary border-primary' : 'bg-card border-border/40'
                         } active:opacity-70`}
                       >
                         <Text

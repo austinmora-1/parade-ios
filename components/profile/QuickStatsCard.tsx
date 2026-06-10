@@ -95,7 +95,7 @@ export function QuickStatsCard({ currentVibe }: { currentVibe?: string | null })
   const vibeLabel = currentVibe ?? 'No vibe set';
 
   return (
-    <View className="bg-white rounded-2xl border border-border/30 p-3 gap-2 shadow-sm">
+    <View className="bg-card rounded-2xl border border-border/30 p-3 gap-2 shadow-sm">
       <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground px-1">
         This week
       </Text>

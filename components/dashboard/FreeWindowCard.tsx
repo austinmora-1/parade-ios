@@ -122,7 +122,7 @@ export function FreeWindowCard() {
           {[0, 1, 2].map((i) => (
             <View
               key={i}
-              className="bg-white border border-border/30 rounded-2xl p-4 gap-2 shadow-sm"
+              className="bg-card border border-border/30 rounded-2xl p-4 gap-2 shadow-sm"
               style={{ width: 176 }}
             >
               <View className="gap-1.5">
@@ -139,7 +139,7 @@ export function FreeWindowCard() {
           ))}
         </ScrollView>
       ) : windows.length === 0 ? (
-        <View className="bg-white rounded-2xl border border-dashed border-border/40 px-4 py-5 items-center gap-1">
+        <View className="bg-card rounded-2xl border border-dashed border-border/40 px-4 py-5 items-center gap-1">
           <Text className="font-sans text-sm text-muted-foreground">No open time this week</Text>
           <Text className="font-sans text-xs text-muted-foreground/60">
             Mark some days free in your availability
@@ -160,7 +160,7 @@ export function FreeWindowCard() {
               <Pressable
                 key={`${w.dateStr}-${w.slot}`}
                 onPress={() => router.push(`/(app)/day/${w.dateStr}`)}
-                className="bg-white border border-border/30 rounded-2xl p-4 gap-1.5 shadow-sm"
+                className="bg-card border border-border/30 rounded-2xl p-4 gap-1.5 shadow-sm"
                 style={{ width: 176 }}
               >
                 {/* Day eyebrow */}

@@ -70,4 +70,50 @@
     --away:             11  60% 56%;
     --away-light:       11  50% 92%;
   }
+
+  /* ── Dark mode (scheduled 9pm–7am local — see lib/theme.ts) ──────────── */
+  .dark:root {
+    /* Brand tokens that double as text/surface colors */
+    --evergreen:      150 18% 78%;   /* light sage text (was dark forest) */
+    --chalk:          160 12%  7%;   /* deep forest-black screen bg */
+    --sidebar-chalk:  160 10%  9%;   /* tab bar surface */
+
+    /* Semantic tokens */
+    --background:          160 12%  7%;
+    --foreground:           40 25% 92%;   /* warm off-white */
+    --card:                160  9% 12%;   /* elevated surface */
+    --card-foreground:      40 25% 92%;
+    --popover:             160  9% 12%;
+    --popover-foreground:   40 25% 92%;
+
+    --primary:             152 45% 42%;   /* brighter parade green */
+    --primary-foreground:    0  0% 100%;
+    --primary-glow:        150 33% 55%;
+
+    --secondary:            11 60% 60%;
+    --secondary-foreground:  0  0% 100%;
+
+    --muted:               160  8% 17%;
+    --muted-foreground:    150  6% 62%;
+    --accent:              160  8% 15%;
+    --accent-foreground:   152 45% 55%;
+
+    --destructive:          11 65% 52%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border:  160 8% 22%;
+    --input:   160 8% 22%;
+    --ring:   152 45% 42%;
+
+    --sidebar-background:  160 10%  9%;
+    --sidebar-border:      160  8% 22%;
+    --sidebar-primary:     152 45% 42%;
+    --sidebar-accent:      160  8% 15%;
+
+    /* Availability tints — darker fills, same hue language */
+    --available-light: 152 30% 16%;
+    --partial-light:    49 40% 16%;
+    --busy-light:       11 35% 16%;
+    --away-light:       11 30% 16%;
+  }
 }

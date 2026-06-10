@@ -5,6 +5,9 @@ module.exports = {
     './components/**/*.{js,jsx,ts,tsx}',
   ],
   presets: [require('nativewind/preset')],
+  // Class-based dark mode so lib/theme.ts can drive the scheme on a
+  // 9pm-7am schedule via nativewind's colorScheme.set().
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {

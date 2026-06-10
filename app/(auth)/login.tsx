@@ -158,7 +158,7 @@ export default function LoginScreen() {
 
             {/* ── Form card (white on dark bg) ─────────────────────────── */}
             <View
-              className="w-full rounded-2xl bg-white p-6 gap-5"
+              className="w-full rounded-2xl bg-card p-6 gap-5"
               style={{
                 maxWidth: 384,
                 shadowColor: '#000000',

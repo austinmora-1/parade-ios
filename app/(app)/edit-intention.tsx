@@ -25,6 +25,7 @@ import {
   useUpsertIntention,
   type SocialEnergy,
 } from '@/hooks/useWeeklyIntention';
+import { TC } from '@/lib/theme';
 
 const ENERGY_OPTIONS: { id: SocialEnergy; label: string; emoji: string }[] = [
   { id: 'low',    label: 'Low',    emoji: '🛋️' },
@@ -97,7 +98,7 @@ export default function EditIntentionScreen() {
           hitSlop={8}
           className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
         >
-          <X size={20} color="#2F4F3F" strokeWidth={2} />
+          <X size={20} color={TC.icon} strokeWidth={2} />
         </Pressable>
         <Text className="font-display text-base text-foreground">This week</Text>
         <Pressable
@@ -144,7 +145,7 @@ export default function EditIntentionScreen() {
                       key={opt.id}
                       onPress={() => { Haptics.selectionAsync(); setEnergy(opt.id); }}
                       className={`flex-1 rounded-xl px-3 py-3 border items-center gap-1.5 active:opacity-70 ${
-                        selected ? 'bg-primary border-primary' : 'bg-white border-border/40'
+                        selected ? 'bg-primary border-primary' : 'bg-card border-border/40'
                       }`}
                     >
                       <Text style={{ fontSize: 24 }}>{opt.emoji}</Text>
@@ -164,7 +165,7 @@ export default function EditIntentionScreen() {
             {/* Target hangouts */}
             <View>
               <FieldLabel>How many hangouts this week?</FieldLabel>
-              <View className="bg-white rounded-2xl border border-border/30 px-4 py-4 flex-row items-center justify-between shadow-sm">
+              <View className="bg-card rounded-2xl border border-border/30 px-4 py-4 flex-row items-center justify-between shadow-sm">
                 <Text className="font-sans text-sm text-muted-foreground">
                   Target
                 </Text>
@@ -207,7 +208,7 @@ export default function EditIntentionScreen() {
                       key={v}
                       onPress={() => toggleVibe(v)}
                       className={`rounded-full px-3 py-1.5 border active:opacity-70 ${
-                        selected ? 'bg-primary border-primary' : 'bg-white border-border/40'
+                        selected ? 'bg-primary border-primary' : 'bg-card border-border/40'
                       }`}
                     >
                       <Text
@@ -231,7 +232,7 @@ export default function EditIntentionScreen() {
                 onChangeText={setNotes}
                 placeholder="Open to anything · Want to see Alex · Try a new spot…"
                 placeholderTextColor="#929298"
-                className="bg-white rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
+                className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
                 maxLength={500}
                 multiline
                 style={{ minHeight: 96, textAlignVertical: 'top' }}

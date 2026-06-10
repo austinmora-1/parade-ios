@@ -32,6 +32,7 @@ import { Avatar } from '@/components/primitives/Avatar';
 import { formatDisplayName } from '@/lib/utils';
 import { TIME_SLOT_LABELS } from '@/types/planner';
 import type { TimeSlot } from '@/types/planner';
+import { TC } from '@/lib/theme';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -204,7 +205,7 @@ export default function FriendProfileScreen() {
           hitSlop={8}
           className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
         >
-          <ChevronLeft size={22} color="#2F4F3F" strokeWidth={2} />
+          <ChevronLeft size={22} color={TC.icon} strokeWidth={2} />
         </Pressable>
         <Text
           className="font-display text-base text-foreground flex-1"
@@ -224,7 +225,7 @@ export default function FriendProfileScreen() {
           }
         >
           {/* ── Profile hero (banner + overlapping avatar, matches Profile tab) ── */}
-          <View className="mx-5 bg-white rounded-2xl border border-border/30 overflow-hidden shadow-sm">
+          <View className="mx-5 bg-card rounded-2xl border border-border/30 overflow-hidden shadow-sm">
             {/* Cover banner — uses photo if set, else gradient-tinted color */}
             {p?.cover_photo_url ? (
               <View style={{ height: 96, backgroundColor: '#DED4C3' }}>
@@ -369,7 +370,7 @@ export default function FriendProfileScreen() {
                 return (
                   <View
                     key={row.date}
-                    className="bg-white rounded-2xl px-3 py-3 flex-row items-center gap-3 shadow-sm"
+                    className="bg-card rounded-2xl px-3 py-3 flex-row items-center gap-3 shadow-sm"
                     style={
                       today
                         ? { borderWidth: 2, borderColor: '#23744D' }
@@ -403,7 +404,7 @@ export default function FriendProfileScreen() {
                         style={{
                           fontFamily: 'Fraunces_900Black', fontSize: 22,
                           lineHeight: 26,
-                          color: today ? '#23744D' : '#2F4F3F',
+                          color: today ? '#23744D' : TC.icon,
                         }}
                       >
                         {format(day, 'd')}
@@ -431,7 +432,7 @@ export default function FriendProfileScreen() {
 
           {/* Empty state for availability */}
           {showAvail && freeDays.length === 0 && !isLoading && (
-            <View className="mx-5 bg-white rounded-2xl border border-dashed border-border/40 px-4 py-6 items-center gap-1">
+            <View className="mx-5 bg-card rounded-2xl border border-dashed border-border/40 px-4 py-6 items-center gap-1">
               <Text className="font-sans text-sm text-muted-foreground">
                 No free windows shared
               </Text>
@@ -459,7 +460,7 @@ export default function FriendProfileScreen() {
                   <Pressable
                     key={plan.id}
                     onPress={() => router.push(`/(app)/plan/${plan.id}`)}
-                    className="bg-white rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm active:opacity-80"
+                    className="bg-card rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm active:opacity-80"
                   >
                     <View style={{ width: 4, backgroundColor: '#23744D' }} />
                     <View className="flex-1 px-4 py-3 gap-1">

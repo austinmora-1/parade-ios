@@ -13,14 +13,9 @@ import { CalendarCheck, ChevronDown, ChevronRight, MapPin, Clock } from 'lucide-
 import { usePlannerStore } from '@/stores/plannerStore';
 import { TIME_SLOT_LABELS } from '@/types/planner';
 import type { TimeSlot } from '@/types/planner';
+import { activityAccent } from '@/lib/activityColors';
 
-const ACTIVITY_COLOR: Record<string, string> = {
-  drinks: '#D46549', food: '#D46549', coffee: '#C47030', brunch: '#D46549',
-  'happy-hour': '#D46549', hike: '#9CB094', run: '#9CB094', gym: '#9CB094',
-  sports: '#9CB094', movie: '#7744BB', concert: '#6E9BC2', game: '#7744BB',
-  travel: '#23744D', beach: '#23744D', park: '#23744D', meetup: '#23744D',
-};
-const DEFAULT_ACCENT = '#929298';
+const DEFAULT_ACCENT = '#929298'; // gray for past plans
 
 function dayLabel(d: Date): string {
   if (isToday(d))     return 'Today';
@@ -54,7 +49,7 @@ export function PlanHistorySection() {
       {/* Header — tap to toggle */}
       <Pressable
         onPress={() => setExpanded((v) => !v)}
-        className="flex-row items-center justify-between bg-white border border-border/30 rounded-2xl px-4 py-3 shadow-sm active:opacity-80"
+        className="flex-row items-center justify-between bg-card border border-border/30 rounded-2xl px-4 py-3 shadow-sm active:opacity-80"
       >
         <View className="flex-row items-center gap-2">
           <CalendarCheck size={14} color="#23744D" strokeWidth={2} />
@@ -82,7 +77,7 @@ export function PlanHistorySection() {
         <View className="gap-2">
           {pastPlans.map((plan) => {
             const d = plan.date instanceof Date ? plan.date : new Date(plan.date);
-            const accent = ACTIVITY_COLOR[plan.activity as string] ?? DEFAULT_ACCENT;
+            const accent = activityAccent(plan.activity as string | undefined, DEFAULT_ACCENT);
             const slotLabel = TIME_SLOT_LABELS[plan.timeSlot as TimeSlot]?.time ?? '';
             const locationStr =
               typeof plan.location === 'string'
@@ -93,7 +88,7 @@ export function PlanHistorySection() {
               <Pressable
                 key={plan.id}
                 onPress={() => router.push(`/(app)/plan/${plan.id}`)}
-                className="bg-white rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm active:opacity-80"
+                className="bg-card rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm active:opacity-80"
               >
                 <View style={{ width: 4, backgroundColor: accent }} />
                 <View className="flex-1 px-4 py-3 gap-1">

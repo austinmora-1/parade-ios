@@ -8,6 +8,7 @@
  */
 import { Pressable, Text, ActivityIndicator, type PressableProps } from 'react-native';
 import { cn } from '@/lib/utils';
+import { TC } from '@/lib/theme';
 
 type Variant = 'filled' | 'soft' | 'outline' | 'secondary' | 'ghost';
 type Size = 'sm' | 'md' | 'lg' | 'xl';
@@ -45,7 +46,7 @@ const variantStyles: Record<Variant, { container: string; label: string; spinner
   ghost: {
     container:    'bg-transparent active:opacity-60',
     label:        'text-evergreen font-medium',
-    spinnerColor: '#2F4F3F',
+    spinnerColor: TC.icon,
   },
 };
 

@@ -29,6 +29,7 @@ import {
   useFinalizeTripProposal,
 } from '@/hooks/useTripProposal';
 import { TripActivitiesSection } from '@/components/trip/TripActivitiesSection';
+import { TC } from '@/lib/theme';
 
 export default function TripProposalScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -57,7 +58,7 @@ export default function TripProposalScreen() {
           hitSlop={8}
           className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
         >
-          <ChevronLeft size={22} color="#2F4F3F" strokeWidth={2} />
+          <ChevronLeft size={22} color={TC.icon} strokeWidth={2} />
         </Pressable>
         <Text
           className="font-display text-base text-foreground flex-1"
@@ -83,7 +84,7 @@ export default function TripProposalScreen() {
           }
         >
           {/* Hero */}
-          <View className="bg-white rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm">
+          <View className="bg-card rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm">
             <View style={{ width: 4, backgroundColor: '#23744D' }} />
             <View className="flex-1 px-5 py-4 gap-1.5">
               <View className="flex-row items-center gap-1.5">
@@ -119,7 +120,7 @@ export default function TripProposalScreen() {
               <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground px-1">
                 Vote on dates
               </Text>
-              <View className="bg-white rounded-2xl border border-border/30 shadow-sm overflow-hidden">
+              <View className="bg-card rounded-2xl border border-border/30 shadow-sm overflow-hidden">
                 {proposal.dates.map((d, i) => {
                   const start = parseISO(d.startDate);
                   const end   = parseISO(d.endDate);

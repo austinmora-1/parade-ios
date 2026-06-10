@@ -2,7 +2,14 @@ import '@/global.css';
 import 'react-native-gesture-handler';
 import 'react-native-url-polyfill/auto';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { AppState } from 'react-native';
+import {
+  applyScheme,
+  scheduledScheme,
+  msUntilNextBoundary,
+  type Scheme,
+} from '@/lib/theme';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
@@ -47,6 +54,35 @@ export default Sentry.wrap(function RootLayout() {
     }
   }, [fontsLoaded, fontError]);
 
+  // ── Scheduled dark mode: dark 9pm–7am local, light otherwise ──────────
+  const [scheme, setScheme] = useState<Scheme>(() => {
+    const s = scheduledScheme();
+    applyScheme(s); // set before first paint
+    return s;
+  });
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const sync = () => {
+      const s = scheduledScheme();
+      applyScheme(s);
+      setScheme(s);
+      // Re-arm for the next 9pm/7am boundary (+5s slack)
+      clearTimeout(timer);
+      timer = setTimeout(sync, msUntilNextBoundary() + 5000);
+    };
+    sync();
+    // Recompute when the app returns to the foreground (clock may have
+    // crossed a boundary, or the timezone changed while backgrounded).
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') sync();
+    });
+    return () => {
+      clearTimeout(timer);
+      sub.remove();
+    };
+  }, []);
+
   if (!fontsLoaded && !fontError) return null;
 
   return (
@@ -56,7 +92,7 @@ export default Sentry.wrap(function RootLayout() {
           <AuthProvider>
             <ActionSheetProvider>
               <BottomSheetModalProvider>
-                <StatusBar style="dark" />
+                <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
                 <Stack screenOptions={{ headerShown: false }} />
               </BottomSheetModalProvider>
             </ActionSheetProvider>

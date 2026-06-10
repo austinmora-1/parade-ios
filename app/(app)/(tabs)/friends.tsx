@@ -118,7 +118,7 @@ function FriendRow({
   return (
     <Pressable
       onPress={onPress}
-      className="flex-row items-center bg-white rounded-xl px-3 py-2.5 border border-border/20 gap-3 active:opacity-80 shadow-sm"
+      className="flex-row items-center bg-card rounded-xl px-3 py-2.5 border border-border/20 gap-3 active:opacity-80 shadow-sm"
     >
       {/* Avatar with vibe ring + free-today dot */}
       <View style={{ position: 'relative' }}>
@@ -241,7 +241,7 @@ function SectionHeader({
 /** Empty state card — matches PWA */
 function EmptyState({ onInvite }: { onInvite: () => void }) {
   return (
-    <View className="mx-5 bg-white rounded-2xl border border-border/30 px-6 py-8 items-center gap-3 shadow-sm">
+    <View className="mx-5 bg-card rounded-2xl border border-border/30 px-6 py-8 items-center gap-3 shadow-sm">
       <Text style={{ fontSize: 32 }}>👥</Text>
       <Text className="font-sans text-sm font-semibold text-foreground text-center">
         Your friends will appear here
@@ -395,7 +395,7 @@ export default function FriendsTab() {
         {/* ── Search ──────────────────────────────────────────────────── */}
         {friends.length > 0 && (
           <View className="px-5 pb-3">
-            <View className="flex-row items-center bg-white rounded-xl border border-border/30 px-3 gap-2 shadow-sm">
+            <View className="flex-row items-center bg-card rounded-xl border border-border/30 px-3 gap-2 shadow-sm">
               <Search size={15} color="#929298" strokeWidth={1.75} />
               <TextInput
                 value={search}
@@ -417,7 +417,7 @@ export default function FriendsTab() {
             {[0, 1, 2, 3].map((i) => (
               <View
                 key={i}
-                className="flex-row items-center bg-white rounded-xl px-3 py-2.5 border border-border/20 gap-3 shadow-sm"
+                className="flex-row items-center bg-card rounded-xl px-3 py-2.5 border border-border/20 gap-3 shadow-sm"
               >
                 <Skeleton width={40} height={40} rounded="rounded-full" />
                 <View className="flex-1 gap-1.5">
@@ -505,7 +505,7 @@ export default function FriendsTab() {
                       <Pressable
                         key={pod.id}
                         onPress={() => router.push(`/(app)/new-pod?podId=${pod.id}`)}
-                        className="flex-row items-center bg-white border border-border/30 rounded-xl px-3 py-2 gap-2 shadow-sm active:opacity-80"
+                        className="flex-row items-center bg-card border border-border/30 rounded-xl px-3 py-2 gap-2 shadow-sm active:opacity-80"
                       >
                         <Text style={{ fontSize: 16 }}>{pod.emoji ?? '💜'}</Text>
                         <View>
@@ -525,7 +525,7 @@ export default function FriendsTab() {
                 ) : (
                   <Pressable
                     onPress={() => router.push('/(app)/new-pod')}
-                    className="bg-white rounded-xl border border-dashed border-border/40 px-4 py-3 active:opacity-70"
+                    className="bg-card rounded-xl border border-dashed border-border/40 px-4 py-3 active:opacity-70"
                   >
                     <Text className="font-sans text-xs text-muted-foreground text-center">
                       Group friends into pods to make planning easier — like

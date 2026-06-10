@@ -48,7 +48,7 @@ export function WeeklyIntentionCard({
   return (
     <Pressable
       onPress={() => router.push('/(app)/edit-intention')}
-      className="bg-white rounded-2xl border border-border/30 px-4 py-3.5 gap-2 shadow-sm active:opacity-80"
+      className="bg-card rounded-2xl border border-border/30 px-4 py-3.5 gap-2 shadow-sm active:opacity-80"
     >
       <View className="flex-row items-center gap-1.5">
         <Sparkles size={12} color="#DFA53A" strokeWidth={2} />

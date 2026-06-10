@@ -32,6 +32,7 @@ import {
 } from 'lucide-react-native';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { TC } from '@/lib/theme';
 
 // ─── Notification routing ────────────────────────────────────────────────────
 
@@ -156,38 +157,30 @@ export default function NotificationsScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
-      {/* Header */}
-      <View className="flex-row items-center px-3 py-2 gap-1">
-        <Pressable
-          onPress={() => router.back()}
-          hitSlop={8}
-          className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
-        >
-          <ChevronLeft size={22} color="#2F4F3F" strokeWidth={2} />
-        </Pressable>
-        <Text className="font-display text-base text-foreground flex-1">
-          Notifications
-        </Text>
-        {unreadCount > 0 && (
-          <Pressable
-            onPress={handleMarkAllRead}
-            disabled={markingAll}
-            hitSlop={6}
-            className="flex-row items-center gap-1 active:opacity-60"
-          >
-            {markingAll ? (
-              <ActivityIndicator size="small" color="#23744D" />
-            ) : (
-              <>
-                <CheckCheck size={14} color="#23744D" strokeWidth={2.2} />
-                <Text className="font-sans text-xs font-semibold text-primary">
-                  Mark all read
-                </Text>
-              </>
-            )}
-          </Pressable>
-        )}
-      </View>
+      <ScreenHeader
+        title="Notifications"
+        rightAction={
+          unreadCount > 0 ? (
+            <Pressable
+              onPress={handleMarkAllRead}
+              disabled={markingAll}
+              hitSlop={6}
+              className="flex-row items-center gap-1 active:opacity-60"
+            >
+              {markingAll ? (
+                <ActivityIndicator size="small" color="#23744D" />
+              ) : (
+                <>
+                  <CheckCheck size={14} color="#23744D" strokeWidth={2.2} />
+                  <Text className="font-sans text-xs font-semibold text-primary">
+                    Mark all read
+                  </Text>
+                </>
+              )}
+            </Pressable>
+          ) : undefined
+        }
+      />
 
       {isLoading && !refreshing ? (
         <ActivityIndicator className="mt-16" color="#23744D" />
@@ -224,7 +217,7 @@ export default function NotificationsScreen() {
                     key={n.id}
                     onPress={() => handleTap(n)}
                     disabled={!tappable && n.read}
-                    className={`bg-white rounded-2xl px-4 py-3.5 flex-row items-start gap-3 shadow-sm active:opacity-80 ${
+                    className={`bg-card rounded-2xl px-4 py-3.5 flex-row items-start gap-3 shadow-sm active:opacity-80 ${
                       isUnread ? 'border border-primary/30' : 'border border-border/20'
                     }`}
                   >

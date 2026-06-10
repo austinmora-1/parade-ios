@@ -43,6 +43,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { syncCalendarBusyTimes } from '@/lib/calendarSync';
+import { TC } from '@/lib/theme';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -140,7 +141,7 @@ function Chip({
     <Pressable
       onPress={onPress}
       className={`rounded-xl px-3 py-2.5 border active:opacity-70 ${
-        selected ? 'bg-primary border-primary' : 'bg-white border-border/40'
+        selected ? 'bg-primary border-primary' : 'bg-card border-border/40'
       }`}
     >
       {children}
@@ -356,7 +357,7 @@ export default function OnboardingScreen() {
               hitSlop={8}
               className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
             >
-              <ChevronLeft size={22} color="#2F4F3F" strokeWidth={2} />
+              <ChevronLeft size={22} color={TC.icon} strokeWidth={2} />
             </Pressable>
           ) : (
             <View className="w-9 h-9" />
@@ -399,7 +400,7 @@ export default function OnboardingScreen() {
                     onChangeText={setFirstName}
                     placeholder="First"
                     placeholderTextColor="#929298"
-                    className="bg-white rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
+                    className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
                     maxLength={40}
                     autoCapitalize="words"
                     autoFocus
@@ -412,7 +413,7 @@ export default function OnboardingScreen() {
                     onChangeText={setLastName}
                     placeholder="Last"
                     placeholderTextColor="#929298"
-                    className="bg-white rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
+                    className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
                     maxLength={40}
                     autoCapitalize="words"
                   />
@@ -428,7 +429,7 @@ export default function OnboardingScreen() {
                     placeholder="+1 555 123 4567"
                     placeholderTextColor="#929298"
                     keyboardType="phone-pad"
-                    className="bg-white rounded-xl border border-border/40 px-4 py-3 pr-10 font-sans text-sm text-foreground shadow-sm"
+                    className="bg-card rounded-xl border border-border/40 px-4 py-3 pr-10 font-sans text-sm text-foreground shadow-sm"
                     maxLength={30}
                   />
                   <View
@@ -468,7 +469,7 @@ export default function OnboardingScreen() {
                 subtitle="We'll mark times you're booked as busy — without you typing them in."
               />
 
-              <View className="bg-white rounded-2xl border border-border/30 p-5 gap-3 shadow-sm">
+              <View className="bg-card rounded-2xl border border-border/30 p-5 gap-3 shadow-sm">
                 <Text className="font-sans text-sm text-foreground leading-relaxed">
                   Parade reads your iPhone Calendar in the background.
                   Events you remove free the slot back up automatically.
@@ -547,7 +548,7 @@ export default function OnboardingScreen() {
                         className={`flex-1 h-11 rounded-xl border items-center justify-center active:opacity-70 ${
                           selected
                             ? 'bg-primary border-primary'
-                            : 'bg-white border-border/40'
+                            : 'bg-card border-border/40'
                         }`}
                       >
                         <Text
@@ -645,7 +646,7 @@ export default function OnboardingScreen() {
 
               <View>
                 <FieldLabel>Friend emails</FieldLabel>
-                <View className="flex-row items-center bg-white rounded-xl border border-border/40 px-3 gap-2 shadow-sm">
+                <View className="flex-row items-center bg-card rounded-xl border border-border/40 px-3 gap-2 shadow-sm">
                   <TextInput
                     value={emailDraft}
                     onChangeText={setEmailDraft}

@@ -135,7 +135,7 @@ export function HangRequestsWidget() {
           return (
             <View
               key={r.id}
-              className="bg-white rounded-2xl border border-border/30 overflow-hidden shadow-sm"
+              className="bg-card rounded-2xl border border-border/30 overflow-hidden shadow-sm"
             >
               <View className="px-4 py-3 gap-1">
                 <Text className="font-display text-sm text-foreground">

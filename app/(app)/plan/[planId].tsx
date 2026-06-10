@@ -37,6 +37,7 @@ import {
   useFinalizeProposal,
 } from '@/hooks/usePlanProposal';
 import { formatDisplayName } from '@/lib/utils';
+import { activityAccent } from '@/lib/activityColors';
 import type { TimeSlot } from '@/types/planner';
 import { TIME_SLOT_LABELS } from '@/types/planner';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -46,6 +47,7 @@ import * as Haptics from 'expo-haptics';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlannerStore } from '@/stores/plannerStore';
+import { TC } from '@/lib/theme';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -57,16 +59,6 @@ const SLOT_LABELS: Record<string, string> = {
   evening:          'Evening',
   late_night:       'Late night',
 };
-
-const ACTIVITY_COLOR: Record<string, string> = {
-  drinks: '#D46549', food: '#D46549', coffee: '#C47030', brunch: '#D46549',
-  'happy-hour': '#D46549', hike: '#9CB094', run: '#9CB094', gym: '#9CB094',
-  sports: '#9CB094', movie: '#7744BB', concert: '#6E9BC2', game: '#7744BB',
-  travel: '#23744D', beach: '#23744D', park: '#23744D', meetup: '#23744D',
-};
-function activityAccent(activity?: string): string {
-  return ACTIVITY_COLOR[activity ?? ''] ?? '#23744D';
-}
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
@@ -251,7 +243,7 @@ export default function PlanDetailScreen() {
           hitSlop={8}
           className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
         >
-          <ChevronLeft size={22} color="#2F4F3F" strokeWidth={2} />
+          <ChevronLeft size={22} color={TC.icon} strokeWidth={2} />
         </Pressable>
         <Text
           className="font-display text-base text-foreground flex-1"
@@ -278,7 +270,7 @@ export default function PlanDetailScreen() {
             hitSlop={8}
             className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
           >
-            <MoreHorizontal size={20} color="#2F4F3F" strokeWidth={2} />
+            <MoreHorizontal size={20} color={TC.icon} strokeWidth={2} />
           </Pressable>
         )}
       </View>
@@ -299,7 +291,7 @@ export default function PlanDetailScreen() {
           }
         >
           {/* Hero card — white with activity left-border accent + Fraunces title */}
-          <View className="bg-white rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm">
+          <View className="bg-card rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm">
             <View style={{ width: 4, backgroundColor: accentColor }} />
             <View className="flex-1 px-5 py-4 gap-1.5">
               <Text className="font-display text-2xl text-foreground leading-tight">
@@ -319,7 +311,7 @@ export default function PlanDetailScreen() {
           {/* ── Pending change request banner ─────────────────────────── */}
           {pendingChange && (
             <View
-              className="bg-white rounded-2xl border overflow-hidden shadow-sm"
+              className="bg-card rounded-2xl border overflow-hidden shadow-sm"
               style={{ borderColor: 'rgba(180,83,9,0.30)' }}
             >
               <View className="px-4 py-3 gap-1">
@@ -393,7 +385,7 @@ export default function PlanDetailScreen() {
           )}
 
           {/* Details card */}
-          <View className="bg-white rounded-2xl border border-border/30 shadow-sm overflow-hidden">
+          <View className="bg-card rounded-2xl border border-border/30 shadow-sm overflow-hidden">
             <DetailRow icon={<Calendar size={15} color="#929298" strokeWidth={1.75} />} label="Date">
               {format(new Date(plan.date), 'EEE, MMM d, yyyy')}
             </DetailRow>
@@ -424,7 +416,7 @@ export default function PlanDetailScreen() {
 
           {/* Notes */}
           {plan.notes ? (
-            <View className="bg-white rounded-2xl border border-border/30 p-5 gap-2 shadow-sm">
+            <View className="bg-card rounded-2xl border border-border/30 p-5 gap-2 shadow-sm">
               <Text className="font-sans text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
                 Notes
               </Text>
@@ -440,7 +432,7 @@ export default function PlanDetailScreen() {
               <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground px-1">
                 Vote on a time
               </Text>
-              <View className="bg-white rounded-2xl border border-border/30 shadow-sm overflow-hidden">
+              <View className="bg-card rounded-2xl border border-border/30 shadow-sm overflow-hidden">
                 {proposalOptions!.map((opt, i) => {
                   const dateObj = parseISO(opt.date);
                   const slotLabel = TIME_SLOT_LABELS[opt.timeSlot]?.time ?? '';
@@ -592,7 +584,7 @@ export default function PlanDetailScreen() {
                   <Pressable
                     onPress={() => handleRsvp('declined')}
                     disabled={rsvpLoading !== null}
-                    className="flex-1 flex-row items-center justify-center gap-1.5 bg-white border border-border/40 rounded-2xl py-3.5 active:opacity-70 shadow-sm"
+                    className="flex-1 flex-row items-center justify-center gap-1.5 bg-card border border-border/40 rounded-2xl py-3.5 active:opacity-70 shadow-sm"
                   >
                     {rsvpLoading === 'declined' ? (
                       <ActivityIndicator size="small" color="#D46549" />
@@ -630,7 +622,7 @@ export default function PlanDetailScreen() {
           {/* Non-participant, non-owner → Request to join */}
           {!isOwner && !myParticipant && (
             <View
-              className="bg-white rounded-2xl border overflow-hidden shadow-sm"
+              className="bg-card rounded-2xl border overflow-hidden shadow-sm"
               style={{ borderColor: 'rgba(35,116,77,0.30)' }}
             >
               <View className="px-4 py-3 gap-1">
@@ -689,7 +681,7 @@ export default function PlanDetailScreen() {
           {/* Owner sees pending join requests */}
           {isOwner && (pendingJoinRequests?.length ?? 0) > 0 && (
             <View
-              className="bg-white rounded-2xl border overflow-hidden shadow-sm"
+              className="bg-card rounded-2xl border overflow-hidden shadow-sm"
               style={{ borderColor: 'rgba(35,116,77,0.30)' }}
             >
               <View className="px-4 py-3 border-b border-border/20">

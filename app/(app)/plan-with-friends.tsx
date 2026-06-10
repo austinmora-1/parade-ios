@@ -25,6 +25,7 @@ import * as Haptics from 'expo-haptics';
 import { X, Check, CalendarCheck, Plane, Users } from 'lucide-react-native';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { Avatar } from '@/components/primitives/Avatar';
+import { TC } from '@/lib/theme';
 
 export default function PlanWithFriendsScreen() {
   const friends = usePlannerStore((s) => s.friends);
@@ -69,7 +70,7 @@ export default function PlanWithFriendsScreen() {
           hitSlop={8}
           className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
         >
-          <X size={20} color="#2F4F3F" strokeWidth={2} />
+          <X size={20} color={TC.icon} strokeWidth={2} />
         </Pressable>
         <Text className="font-display text-base text-foreground">Plan with friends</Text>
         <View className="w-9" />
@@ -94,7 +95,7 @@ export default function PlanWithFriendsScreen() {
           </View>
 
           {connectedFriends.length === 0 ? (
-            <View className="bg-white rounded-2xl border border-dashed border-border/40 px-4 py-8 items-center gap-2">
+            <View className="bg-card rounded-2xl border border-dashed border-border/40 px-4 py-8 items-center gap-2">
               <Text className="font-sans text-sm text-muted-foreground">No friends yet</Text>
               <Text className="font-sans text-xs text-muted-foreground/60 text-center">
                 Add friends first — then come back to plan with them.
@@ -112,7 +113,7 @@ export default function PlanWithFriendsScreen() {
                   </Text>
                 )}
               </View>
-              <View className="bg-white rounded-2xl border border-border/30 shadow-sm overflow-hidden">
+              <View className="bg-card rounded-2xl border border-border/30 shadow-sm overflow-hidden">
                 {connectedFriends.map((f, i) => {
                   const checked = selected.has(f.friendUserId!);
                   return (
@@ -165,7 +166,7 @@ export default function PlanWithFriendsScreen() {
             </Pressable>
             <Pressable
               onPress={() => continueToPlanning('trip')}
-              className="flex-row items-center justify-center gap-1.5 bg-white border border-border/40 rounded-2xl py-3 active:opacity-70"
+              className="flex-row items-center justify-center gap-1.5 bg-card border border-border/40 rounded-2xl py-3 active:opacity-70"
             >
               <Plane size={14} color="#23744D" strokeWidth={2.2} />
               <Text className="font-sans text-sm font-semibold text-primary">

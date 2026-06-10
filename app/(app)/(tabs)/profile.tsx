@@ -29,6 +29,7 @@ import { formatDisplayName } from '@/lib/utils';
 import { WeeklyIntentionCard } from '@/components/profile/WeeklyIntentionCard';
 import { QuickStatsCard } from '@/components/profile/QuickStatsCard';
 import { PlanHistorySection } from '@/components/profile/PlanHistorySection';
+import { TC } from '@/lib/theme';
 
 // ─── Profile query ────────────────────────────────────────────────────────────
 
@@ -116,19 +117,19 @@ export default function ProfileTab() {
             hitSlop={6}
             className="w-9 h-9 items-center justify-center rounded-full active:opacity-70"
           >
-            <Bell size={20} color="#2F4F3F" strokeWidth={1.75} />
+            <Bell size={20} color={TC.icon} strokeWidth={1.75} />
           </Pressable>
           <Pressable
             onPress={() => router.push('/(app)/settings')}
             hitSlop={6}
             className="w-9 h-9 items-center justify-center rounded-full active:opacity-70"
           >
-            <Settings size={20} color="#2F4F3F" strokeWidth={1.75} />
+            <Settings size={20} color={TC.icon} strokeWidth={1.75} />
           </Pressable>
         </View>
 
         {/* ── Hero card ────────────────────────────────────────────────── */}
-        <View className="mx-5 bg-white rounded-2xl border border-border/30 overflow-hidden shadow-sm">
+        <View className="mx-5 bg-card rounded-2xl border border-border/30 overflow-hidden shadow-sm">
           {/* Cover banner — gradient-style muted primary */}
           <View
             style={{
@@ -213,7 +214,7 @@ export default function ProfileTab() {
         <View className="px-5 pt-4">
           <Pressable
             onPress={() => router.push('/(app)/edit-profile')}
-            className="bg-white rounded-2xl border border-border/30 px-4 py-3.5 items-center shadow-sm active:opacity-70"
+            className="bg-card rounded-2xl border border-border/30 px-4 py-3.5 items-center shadow-sm active:opacity-70"
           >
             <Text className="font-sans text-sm font-semibold text-primary">
               Edit profile

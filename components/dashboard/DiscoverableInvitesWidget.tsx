@@ -20,13 +20,8 @@ import { usePlannerStore } from '@/stores/plannerStore';
 import { useDiscoverableInvites } from '@/hooks/useDiscoverableInvites';
 import { TIME_SLOT_LABELS } from '@/types/planner';
 import type { TimeSlot } from '@/types/planner';
+import { activityAccent } from '@/lib/activityColors';
 
-const ACTIVITY_COLOR: Record<string, string> = {
-  drinks: '#D46549', food: '#D46549', coffee: '#C47030', brunch: '#D46549',
-  'happy-hour': '#D46549', hike: '#9CB094', run: '#9CB094', gym: '#9CB094',
-  sports: '#9CB094', movie: '#7744BB', concert: '#6E9BC2', game: '#7744BB',
-  travel: '#23744D', beach: '#23744D', park: '#23744D', meetup: '#23744D',
-};
 const DEFAULT_ACCENT = '#DFA53A'; // marigold for discovery (distinct from invites)
 
 function dayLabel(d: Date): string {
@@ -95,7 +90,7 @@ export function DiscoverableInvitesWidget() {
 
       <View className="gap-2">
         {invites.slice(0, 5).map((inv) => {
-          const accent    = ACTIVITY_COLOR[inv.activity ?? ''] ?? DEFAULT_ACCENT;
+          const accent    = activityAccent(inv.activity, DEFAULT_ACCENT);
           const slotLabel = TIME_SLOT_LABELS[inv.timeSlot as TimeSlot]?.time ?? '';
           const busy      = busyId === inv.id;
 
@@ -103,7 +98,7 @@ export function DiscoverableInvitesWidget() {
             <Pressable
               key={inv.id}
               onPress={() => router.push(`/(app)/plan/${inv.id}`)}
-              className="bg-white rounded-2xl border border-border/30 overflow-hidden shadow-sm active:opacity-80"
+              className="bg-card rounded-2xl border border-border/30 overflow-hidden shadow-sm active:opacity-80"
             >
               <View className="flex-row">
                 <View style={{ width: 4, backgroundColor: accent }} />

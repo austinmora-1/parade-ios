@@ -13,33 +13,7 @@ import { usePlannerStore } from '@/stores/plannerStore';
 import { TIME_SLOT_LABELS } from '@/types/planner';
 import { Skeleton } from '@/components/primitives/Skeleton';
 import type { Plan } from '@/types/planner';
-
-// ─── Activity → left-border accent color (matches PWA category palette) ──────
-
-const ACTIVITY_COLOR: Record<string, string> = {
-  drinks:        '#D46549',
-  food:          '#D46549',
-  coffee:        '#C47030',
-  brunch:        '#D46549',
-  'happy-hour':  '#D46549',
-  hike:          '#9CB094',
-  run:           '#9CB094',
-  gym:           '#9CB094',
-  sports:        '#9CB094',
-  movie:         '#7744BB',
-  concert:       '#6E9BC2',
-  game:          '#7744BB',
-  travel:        '#23744D',
-  beach:         '#23744D',
-  park:          '#23744D',
-  meetup:        '#23744D',
-};
-const DEFAULT_ACTIVITY_COLOR = '#23744D';
-
-function activityAccent(activity: string | undefined): string {
-  if (!activity) return DEFAULT_ACTIVITY_COLOR;
-  return ACTIVITY_COLOR[activity] ?? DEFAULT_ACTIVITY_COLOR;
-}
+import { activityAccent } from '@/lib/activityColors';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -94,7 +68,7 @@ export function UpcomingPlansWidget() {
           {[0, 1, 2].map((i) => (
             <View
               key={i}
-              className="bg-white rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm"
+              className="bg-card rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm"
             >
               <View style={{ width: 4, backgroundColor: '#DDD8CE' }} />
               <View className="flex-1 px-4 py-3.5 gap-1.5">
@@ -105,7 +79,7 @@ export function UpcomingPlansWidget() {
           ))}
         </View>
       ) : upcoming.length === 0 ? (
-        <View className="bg-white rounded-2xl border border-dashed border-border/40 px-4 py-6 items-center gap-1">
+        <View className="bg-card rounded-2xl border border-dashed border-border/40 px-4 py-6 items-center gap-1">
           <Text className="text-2xl">📅</Text>
           <Text className="font-sans text-sm text-muted-foreground mt-1">
             No plans this week
@@ -126,7 +100,7 @@ export function UpcomingPlansWidget() {
               <Pressable
                 key={plan.id}
                 onPress={() => router.push(`/(app)/plan/${plan.id}`)}
-                className="bg-white rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm active:opacity-80"
+                className="bg-card rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm active:opacity-80"
               >
                 {/* Activity left-border accent (matches PWA border-l-[3px]) */}
                 <View style={{ width: 4, backgroundColor: accentColor }} />

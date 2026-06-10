@@ -39,7 +39,7 @@ export function SmartPrimaryCTA() {
   return (
     <Pressable
       onPress={() => router.push(`/(app)/plan/${todayPlan.id}`)}
-      className="flex-row items-center bg-white rounded-2xl border border-primary/30 px-4 py-3.5 gap-3 shadow-sm active:opacity-80"
+      className="flex-row items-center bg-card rounded-2xl border border-primary/30 px-4 py-3.5 gap-3 shadow-sm active:opacity-80"
       style={{
         shadowColor: '#23744D',
         shadowOpacity: 0.08,

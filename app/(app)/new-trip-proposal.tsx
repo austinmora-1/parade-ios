@@ -34,6 +34,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { LocationAutocomplete } from '@/components/primitives/LocationAutocomplete';
 import { Avatar } from '@/components/primitives/Avatar';
+import { TC } from '@/lib/theme';
 
 const START_DATE_CHIPS = 30;
 const DURATION_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 10, 14] as const;
@@ -61,7 +62,7 @@ function Chip({ selected, onPress, children }: {
     <Pressable
       onPress={onPress}
       className={`rounded-xl px-3 py-2.5 border active:opacity-70 ${
-        selected ? 'bg-primary border-primary' : 'bg-white border-border/40'
+        selected ? 'bg-primary border-primary' : 'bg-card border-border/40'
       }`}
     >
       <View className="flex-row items-center gap-1.5">{children}</View>
@@ -221,7 +222,7 @@ export default function NewTripProposalScreen() {
           hitSlop={8}
           className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
         >
-          <X size={20} color="#2F4F3F" strokeWidth={2} />
+          <X size={20} color={TC.icon} strokeWidth={2} />
         </Pressable>
         <Text className="font-display text-base text-foreground">Propose a trip</Text>
         <Pressable
@@ -268,7 +269,7 @@ export default function NewTripProposalScreen() {
               onChangeText={setName}
               placeholder="e.g. Lisbon for a week"
               placeholderTextColor="#929298"
-              className="bg-white rounded-xl border border-border/40 px-4 py-3 font-display text-base text-foreground shadow-sm"
+              className="bg-card rounded-xl border border-border/40 px-4 py-3 font-display text-base text-foreground shadow-sm"
               maxLength={80}
               autoFocus
             />
@@ -311,7 +312,7 @@ export default function NewTripProposalScreen() {
               </Pressable>
             </View>
 
-            <View className="bg-white rounded-2xl border border-border/30 shadow-sm overflow-hidden">
+            <View className="bg-card rounded-2xl border border-border/30 shadow-sm overflow-hidden">
               {options.map((opt, i) => {
                 const end = addDays(opt.startDate, Math.max(0, opt.duration - 1));
                 const sameMonth = format(opt.startDate, 'MMM') === format(end, 'MMM');
@@ -465,7 +466,7 @@ export default function NewTripProposalScreen() {
                   </Text>
                 )}
               </View>
-              <View className="bg-white rounded-2xl border border-border/30 shadow-sm overflow-hidden">
+              <View className="bg-card rounded-2xl border border-border/30 shadow-sm overflow-hidden">
                 {connectedFriends.map((f, i) => {
                   const checked = inviteeIds.has(f.friendUserId!);
                   return (
@@ -499,7 +500,7 @@ export default function NewTripProposalScreen() {
               </View>
             </View>
           ) : (
-            <View className="bg-white rounded-2xl border border-dashed border-border/40 px-4 py-5 items-center gap-1">
+            <View className="bg-card rounded-2xl border border-dashed border-border/40 px-4 py-5 items-center gap-1">
               <Text className="font-sans text-sm text-muted-foreground">
                 Add friends first
               </Text>

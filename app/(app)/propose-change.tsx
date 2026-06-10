@@ -27,6 +27,7 @@ import { X, AlertCircle } from 'lucide-react-native';
 import { supabase } from '@/integrations/supabase/client';
 import { useProposeChange } from '@/hooks/usePlanChangeRequests';
 import type { TimeSlot } from '@/types/planner';
+import { TC } from '@/lib/theme';
 
 const SLOTS: { id: TimeSlot; label: string; range: string }[] = [
   { id: 'early-morning',   label: 'Early morning',   range: '7–9am' },
@@ -60,7 +61,7 @@ function Chip({ selected, onPress, children }: {
     <Pressable
       onPress={onPress}
       className={`rounded-xl px-3 py-2.5 border active:opacity-70 ${
-        selected ? 'bg-primary border-primary' : 'bg-white border-border/40'
+        selected ? 'bg-primary border-primary' : 'bg-card border-border/40'
       }`}
     >
       <View className="flex-row items-center gap-1.5">{children}</View>
@@ -144,7 +145,7 @@ export default function ProposeChangeScreen() {
           hitSlop={8}
           className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
         >
-          <X size={20} color="#2F4F3F" strokeWidth={2} />
+          <X size={20} color={TC.icon} strokeWidth={2} />
         </Pressable>
         <Text className="font-display text-base text-foreground">Propose change</Text>
         <Pressable
@@ -179,7 +180,7 @@ export default function ProposeChangeScreen() {
           </View>
 
           {plan && (
-            <View className="bg-white rounded-2xl border border-border/30 px-4 py-3 shadow-sm">
+            <View className="bg-card rounded-2xl border border-border/30 px-4 py-3 shadow-sm">
               <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">
                 Original
               </Text>
