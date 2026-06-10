@@ -270,9 +270,10 @@ export default function HomeTab() {
               >
                 <Defs>
                   <SvgLinearGradient id="heroGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <Stop offset="0%"   stopColor="#23744D" stopOpacity="1" />
-                    <Stop offset="55%"  stopColor="#2F8A5C" stopOpacity="1" />
-                    <Stop offset="100%" stopColor="#FFFFFF" stopOpacity="1" />
+                    {/* forest → parade → mint */}
+                    <Stop offset="0%"   stopColor="#143D29" stopOpacity="1" />
+                    <Stop offset="55%"  stopColor="#23744D" stopOpacity="1" />
+                    <Stop offset="100%" stopColor="#9ED8B5" stopOpacity="1" />
                   </SvgLinearGradient>
                 </Defs>
                 <Rect
@@ -284,7 +285,7 @@ export default function HomeTab() {
                 />
               </Svg>
             )}
-            <View className="flex-row items-center justify-between px-5 py-4">
+            <View className="flex-row items-center justify-between px-5 py-7">
               {/* Left: greeting + date/location */}
               <View className="flex-1 pr-3">
                 {profileLoading ? (
@@ -360,15 +361,17 @@ export default function HomeTab() {
                   className="w-11 h-11 rounded-full items-center justify-center active:opacity-80"
                   hitSlop={6}
                   style={{
-                    backgroundColor: '#FFFFFF',
+                    backgroundColor: '#23744D',
+                    borderWidth: 1.5,
+                    borderColor: 'rgba(255,255,255,0.6)',
                     shadowColor: '#040A2A',
-                    shadowOpacity: 0.18,
+                    shadowOpacity: 0.22,
                     shadowRadius: 8,
                     shadowOffset: { width: 0, height: 3 },
                     elevation: 6,
                   }}
                 >
-                  <Plus size={22} color="#23744D" strokeWidth={2.5} />
+                  <Plus size={22} color="#FFFFFF" strokeWidth={2.5} />
                 </Pressable>
               </View>
             </View>
