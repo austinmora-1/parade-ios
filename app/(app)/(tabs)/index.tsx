@@ -12,7 +12,8 @@ import { Bell, Plus, MapPin } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useCallback, useState, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { format, addDays, startOfWeek } from 'date-fns';
+import { format, addDays, startOfWeek, parseISO, differenceInCalendarDays } from 'date-fns';
+import { formatCityForDisplay } from '@/lib/formatCity';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Skeleton } from '@/components/primitives/Skeleton';
@@ -70,6 +71,28 @@ function useWalkthroughStatus(userId: string | undefined) {
   });
 }
 
+/** Next upcoming or in-progress trip/visit for the current user. */
+function useNextTrip(userId: string | undefined) {
+  return useQuery({
+    enabled: !!userId,
+    queryKey: ['next-trip', userId],
+    staleTime: 60_000,
+    queryFn: async () => {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const { data } = await (supabase as any)
+        .from('trips')
+        .select('id, name, location, start_date, end_date')
+        .eq('user_id', userId!)
+        .gte('end_date', todayStr)
+        .order('start_date', { ascending: true })
+        .limit(1);
+      return ((data ?? [])[0] as
+        | { id: string; name: string; location: string | null; start_date: string; end_date: string }
+        | undefined) ?? null;
+    },
+  });
+}
+
 /** Returns count of unread notifications for the current user. */
 function useUnreadCount(userId: string | undefined) {
   return useQuery({
@@ -109,6 +132,7 @@ export default function HomeTab() {
 
   const { data: profile, isLoading: profileLoading, refetch } = useProfile(user?.id);
   const { data: unreadCount } = useUnreadCount(user?.id);
+  const { data: nextTrip } = useNextTrip(user?.id);
   const { data: friendData }  = useFriendDashboardData();
   const { data: walkthroughDone, isLoading: walkthroughLoading } =
     useWalkthroughStatus(user?.id);
@@ -152,6 +176,7 @@ export default function HomeTab() {
       loadAllData(true),
       queryClient.invalidateQueries({ queryKey: ['friend-dashboard-data'] }),
       queryClient.invalidateQueries({ queryKey: ['unread-notifications'] }),
+      queryClient.invalidateQueries({ queryKey: ['next-trip'] }),
     ]);
     setRefreshing(false);
   }, [refetch, loadAllData, queryClient]);
@@ -178,6 +203,22 @@ export default function HomeTab() {
 
     return { upcomingCount, friendsFreeWeekend };
   }, [plans, friendData]);
+
+  // Upcoming trip/visit reminder label
+  const tripLabel = useMemo(() => {
+    if (!nextTrip) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const start = parseISO(nextTrip.start_date);
+    const end = parseISO(nextTrip.end_date);
+    const city = formatCityForDisplay(nextTrip.location || '') || nextTrip.name;
+    if (today >= start && today <= end) return `In ${city} now`;
+    const days = differenceInCalendarDays(start, today);
+    if (days <= 0) return `${city} soon`;
+    if (days === 1) return `${city} tomorrow`;
+    if (days <= 14) return `${city} in ${days} days`;
+    return `${city} · ${format(start, 'MMM d')}`;
+  }, [nextTrip]);
 
   const firstName = profile
     ? formatDisplayName({
@@ -335,8 +376,19 @@ export default function HomeTab() {
         </View>
 
         {/* ── Week-at-a-glance stat pills ─────────────────────────────────── */}
-        {!storeLoading && (stats.upcomingCount > 0 || stats.friendsFreeWeekend > 0) && (
-          <View className="flex-row gap-2 px-5 pb-5">
+        {!storeLoading && (stats.upcomingCount > 0 || stats.friendsFreeWeekend > 0 || !!tripLabel) && (
+          <View className="flex-row flex-wrap gap-2 px-5 pb-5">
+            {tripLabel && nextTrip && (
+              <Pressable
+                onPress={() => router.push(`/(app)/trip/${nextTrip.id}`)}
+                className="flex-row items-center gap-1.5 bg-primary/10 rounded-full px-3 py-1.5 active:opacity-70"
+              >
+                <Text style={{ fontSize: 12 }}>🧳</Text>
+                <Text className="font-sans text-xs text-primary font-medium">
+                  {tripLabel}
+                </Text>
+              </Pressable>
+            )}
             {stats.upcomingCount > 0 && (
               <View className="flex-row items-center gap-1.5 bg-evergreen/8 rounded-full px-3 py-1.5">
                 <Text style={{ fontSize: 12 }}>📅</Text>
