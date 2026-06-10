@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Stop, Rect } from 'react-native-svg';
-import { Bell, Plus, MapPin } from 'lucide-react-native';
+import { Bell, Plus, MapPin, ChevronRight } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useCallback, useState, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -375,20 +375,38 @@ export default function HomeTab() {
           </View>
         </View>
 
-        {/* ── Week-at-a-glance stat pills ─────────────────────────────────── */}
-        {!storeLoading && (stats.upcomingCount > 0 || stats.friendsFreeWeekend > 0 || !!tripLabel) && (
-          <View className="flex-row flex-wrap gap-2 px-5 pb-5">
-            {tripLabel && nextTrip && (
-              <Pressable
-                onPress={() => router.push(`/(app)/trip/${nextTrip.id}`)}
-                className="flex-row items-center gap-1.5 bg-primary/10 rounded-full px-3 py-1.5 active:opacity-70"
+        {/* ── Upcoming trip / visit banner ────────────────────────────────── */}
+        {tripLabel && nextTrip && (
+          <View className="px-5 pb-3">
+            <Pressable
+              onPress={() => router.push(`/(app)/trip/${nextTrip.id}`)}
+              className="flex-row items-center gap-3 bg-primary/10 border border-primary/25 rounded-2xl px-4 py-3.5 active:opacity-80"
+            >
+              <View
+                className="w-10 h-10 rounded-xl items-center justify-center"
+                style={{ backgroundColor: 'rgba(35,116,77,0.15)' }}
               >
-                <Text style={{ fontSize: 12 }}>🧳</Text>
-                <Text className="font-sans text-xs text-primary font-medium">
+                <Text style={{ fontSize: 18 }}>🧳</Text>
+              </View>
+              <View className="flex-1">
+                <Text className="font-sans text-[10px] font-semibold uppercase tracking-widest text-primary/70">
+                  Upcoming trip
+                </Text>
+                <Text className="font-display text-base text-primary" numberOfLines={1}>
                   {tripLabel}
                 </Text>
-              </Pressable>
-            )}
+                <Text className="font-sans text-[11px] text-primary/70 mt-0.5">
+                  {format(parseISO(nextTrip.start_date), 'EEE, MMM d')} – {format(parseISO(nextTrip.end_date), 'EEE, MMM d')}
+                </Text>
+              </View>
+              <ChevronRight size={16} color="#23744D" strokeWidth={2} />
+            </Pressable>
+          </View>
+        )}
+
+        {/* ── Week-at-a-glance stat pills ─────────────────────────────────── */}
+        {!storeLoading && (stats.upcomingCount > 0 || stats.friendsFreeWeekend > 0) && (
+          <View className="flex-row flex-wrap gap-2 px-5 pb-5">
             {stats.upcomingCount > 0 && (
               <View className="flex-row items-center gap-1.5 bg-evergreen/8 rounded-full px-3 py-1.5">
                 <Text style={{ fontSize: 12 }}>📅</Text>
