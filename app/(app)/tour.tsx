@@ -28,6 +28,7 @@ import { Plus, Users, Sparkles, CalendarDays, Settings as SettingsIcon } from 'l
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 
+import { TINT } from '@/lib/colors';
 interface Slide {
   icon: React.ReactNode;
   /** Tile background color */
@@ -50,7 +51,7 @@ const SLIDES: Slide[] = [
   },
   {
     icon: <Users size={28} color="#23744D" strokeWidth={2.2} />,
-    iconBg: 'rgba(35,116,77,0.12)',
+    iconBg: TINT.primarySubtle,
     eyebrow: "Who's around",
     title:   'Friend vibes at a glance',
     body:    "Connected friends show their current vibe and how many days they're free this week. Tap a pill to open their profile.",
@@ -58,7 +59,7 @@ const SLIDES: Slide[] = [
   },
   {
     icon: <Sparkles size={28} color="#DFA53A" strokeWidth={2.2} />,
-    iconBg: 'rgba(223,165,58,0.15)',
+    iconBg: TINT.marigoldSubtle,
     eyebrow: 'Recommended',
     title:   'Your free windows, sorted',
     body:    "Open time you've marked — sorted by friend overlap. Tap a chip to see the day in detail or plan something then.",
@@ -66,7 +67,7 @@ const SLIDES: Slide[] = [
   },
   {
     icon: <CalendarDays size={28} color="#23744D" strokeWidth={2.2} />,
-    iconBg: 'rgba(35,116,77,0.12)',
+    iconBg: TINT.primarySubtle,
     eyebrow: 'Plans tab',
     title:   'Your week, weekend, and trips',
     body:    "Mark availability with a tap, see plans by day, navigate weeks, and add trips. Today is highlighted in parade green.",
@@ -74,7 +75,7 @@ const SLIDES: Slide[] = [
   },
   {
     icon: <SettingsIcon size={28} color="#929298" strokeWidth={2.2} />,
-    iconBg: 'rgba(146,146,152,0.12)',
+    iconBg: TINT.grayFaint,
     eyebrow: 'Settings',
     title:   'Make it yours',
     body:    "Sync your calendar, control notifications, choose what friends see. Tap the gear on your profile.",
@@ -139,7 +140,7 @@ export default function TourScreen() {
                 width:  i === index ? 20 : 6,
                 height: 6,
                 borderRadius: 3,
-                backgroundColor: i === index ? '#23744D' : 'rgba(146,146,152,0.3)',
+                backgroundColor: i === index ? '#23744D' : TINT.grayBorder,
               }}
             />
           ))}
@@ -195,7 +196,7 @@ export default function TourScreen() {
             {/* Where it lives */}
             <View
               className="flex-row items-center gap-1.5 mt-6 rounded-full px-3 py-1.5"
-              style={{ backgroundColor: 'rgba(146,146,152,0.10)' }}
+              style={{ backgroundColor: TINT.grayFaint }}
             >
               <Text className="font-sans text-[11px] font-semibold text-muted-foreground">
                 {s.where}

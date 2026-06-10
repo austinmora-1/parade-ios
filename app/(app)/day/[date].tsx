@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ChevronLeft, Clock, MapPin, Check, Plus } from 'lucide-react-native';
+import { Clock, MapPin, Check, Plus } from 'lucide-react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO, isToday } from 'date-fns';
 import { useState, useCallback, useEffect } from 'react';
@@ -24,7 +24,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { usePlannerStore } from '@/stores/plannerStore';
 import type { TimeSlot } from '@/types/planner';
 import { activityAccent } from '@/lib/activityColors';
-import { TC } from '@/lib/theme';
+import { ScreenHeader } from '@/components/primitives/ScreenHeader';
+import { TINT } from '@/lib/colors';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -186,24 +187,10 @@ export default function DayDetailScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
-      {/* Header */}
-      <View className="flex-row items-center px-3 py-2 gap-1">
-        <Pressable
-          onPress={() => router.back()}
-          hitSlop={8}
-          className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
-        >
-          <ChevronLeft size={22} color={TC.icon} strokeWidth={2} />
-        </Pressable>
-        <View className="flex-1">
-          <Text className="font-display text-base text-foreground">
-            {today ? 'Today' : format(parsedDate, 'EEEE')}
-          </Text>
-          <Text className="font-sans text-[11px] text-muted-foreground">
-            {format(parsedDate, 'MMMM d, yyyy')}
-          </Text>
-        </View>
-      </View>
+      <ScreenHeader
+        title={today ? 'Today' : format(parsedDate, 'EEEE')}
+        subtitle={format(parsedDate, 'MMMM d, yyyy')}
+      />
 
       {isLoading ? (
         <ActivityIndicator className="mt-16" color="#23744D" />
@@ -245,7 +232,7 @@ export default function DayDetailScreen() {
                           height: 22,
                           borderRadius: 6,
                           borderWidth: 1.5,
-                          borderColor: free ? '#23744D' : 'rgba(146,146,152,0.4)',
+                          borderColor: free ? '#23744D' : TINT.grayStrong,
                           backgroundColor: free ? '#23744D' : 'transparent',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -268,7 +255,7 @@ export default function DayDetailScreen() {
                       {free ? (
                         <View
                           style={{
-                            backgroundColor: 'rgba(35,116,77,0.12)',
+                            backgroundColor: TINT.primarySubtle,
                             borderRadius: 999,
                             paddingHorizontal: 10,
                             paddingVertical: 3,

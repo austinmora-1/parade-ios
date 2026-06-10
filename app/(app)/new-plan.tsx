@@ -43,6 +43,7 @@ import { usePods } from '@/hooks/usePods';
 import { Eye, Users as UsersIcon, Lock } from 'lucide-react-native';
 import type { TimeSlot } from '@/types/planner';
 import { TC } from '@/lib/theme';
+import { TINT } from '@/lib/colors';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -779,7 +780,7 @@ export default function NewPlanScreen() {
                           style={{
                             width: 22, height: 22, borderRadius: 6,
                             borderWidth: 1.5,
-                            borderColor: checked ? '#23744D' : 'rgba(146,146,152,0.4)',
+                            borderColor: checked ? '#23744D' : TINT.grayStrong,
                             backgroundColor: checked ? '#23744D' : 'transparent',
                             alignItems: 'center', justifyContent: 'center',
                           }}

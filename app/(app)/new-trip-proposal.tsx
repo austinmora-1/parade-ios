@@ -36,6 +36,7 @@ import { LocationAutocomplete } from '@/components/primitives/LocationAutocomple
 import { Avatar } from '@/components/primitives/Avatar';
 import { TC } from '@/lib/theme';
 
+import { TINT } from '@/lib/colors';
 const START_DATE_CHIPS = 30;
 const DURATION_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 10, 14] as const;
 
@@ -483,7 +484,7 @@ export default function NewTripProposalScreen() {
                           style={{
                             width: 22, height: 22, borderRadius: 6,
                             borderWidth: 1.5,
-                            borderColor: checked ? '#23744D' : 'rgba(146,146,152,0.4)',
+                            borderColor: checked ? '#23744D' : TINT.grayStrong,
                             backgroundColor: checked ? '#23744D' : 'transparent',
                             alignItems: 'center', justifyContent: 'center',
                           }}

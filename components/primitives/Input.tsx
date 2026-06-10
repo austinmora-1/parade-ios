@@ -31,7 +31,7 @@ export function Input({
       <View className="relative">
         <TextInput
           secureTextEntry={isPassword ? hidden : false}
-          placeholderTextColor="#9CB094"
+          placeholderTextColor="#929298"
           className={cn(
             'font-sans text-base text-foreground bg-background',
             'rounded-2xl border border-border px-4 py-3',
@@ -48,9 +48,9 @@ export function Input({
             hitSlop={8}
           >
             {hidden ? (
-              <EyeOff size={18} color="#9CB094" />
+              <EyeOff size={18} color="#929298" />
             ) : (
-              <Eye size={18} color="#9CB094" />
+              <Eye size={18} color="#929298" />
             )}
           </Pressable>
         ) : null}

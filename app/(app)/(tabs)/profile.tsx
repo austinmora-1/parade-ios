@@ -30,6 +30,7 @@ import { WeeklyIntentionCard } from '@/components/profile/WeeklyIntentionCard';
 import { QuickStatsCard } from '@/components/profile/QuickStatsCard';
 import { PlanHistorySection } from '@/components/profile/PlanHistorySection';
 import { TC } from '@/lib/theme';
+import { TINT } from '@/lib/colors';
 
 // ─── Profile query ────────────────────────────────────────────────────────────
 
@@ -134,14 +135,14 @@ export default function ProfileTab() {
           <View
             style={{
               height: 96,
-              backgroundColor: 'rgba(35,116,77,0.12)',
+              backgroundColor: TINT.primarySubtle,
             }}
           />
 
           {/* Content */}
           <View className="px-4 pb-4">
             {/* Avatar (overlaps banner, left-aligned, white ring) */}
-            <View style={{ marginTop: -36, marginBottom: 12, alignSelf: 'flex-start' }}>
+            <View className="-mt-9 mb-3 self-start">
               <View
                 style={{
                   borderWidth: 4,

@@ -14,7 +14,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useCallback } from 'react';
 import {
-  ChevronLeft,
   Plane,
   Calendar,
   MapPin,
@@ -32,6 +31,7 @@ import { resetCalendarSyncCache, syncCalendarBusyTimes } from '@/lib/calendarSyn
 import * as ExpoCalendar from 'expo-calendar';
 import { TripActivitiesSection } from '@/components/trip/TripActivitiesSection';
 import { TC } from '@/lib/theme';
+import { ScreenHeader } from '@/components/primitives/ScreenHeader';
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
@@ -183,32 +183,21 @@ export default function TripDetailScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
-      {/* Header */}
-      <View className="flex-row items-center px-3 py-2 gap-1">
-        <Pressable
-          onPress={() => router.back()}
-          hitSlop={8}
-          className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
-        >
-          <ChevronLeft size={22} color={TC.icon} strokeWidth={2} />
-        </Pressable>
-        <Text
-          className="font-display text-base text-foreground flex-1"
-          numberOfLines={1}
-        >
-          {trip?.name ?? 'Trip'}
-        </Text>
-        {isOwner && !isLoading && !error && (
-          <Pressable
-            onPress={openOwnerMenu}
-            disabled={deleting}
-            hitSlop={8}
-            className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
-          >
-            <MoreHorizontal size={20} color={TC.icon} strokeWidth={2} />
-          </Pressable>
-        )}
-      </View>
+      <ScreenHeader
+        title={trip?.name ?? 'Trip'}
+        rightAction={
+          isOwner && !isLoading && !error ? (
+            <Pressable
+              onPress={openOwnerMenu}
+              disabled={deleting}
+              hitSlop={8}
+              className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
+            >
+              <MoreHorizontal size={20} color={TC.icon} strokeWidth={2} />
+            </Pressable>
+          ) : undefined
+        }
+      />
 
       {isLoading ? (
         <ActivityIndicator className="mt-16" color="#23744D" />

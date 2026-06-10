@@ -34,6 +34,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Avatar } from '@/components/primitives/Avatar';
 import { LocationAutocomplete } from '@/components/primitives/LocationAutocomplete';
 import { TC } from '@/lib/theme';
+import { TINT } from '@/lib/colors';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -451,7 +452,7 @@ export default function EditProfileScreen() {
                     {usernameState === 'available' && (
                       <View
                         className="w-5 h-5 rounded-full items-center justify-center"
-                        style={{ backgroundColor: 'rgba(35,116,77,0.15)' }}
+                        style={{ backgroundColor: TINT.primaryBorder }}
                       >
                         <Check size={12} color="#23744D" strokeWidth={2.5} />
                       </View>
@@ -459,7 +460,7 @@ export default function EditProfileScreen() {
                     {(usernameState === 'taken' || usernameState === 'invalid') && (
                       <View
                         className="w-5 h-5 rounded-full items-center justify-center"
-                        style={{ backgroundColor: 'rgba(212,101,73,0.15)' }}
+                        style={{ backgroundColor: TINT.secondaryBorder }}
                       >
                         <AlertCircle size={12} color="#D46549" strokeWidth={2.5} />
                       </View>

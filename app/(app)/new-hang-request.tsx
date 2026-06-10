@@ -35,6 +35,7 @@ import { formatDisplayName } from '@/lib/utils';
 import type { TimeSlot } from '@/types/planner';
 import { TC } from '@/lib/theme';
 
+import { TINT } from '@/lib/colors';
 const SLOTS: { id: TimeSlot; label: string; range: string }[] = [
   { id: 'early-morning',   label: 'Early morning',   range: '7–9am' },
   { id: 'late-morning',    label: 'Late morning',    range: '9am–12pm' },
@@ -227,7 +228,7 @@ export default function NewHangRequestScreen() {
                             style={{
                               width: 20, height: 20, borderRadius: 999,
                               borderWidth: 2,
-                              borderColor: selected ? '#23744D' : 'rgba(146,146,152,0.4)',
+                              borderColor: selected ? '#23744D' : TINT.grayStrong,
                               backgroundColor: selected ? '#23744D' : 'transparent',
                             }}
                           />

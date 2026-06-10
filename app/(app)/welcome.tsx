@@ -27,6 +27,7 @@ import * as Haptics from 'expo-haptics';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 
+import { TINT } from '@/lib/colors';
 interface Slide {
   emoji: string;
   eyebrow: string;
@@ -157,7 +158,7 @@ export default function WelcomeScreen() {
                 width:  i === index ? 24 : 8,
                 height: 8,
                 borderRadius: 4,
-                backgroundColor: i === index ? '#23744D' : 'rgba(146,146,152,0.3)',
+                backgroundColor: i === index ? '#23744D' : TINT.grayBorder,
               }}
             />
           ))}

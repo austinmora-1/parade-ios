@@ -27,7 +27,6 @@ import { useQuery } from '@tanstack/react-query';
 import * as Calendar from 'expo-calendar';
 import * as Haptics from 'expo-haptics';
 import {
-  ChevronLeft,
   LogOut,
   Bell,
   Sparkles,
@@ -45,7 +44,8 @@ import { syncCalendarBusyTimes, getLastSyncTime } from '@/lib/calendarSync';
 import { useGoogleCalendar } from '@/hooks/useGoogleCalendar';
 import { useNylasCalendar } from '@/hooks/useNylasCalendar';
 import { formatDistanceToNow } from 'date-fns';
-import { TC } from '@/lib/theme';
+import { ScreenHeader } from '@/components/primitives/ScreenHeader';
+import { TINT } from '@/lib/colors';
 
 // ─── Profile settings query ──────────────────────────────────────────────────
 
@@ -279,7 +279,7 @@ function CalendarProviderRow({
         <View className="flex-row items-center gap-1.5">
           <View
             className="flex-row items-center gap-1 px-2 py-0.5 rounded-full"
-            style={{ backgroundColor: 'rgba(35,116,77,0.12)' }}
+            style={{ backgroundColor: TINT.primarySubtle }}
           >
             <Check size={11} color="#23744D" strokeWidth={2.5} />
             <Text className="font-sans text-[11px] font-semibold text-primary">
@@ -632,44 +632,37 @@ export default function SettingsPage() {
 
   return (
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
-      {/* Header */}
-      <View className="flex-row items-center px-3 pt-2 pb-3 gap-1">
-        <Pressable
-          onPress={handleBack}
-          hitSlop={8}
-          className="w-9 h-9 items-center justify-center rounded-full active:opacity-70"
-        >
-          <ChevronLeft size={22} color={TC.icon} strokeWidth={2} />
-        </Pressable>
-        <View className="flex-1">
-          <Text className="font-display text-base text-foreground">Settings</Text>
-          <Text className="font-sans text-[11px] text-muted-foreground">
-            {hasUnsavedChanges
-              ? 'Unsaved changes'
-              : 'Manage your account and preferences'}
-          </Text>
-        </View>
-        <Pressable
-          onPress={saveAll}
-          disabled={!hasUnsavedChanges || savingAll}
-          hitSlop={6}
-          className={`rounded-xl px-3 py-1.5 ${
-            hasUnsavedChanges ? 'bg-primary active:opacity-80' : 'bg-muted'
-          }`}
-        >
-          {savingAll ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <Text
-              className={`font-sans text-sm font-semibold ${
-                hasUnsavedChanges ? 'text-white' : 'text-muted-foreground'
-              }`}
-            >
-              Save
-            </Text>
-          )}
-        </Pressable>
-      </View>
+      <ScreenHeader
+        title="Settings"
+        subtitle={
+          hasUnsavedChanges
+            ? 'Unsaved changes'
+            : 'Manage your account and preferences'
+        }
+        onBack={handleBack}
+        rightAction={
+          <Pressable
+            onPress={saveAll}
+            disabled={!hasUnsavedChanges || savingAll}
+            hitSlop={6}
+            className={`rounded-xl px-3 py-1.5 ${
+              hasUnsavedChanges ? 'bg-primary active:opacity-80' : 'bg-muted'
+            }`}
+          >
+            {savingAll ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text
+                className={`font-sans text-sm font-semibold ${
+                  hasUnsavedChanges ? 'text-white' : 'text-muted-foreground'
+                }`}
+              >
+                Save
+              </Text>
+            )}
+          </Pressable>
+        }
+      />
 
       <ScrollView
         className="flex-1"

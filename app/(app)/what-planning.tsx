@@ -27,6 +27,7 @@ import {
 } from 'lucide-react-native';
 import { TC } from '@/lib/theme';
 
+import { TINT } from '@/lib/colors';
 interface PathProps {
   icon: React.ReactNode;
   /** Background color for the icon tile */
@@ -54,7 +55,7 @@ function PathRow({ icon, iconBg, title, subtitle, onPress }: PathProps) {
           {subtitle}
         </Text>
       </View>
-      <ChevronRight size={16} color="rgba(146,146,152,0.5)" strokeWidth={2} />
+      <ChevronRight size={16} color={TINT.graySolid} strokeWidth={2} />
     </Pressable>
   );
 }
@@ -90,7 +91,7 @@ export default function WhatPlanningScreen() {
 
         <PathRow
           icon={<CalendarCheck size={20} color="#23744D" strokeWidth={2} />}
-          iconBg="rgba(35,116,77,0.12)"
+          iconBg={TINT.primarySubtle}
           title="Find time with friends"
           subtitle="Pick friends, see when everyone's free, and lock in a plan."
           onPress={() => go('/(app)/find-time')}
@@ -98,7 +99,7 @@ export default function WhatPlanningScreen() {
 
         <PathRow
           icon={<Sparkles size={20} color="#DFA53A" strokeWidth={2} />}
-          iconBg="rgba(223,165,58,0.15)"
+          iconBg={TINT.marigoldSubtle}
           title="Find friends to join"
           subtitle="Open call: 'I'm getting drinks Friday — who's in?' No invitee list needed."
           onPress={() => go('/(app)/new-plan?openInvite=true')}
@@ -106,7 +107,7 @@ export default function WhatPlanningScreen() {
 
         <PathRow
           icon={<Plane size={20} color="#23744D" strokeWidth={2} />}
-          iconBg="rgba(35,116,77,0.12)"
+          iconBg={TINT.primarySubtle}
           title="Go somewhere"
           subtitle="Mark a trip on your calendar so friends know you're traveling."
           onPress={() => go('/(app)/new-trip')}
@@ -116,7 +117,7 @@ export default function WhatPlanningScreen() {
 
         <PathRow
           icon={<UserPlus size={20} color="#D46549" strokeWidth={2} />}
-          iconBg="rgba(212,101,73,0.12)"
+          iconBg={TINT.secondarySubtle}
           title="Invite friends to Parade"
           subtitle="Share a link or find people already on the app."
           onPress={() => go('/(app)/add-friend')}

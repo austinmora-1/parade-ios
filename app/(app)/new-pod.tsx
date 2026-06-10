@@ -34,6 +34,7 @@ import {
 import { Avatar } from '@/components/primitives/Avatar';
 import { TC } from '@/lib/theme';
 
+import { TINT } from '@/lib/colors';
 function FieldLabel({ children }: { children: string }) {
   return (
     <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
@@ -250,7 +251,7 @@ export default function NewPodScreen() {
                             style={{
                               width: 22, height: 22, borderRadius: 6,
                               borderWidth: 1.5,
-                              borderColor: checked ? '#23744D' : 'rgba(146,146,152,0.4)',
+                              borderColor: checked ? '#23744D' : TINT.grayStrong,
                               backgroundColor: checked ? '#23744D' : 'transparent',
                               alignItems: 'center', justifyContent: 'center',
                             }}

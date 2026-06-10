@@ -21,7 +21,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useCallback } from 'react';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import * as Haptics from 'expo-haptics';
-import { ChevronLeft, Plane, Check, MapPin } from 'lucide-react-native';
+import { Plane, Check, MapPin } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import {
   useTripProposal,
@@ -29,8 +29,9 @@ import {
   useFinalizeTripProposal,
 } from '@/hooks/useTripProposal';
 import { TripActivitiesSection } from '@/components/trip/TripActivitiesSection';
-import { TC } from '@/lib/theme';
+import { ScreenHeader } from '@/components/primitives/ScreenHeader';
 
+import { TINT } from '@/lib/colors';
 export default function TripProposalScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
@@ -51,22 +52,7 @@ export default function TripProposalScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
-      {/* Header */}
-      <View className="flex-row items-center px-3 py-2 gap-1">
-        <Pressable
-          onPress={() => router.back()}
-          hitSlop={8}
-          className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
-        >
-          <ChevronLeft size={22} color={TC.icon} strokeWidth={2} />
-        </Pressable>
-        <Text
-          className="font-display text-base text-foreground flex-1"
-          numberOfLines={1}
-        >
-          {proposal?.name ?? 'Trip proposal'}
-        </Text>
-      </View>
+      <ScreenHeader title={proposal?.name ?? 'Trip proposal'} />
 
       {isLoading ? (
         <ActivityIndicator className="mt-16" color="#23744D" />
@@ -159,7 +145,7 @@ export default function TripProposalScreen() {
                           style={{
                             width: 22, height: 22, borderRadius: 999,
                             borderWidth: 2,
-                            borderColor: isMyPick ? '#23744D' : 'rgba(146,146,152,0.4)',
+                            borderColor: isMyPick ? '#23744D' : TINT.grayStrong,
                             backgroundColor: isMyPick ? '#23744D' : 'transparent',
                             alignItems: 'center', justifyContent: 'center',
                           }}

@@ -7,6 +7,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useColorScheme } from 'nativewind';
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Stop, Rect } from 'react-native-svg';
 import { Bell, Plus, MapPin, ChevronRight } from 'lucide-react-native';
 import { router } from 'expo-router';
@@ -30,6 +31,8 @@ import { PushNotificationPrompt } from '@/components/dashboard/PushNotificationP
 import { HangRequestsWidget } from '@/components/dashboard/HangRequestsWidget';
 import { DiscoverableInvitesWidget } from '@/components/dashboard/DiscoverableInvitesWidget';
 import { TripProposalInvitesWidget } from '@/components/dashboard/TripProposalInvitesWidget';
+import { TINT } from '@/lib/colors';
+import { TC } from '@/lib/theme';
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
@@ -112,11 +115,41 @@ function useUnreadCount(userId: string | undefined) {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function greeting(name: string) {
-  const hour = new Date().getHours();
-  if (hour < 12) return `Good morning, ${name} ☀️`;
-  if (hour < 17) return `Hey, ${name} 👋`;
-  return `Good evening, ${name} 🌙`;
+/**
+ * Time-of-day greeting + hero tint — mirrors the PWA's GreetingHeader
+ * (greeting text and 135° translucent gradient stops, light/dark variants).
+ */
+function getGreetingConfig(hour: number, dark: boolean) {
+  if (hour >= 5 && hour < 12) {
+    return {
+      greeting: 'Good morning',
+      stops: dark
+        ? [['#175B3A', 0.28, '0%'], ['#67B28E', 0.12, '45%'], ['#29538B', 0.22, '100%']]
+        : [['#175B3A', 0.22, '0%'], ['#67B28E', 0.10, '45%'], ['#29538B', 0.18, '100%']],
+    };
+  }
+  if (hour >= 12 && hour < 17) {
+    return {
+      greeting: 'Good afternoon',
+      stops: dark
+        ? [['#29538B', 0.26, '0%'], ['#508CB4', 0.12, '45%'], ['#175B3A', 0.26, '100%']]
+        : [['#29538B', 0.20, '0%'], ['#508CB4', 0.10, '45%'], ['#175B3A', 0.22, '100%']],
+    };
+  }
+  if (hour >= 17 && hour < 21) {
+    return {
+      greeting: 'Good evening',
+      stops: dark
+        ? [['#175B3A', 0.26, '0%'], ['#3C6446', 0.14, '40%'], ['#29538B', 0.30, '100%']]
+        : [['#175B3A', 0.20, '0%'], ['#3C6446', 0.12, '40%'], ['#29538B', 0.24, '100%']],
+    };
+  }
+  return {
+    greeting: 'Night owl mode',
+    stops: dark
+      ? [['#29538B', 0.28, '0%'], ['#175B3A', 0.20, '50%'], ['#64A0C8', 0.16, '100%']]
+      : [['#29538B', 0.22, '0%'], ['#175B3A', 0.14, '50%'], ['#64A0C8', 0.12, '100%']],
+  };
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -220,12 +253,9 @@ export default function HomeTab() {
     return `${city} · ${format(start, 'MMM d')}`;
   }, [nextTrip]);
 
-  const firstName = profile
-    ? formatDisplayName({
-        firstName: profile.first_name,
-        displayName: profile.display_name,
-      }).split(' ')[0]
-    : '';
+  // Time-of-day greeting + tint (no username — matches PWA GreetingHeader)
+  const { colorScheme } = useColorScheme();
+  const heroCfg = getGreetingConfig(new Date().getHours(), colorScheme === 'dark');
 
   const hasUnread = (unreadCount ?? 0) > 0;
 
@@ -233,13 +263,13 @@ export default function HomeTab() {
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
       <ScrollView
         className="flex-1"
-        contentContainerClassName="pb-24"
+        contentContainerClassName="pb-10"
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#23744D" />
         }
       >
         {/* ── Greeting hero (gradient banner) ─────────────────────────────── */}
-        <View className="px-4 pt-3 pb-4">
+        <View className="px-5 pt-3 pb-4">
           <View
             onLayout={(e) => {
               const { width, height } = e.nativeEvent.layout;
@@ -250,12 +280,8 @@ export default function HomeTab() {
               );
             }}
             style={{
-              borderRadius: 24,
+              borderRadius: 16,
               overflow: 'hidden',
-              shadowColor: '#040A2A',
-              shadowOpacity: 0.12,
-              shadowRadius: 12,
-              shadowOffset: { width: 0, height: 4 },
             }}
           >
             {/* SVG gradient background — explicit pixel dims from onLayout so
@@ -270,10 +296,14 @@ export default function HomeTab() {
               >
                 <Defs>
                   <SvgLinearGradient id="heroGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                    {/* forest → parade → mint */}
-                    <Stop offset="0%"   stopColor="#143D29" stopOpacity="1" />
-                    <Stop offset="55%"  stopColor="#23744D" stopOpacity="1" />
-                    <Stop offset="100%" stopColor="#9ED8B5" stopOpacity="1" />
+                    {heroCfg.stops.map(([color, opacity, offset]) => (
+                      <Stop
+                        key={String(offset)}
+                        offset={String(offset)}
+                        stopColor={String(color)}
+                        stopOpacity={Number(opacity)}
+                      />
+                    ))}
                   </SvgLinearGradient>
                 </Defs>
                 <Rect
@@ -285,7 +315,7 @@ export default function HomeTab() {
                 />
               </Svg>
             )}
-            <View className="flex-row items-center justify-between px-5 py-7">
+            <View className="flex-row items-center justify-between px-5 py-4">
               {/* Left: greeting + date/location */}
               <View className="flex-1 pr-3">
                 {profileLoading ? (
@@ -296,21 +326,21 @@ export default function HomeTab() {
                 ) : (
                   <>
                     <Text
-                      className="text-white"
+                      className="text-foreground"
                       style={{
                         fontFamily: 'Fraunces_700Bold',
-                        fontSize: 19,
-                        lineHeight: 24,
+                        fontSize: 26,
+                        lineHeight: 31,
                       }}
                       numberOfLines={1}
                       adjustsFontSizeToFit
                       minimumFontScale={0.8}
                     >
-                      {greeting(firstName || 'there')}
+                      {heroCfg.greeting}
                     </Text>
                     <View className="flex-row items-center gap-3 mt-1.5">
                       <Text
-                        className="text-white/85"
+                        className="text-muted-foreground"
                         style={{
                           fontFamily: 'Inter_400Regular',
                           fontSize: 12,
@@ -327,9 +357,9 @@ export default function HomeTab() {
                         hitSlop={4}
                         className="flex-row items-center gap-1 active:opacity-70"
                       >
-                        <MapPin size={11} color="#FFFFFF" strokeWidth={2} />
+                        <MapPin size={11} color={TC.primary} strokeWidth={2} />
                         <Text
-                          className="text-white"
+                          className="text-primary"
                           style={{
                             fontFamily: 'Inter_600SemiBold',
                             fontSize: 12,
@@ -348,30 +378,41 @@ export default function HomeTab() {
               <View className="flex-row items-center gap-2">
                 <Pressable
                   onPress={() => router.push('/(app)/notifications')}
-                  className="w-10 h-10 rounded-full bg-white/20 items-center justify-center active:opacity-70"
+                  className="w-9 h-9 rounded-full bg-foreground/10 items-center justify-center active:opacity-70"
                   hitSlop={6}
                 >
-                  <Bell size={18} color="#FFFFFF" strokeWidth={2} />
+                  <Bell size={17} color={TC.icon} strokeWidth={2} />
                   {hasUnread && (
-                    <View className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-ember" />
+                    <View className="absolute top-1 right-1 w-2 h-2 rounded-full bg-ember" />
                   )}
                 </Pressable>
+                {/* FAB — parade→mint gradient circle, matches the PWA */}
                 <Pressable
                   onPress={() => router.push('/(app)/what-planning')}
-                  className="w-11 h-11 rounded-full items-center justify-center active:opacity-80"
+                  className="w-9 h-9 rounded-full items-center justify-center overflow-hidden active:opacity-80"
                   hitSlop={6}
                   style={{
-                    backgroundColor: '#23744D',
-                    borderWidth: 1.5,
-                    borderColor: 'rgba(255,255,255,0.6)',
-                    shadowColor: '#040A2A',
-                    shadowOpacity: 0.22,
-                    shadowRadius: 8,
-                    shadowOffset: { width: 0, height: 3 },
+                    shadowColor: '#23744D',
+                    shadowOpacity: 0.5,
+                    shadowRadius: 6,
+                    shadowOffset: { width: 0, height: 4 },
                     elevation: 6,
                   }}
                 >
-                  <Plus size={22} color="#FFFFFF" strokeWidth={2.5} />
+                  <Svg
+                    style={{ position: 'absolute', top: 0, left: 0 }}
+                    width={36}
+                    height={36}
+                  >
+                    <Defs>
+                      <SvgLinearGradient id="fabGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <Stop offset="0%" stopColor="#23744D" stopOpacity="1" />
+                        <Stop offset="100%" stopColor="#67B28E" stopOpacity="1" />
+                      </SvgLinearGradient>
+                    </Defs>
+                    <Rect x="0" y="0" width={36} height={36} fill="url(#fabGrad)" />
+                  </Svg>
+                  <Plus size={20} color="#FFFFFF" strokeWidth={2.5} />
                 </Pressable>
               </View>
             </View>
@@ -387,7 +428,7 @@ export default function HomeTab() {
             >
               <View
                 className="w-10 h-10 rounded-xl items-center justify-center"
-                style={{ backgroundColor: 'rgba(35,116,77,0.15)' }}
+                style={{ backgroundColor: TINT.primaryBorder }}
               >
                 <Text style={{ fontSize: 18 }}>🧳</Text>
               </View>

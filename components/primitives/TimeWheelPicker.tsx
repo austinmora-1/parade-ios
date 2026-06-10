@@ -18,6 +18,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Modal, View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import * as Haptics from 'expo-haptics';
 
+import { TINT } from '@/lib/colors';
 const ROW_HEIGHT = 44;
 const VISIBLE_ROWS = 5;            // odd number so middle row is centered
 const PICKER_HEIGHT = ROW_HEIGHT * VISIBLE_ROWS;
@@ -181,8 +182,8 @@ export function TimeWheelPicker({
                 height: ROW_HEIGHT,
                 borderTopWidth: 1,
                 borderBottomWidth: 1,
-                borderColor: 'rgba(35,116,77,0.2)',
-                backgroundColor: 'rgba(35,116,77,0.05)',
+                borderColor: TINT.primaryBorder,
+                backgroundColor: TINT.primaryFaint,
                 borderRadius: 10,
               }}
             />
@@ -217,7 +218,7 @@ export function TimeWheelPicker({
                         fontFamily: 'Fraunces_700Bold',
                         fontSize: isSelected ? 22 : 18,
                         color: disabled
-                          ? 'rgba(146,146,152,0.35)'
+                          ? TINT.grayBorder
                           : isSelected
                             ? '#23744D'
                             : 'rgba(20,20,25,0.55)',

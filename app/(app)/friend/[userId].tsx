@@ -16,7 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useCallback, useMemo } from 'react';
-import { ChevronLeft, CalendarDays, MapPin, Flame, Clock } from 'lucide-react-native';
+import { CalendarDays, MapPin, Flame, Clock } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
 import { format, isToday, parseISO, isTomorrow } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
@@ -33,6 +33,8 @@ import { formatDisplayName } from '@/lib/utils';
 import { TIME_SLOT_LABELS } from '@/types/planner';
 import type { TimeSlot } from '@/types/planner';
 import { TC } from '@/lib/theme';
+import { ScreenHeader } from '@/components/primitives/ScreenHeader';
+import { TINT } from '@/lib/colors';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -198,22 +200,7 @@ export default function FriendProfileScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
-      {/* Header */}
-      <View className="flex-row items-center px-3 py-2 gap-1">
-        <Pressable
-          onPress={() => router.back()}
-          hitSlop={8}
-          className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
-        >
-          <ChevronLeft size={22} color={TC.icon} strokeWidth={2} />
-        </Pressable>
-        <Text
-          className="font-display text-base text-foreground flex-1"
-          numberOfLines={1}
-        >
-          {name || 'Friend'}
-        </Text>
-      </View>
+      <ScreenHeader title={name || 'Friend'} />
 
       {isLoading ? (
         <ActivityIndicator className="mt-16" color="#23744D" />
@@ -238,17 +225,13 @@ export default function FriendProfileScreen() {
               </View>
             ) : (
               <View
-                style={{ height: 96, backgroundColor: 'rgba(35,116,77,0.12)' }}
+                style={{ height: 96, backgroundColor: TINT.primarySubtle }}
               />
             )}
 
             <View className="px-4 pb-4">
               {/* Avatar overlapping banner — white ring */}
-              <View
-                style={{
-                  marginTop: -36, marginBottom: 12, alignSelf: 'flex-start',
-                }}
-              >
+              <View className="-mt-9 mb-3 self-start">
                 <View
                   style={{
                     borderWidth: 4, borderColor: '#FFFFFF', borderRadius: 999,
@@ -375,7 +358,7 @@ export default function FriendProfileScreen() {
                       today
                         ? { borderWidth: 2, borderColor: '#23744D' }
                         : mutual
-                          ? { borderWidth: 1, borderColor: 'rgba(35,116,77,0.4)' }
+                          ? { borderWidth: 1, borderColor: TINT.primaryRing }
                           : { borderWidth: 1, borderColor: 'rgba(0,0,0,0.08)' }
                     }
                   >

@@ -15,6 +15,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 
+import { TINT } from '@/lib/colors';
 const LIGHT = {
   active:   '#23744D',  // parade green
   inactive: '#929298',  // elephant gray
@@ -60,7 +61,7 @@ function ProfileTabIcon({ color, focused, avatarUrl }: { color: string; focused:
         borderRadius: 13,
         overflow: 'hidden',
         borderWidth: focused ? 2 : 1,
-        borderColor: focused ? PARADE_GREEN : 'rgba(146,146,152,0.5)',
+        borderColor: focused ? PARADE_GREEN : TINT.graySolid,
       }}
     >
       <Image source={{ uri: avatarUrl }} style={{ width: '100%', height: '100%' }} />

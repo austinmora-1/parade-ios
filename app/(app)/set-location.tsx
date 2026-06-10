@@ -28,6 +28,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { LocationAutocomplete } from '@/components/primitives/LocationAutocomplete';
 import { format } from 'date-fns';
 import { TC } from '@/lib/theme';
+import { TINT } from '@/lib/colors';
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
@@ -187,7 +188,7 @@ export default function SetLocationScreen() {
                     height: 22,
                     borderRadius: 6,
                     borderWidth: 1.5,
-                    borderColor: saveAsHome ? '#23744D' : 'rgba(146,146,152,0.4)',
+                    borderColor: saveAsHome ? '#23744D' : TINT.grayStrong,
                     backgroundColor: saveAsHome ? '#23744D' : 'transparent',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -219,7 +220,7 @@ export default function SetLocationScreen() {
                     height: 22,
                     borderRadius: 6,
                     borderWidth: 1.5,
-                    borderColor: markAway ? '#D46549' : 'rgba(146,146,152,0.4)',
+                    borderColor: markAway ? '#D46549' : TINT.grayStrong,
                     backgroundColor: markAway ? '#D46549' : 'transparent',
                     alignItems: 'center',
                     justifyContent: 'center',

@@ -15,6 +15,7 @@ import { usePlannerStore } from '@/stores/plannerStore';
 import { TIME_SLOT_LABELS } from '@/types/planner';
 import type { Plan, TimeSlot } from '@/types/planner';
 
+import { TINT } from '@/lib/colors';
 export function SmartPrimaryCTA() {
   const plans = usePlannerStore((s) => s.plans);
 
@@ -49,7 +50,7 @@ export function SmartPrimaryCTA() {
     >
       <View
         className="w-10 h-10 rounded-xl items-center justify-center"
-        style={{ backgroundColor: 'rgba(35,116,77,0.12)' }}
+        style={{ backgroundColor: TINT.primarySubtle }}
       >
         <CalendarCheck size={18} color="#23744D" strokeWidth={2} />
       </View>

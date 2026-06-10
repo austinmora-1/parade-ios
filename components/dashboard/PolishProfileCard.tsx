@@ -18,6 +18,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { useDismissed } from './dismissCache';
 
+import { TINT } from '@/lib/colors';
 const DISMISS_KEY = 'polishProfile';
 
 function useProfilePreferences(userId: string | undefined) {
@@ -69,7 +70,7 @@ export function PolishProfileCard() {
     >
       <View
         className="w-10 h-10 rounded-xl items-center justify-center"
-        style={{ backgroundColor: 'rgba(223,165,58,0.15)' }}
+        style={{ backgroundColor: TINT.marigoldSubtle }}
       >
         <Sparkles size={18} color="#DFA53A" strokeWidth={2} />
       </View>

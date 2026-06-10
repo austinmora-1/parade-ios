@@ -44,6 +44,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { syncCalendarBusyTimes } from '@/lib/calendarSync';
 import { TC } from '@/lib/theme';
+import { TINT } from '@/lib/colors';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -89,7 +90,7 @@ function ProgressBar({ step }: { step: number }) {
           key={i}
           className="flex-1 h-1 rounded-full"
           style={{
-            backgroundColor: i <= step ? '#23744D' : 'rgba(146,146,152,0.25)',
+            backgroundColor: i <= step ? '#23744D' : TINT.grayBorder,
           }}
         />
       ))}
@@ -106,7 +107,7 @@ function StepHeading({ icon, title, subtitle }: {
     <View className="items-center gap-2 py-4">
       <View
         className="w-12 h-12 rounded-2xl items-center justify-center"
-        style={{ backgroundColor: 'rgba(35,116,77,0.10)' }}
+        style={{ backgroundColor: TINT.primarySubtle }}
       >
         {icon}
       </View>

@@ -12,6 +12,7 @@ import { isToday, isThisWeek } from 'date-fns';
 import { useWeeklyIntention } from '@/hooks/useWeeklyIntention';
 import { usePlannerStore } from '@/stores/plannerStore';
 
+import { TINT } from '@/lib/colors';
 const ENERGY_EMOJI: Record<string, string> = {
   low: '🛋️', medium: '☕', high: '🎉',
 };
@@ -55,7 +56,7 @@ export function WeeklyIntentionCard({
         <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
           This week
         </Text>
-        <ChevronRight size={14} color="rgba(146,146,152,0.5)" strokeWidth={2} className="ml-auto" />
+        <ChevronRight size={14} color={TINT.graySolid} strokeWidth={2} className="ml-auto" />
       </View>
 
       {hasIntention ? (

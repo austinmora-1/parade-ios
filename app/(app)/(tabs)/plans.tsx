@@ -45,6 +45,7 @@ import { TIME_SLOT_LABELS } from '@/types/planner';
 import type { Plan, DayAvailability, TimeSlot } from '@/types/planner';
 import { activityAccent } from '@/lib/activityColors';
 import { TC } from '@/lib/theme';
+import { TINT } from '@/lib/colors';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -91,13 +92,13 @@ function AvailPill({ count, hasData }: AvailInfo) {
   let textColor: string;
 
   if (count === 0) {
-    label = 'Booked'; bg = 'rgba(212,101,73,0.12)'; textColor = '#D46549';
+    label = 'Booked'; bg = TINT.secondarySubtle; textColor = '#D46549';
   } else if (count <= 2) {
-    label = 'Some time'; bg = 'rgba(180,83,9,0.10)'; textColor = '#92400E';
+    label = 'Some time'; bg = TINT.amberSubtle; textColor = '#92400E';
   } else if (count <= 4) {
-    label = 'Mostly open'; bg = 'rgba(35,116,77,0.10)'; textColor = '#23744D';
+    label = 'Mostly open'; bg = TINT.primarySubtle; textColor = '#23744D';
   } else {
-    label = 'Open'; bg = 'rgba(35,116,77,0.20)'; textColor = '#1A5C3A';
+    label = 'Open'; bg = TINT.primaryBorder; textColor = '#1A5C3A';
   }
 
   return (

@@ -41,6 +41,7 @@ import { resolveEffectiveCity, citiesMatch, normalizeCity } from '@/lib/effectiv
 import type { TimeSlot } from '@/types/planner';
 import { TC } from '@/lib/theme';
 
+import { TINT } from '@/lib/colors';
 const OVERLAP_DAYS = 182; // ~6 months
 const SLOT_COLS: { col: string; slot: TimeSlot }[] = [
   { col: 'early_morning', slot: 'early-morning' },
@@ -96,7 +97,7 @@ function StepDots({ step }: { step: number }) {
             width: i === step ? 18 : 6,
             height: 6,
             borderRadius: 3,
-            backgroundColor: i === step ? '#23744D' : 'rgba(146,146,152,0.35)',
+            backgroundColor: i === step ? '#23744D' : TINT.grayBorder,
           }}
         />
       ))}
@@ -736,7 +737,7 @@ export default function FindTimeScreen() {
                                   <Text className="font-sans text-sm font-semibold text-foreground">{SLOT_LABEL[slot]}</Text>
                                   <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">{slotRangeLabel(slot)}</Text>
                                 </View>
-                                <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: selected ? '#23744D' : 'rgba(146,146,152,0.4)', backgroundColor: selected ? '#23744D' : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
+                                <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: selected ? '#23744D' : TINT.grayStrong, backgroundColor: selected ? '#23744D' : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
                                   {selected && <Check size={13} color="#FFFFFF" strokeWidth={2.5} />}
                                 </View>
                               </Pressable>

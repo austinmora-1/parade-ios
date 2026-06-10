@@ -29,6 +29,7 @@ import { Skeleton } from '@/components/primitives/Skeleton';
 import { formatDisplayName } from '@/lib/utils';
 import { TC } from '@/lib/theme';
 
+import { TINT } from '@/lib/colors';
 interface ProfileMatch {
   user_id:      string;
   display_name: string | null;
@@ -258,7 +259,7 @@ export default function AddFriendScreen() {
                     {connected ? (
                       <View
                         className="flex-row items-center gap-1 px-2.5 py-1 rounded-full"
-                        style={{ backgroundColor: 'rgba(35,116,77,0.12)' }}
+                        style={{ backgroundColor: TINT.primarySubtle }}
                       >
                         <Check size={12} color="#23744D" strokeWidth={2.5} />
                         <Text className="font-sans text-xs font-semibold text-primary">

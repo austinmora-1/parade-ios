@@ -39,6 +39,7 @@ import {
 import { usePods } from '@/hooks/usePods';
 import { Avatar } from '@/components/primitives/Avatar';
 import { Skeleton } from '@/components/primitives/Skeleton';
+import { TINT } from '@/lib/colors';
 
 // ─── Vibe emoji map (matches dashboard) ──────────────────────────────────────
 
@@ -61,9 +62,9 @@ function NumericBubble({
   tone: 'green' | 'amber' | 'muted';
 }) {
   const colors = {
-    green: { bg: 'rgba(35,116,77,0.12)',  fg: '#23744D' },
-    amber: { bg: 'rgba(180,83,9,0.12)',   fg: '#92400E' },
-    muted: { bg: 'rgba(146,146,152,0.18)', fg: '#929298' },
+    green: { bg: TINT.primarySubtle,  fg: '#23744D' },
+    amber: { bg: TINT.amberSubtle,   fg: '#92400E' },
+    muted: { bg: TINT.grayBorder, fg: '#929298' },
   }[tone];
 
   return (
@@ -195,7 +196,7 @@ function FriendRow({
             onPress={onDecline}
             hitSlop={6}
             className="w-8 h-8 rounded-full items-center justify-center active:opacity-70"
-            style={{ backgroundColor: 'rgba(212,101,73,0.12)' }}
+            style={{ backgroundColor: TINT.secondarySubtle }}
           >
             <X size={16} color="#D46549" strokeWidth={2.5} />
           </Pressable>
@@ -214,7 +215,7 @@ function FriendRow({
           </Text>
         </View>
       ) : (
-        <ChevronRight size={16} color="rgba(146,146,152,0.4)" strokeWidth={2} />
+        <ChevronRight size={16} color={TINT.grayStrong} strokeWidth={2} />
       )}
     </Pressable>
   );
@@ -368,7 +369,7 @@ export default function FriendsTab() {
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
       <ScrollView
         className="flex-1"
-        contentContainerClassName="pb-8"
+        contentContainerClassName="pb-10"
         keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl

@@ -15,6 +15,7 @@ import { TIME_SLOT_LABELS } from '@/types/planner';
 import type { TimeSlot } from '@/types/planner';
 import { activityAccent } from '@/lib/activityColors';
 
+import { TINT } from '@/lib/colors';
 const DEFAULT_ACCENT = '#929298'; // gray for past plans
 
 function dayLabel(d: Date): string {
@@ -128,7 +129,7 @@ export function PlanHistorySection() {
                   ) : null}
                 </View>
                 <View className="items-center justify-center pr-3">
-                  <ChevronRight size={14} color="rgba(146,146,152,0.5)" strokeWidth={2} />
+                  <ChevronRight size={14} color={TINT.graySolid} strokeWidth={2} />
                 </View>
               </Pressable>
             );

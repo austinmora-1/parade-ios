@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ChevronLeft, Calendar, Clock, MapPin, Users, Check, X, MoreHorizontal, AlertCircle } from 'lucide-react-native';
+import { Calendar, Clock, MapPin, Users, Check, X, MoreHorizontal, AlertCircle } from 'lucide-react-native';
 import { useActionSheet } from '@expo/react-native-action-sheet';
 import {
   usePlanChangeRequest,
@@ -48,6 +48,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { TC } from '@/lib/theme';
+import { ScreenHeader } from '@/components/primitives/ScreenHeader';
+import { TINT } from '@/lib/colors';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -236,44 +238,33 @@ export default function PlanDetailScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
-      {/* Header */}
-      <View className="flex-row items-center px-3 py-2 gap-1">
-        <Pressable
-          onPress={() => router.back()}
-          hitSlop={8}
-          className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
-        >
-          <ChevronLeft size={22} color={TC.icon} strokeWidth={2} />
-        </Pressable>
-        <Text
-          className="font-display text-base text-foreground flex-1"
-          numberOfLines={1}
-        >
-          {plan?.title ?? 'Plan'}
-        </Text>
-        {(isOwner || myParticipant) && (
-          <Pressable
-            onPress={() => {
-              if (isOwner) {
-                openOwnerMenu();
-              } else {
-                // Participant menu: just propose change
-                Haptics.selectionAsync();
-                showActionSheetWithOptions(
-                  { options: ['Propose change', 'Cancel'], cancelButtonIndex: 1 },
-                  (i) => {
-                    if (i === 0) router.push(`/(app)/propose-change?planId=${planId}`);
-                  },
-                );
-              }
-            }}
-            hitSlop={8}
-            className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
-          >
-            <MoreHorizontal size={20} color={TC.icon} strokeWidth={2} />
-          </Pressable>
-        )}
-      </View>
+      <ScreenHeader
+        title={plan?.title ?? 'Plan'}
+        rightAction={
+          isOwner || myParticipant ? (
+            <Pressable
+              onPress={() => {
+                if (isOwner) {
+                  openOwnerMenu();
+                } else {
+                  // Participant menu: just propose change
+                  Haptics.selectionAsync();
+                  showActionSheetWithOptions(
+                    { options: ['Propose change', 'Cancel'], cancelButtonIndex: 1 },
+                    (i) => {
+                      if (i === 0) router.push(`/(app)/propose-change?planId=${planId}`);
+                    },
+                  );
+                }
+              }}
+              hitSlop={8}
+              className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
+            >
+              <MoreHorizontal size={20} color={TC.icon} strokeWidth={2} />
+            </Pressable>
+          ) : undefined
+        }
+      />
 
       {isLoading ? (
         <ActivityIndicator className="mt-16" color="#23744D" />
@@ -312,7 +303,7 @@ export default function PlanDetailScreen() {
           {pendingChange && (
             <View
               className="bg-card rounded-2xl border overflow-hidden shadow-sm"
-              style={{ borderColor: 'rgba(180,83,9,0.30)' }}
+              style={{ borderColor: TINT.amberStrong }}
             >
               <View className="px-4 py-3 gap-1">
                 <View className="flex-row items-center gap-1.5">
@@ -463,7 +454,7 @@ export default function PlanDetailScreen() {
                           style={{
                             width: 22, height: 22, borderRadius: 999,
                             borderWidth: 2,
-                            borderColor: isMyPick ? '#23744D' : 'rgba(146,146,152,0.4)',
+                            borderColor: isMyPick ? '#23744D' : TINT.grayStrong,
                             backgroundColor: isMyPick ? '#23744D' : 'transparent',
                             alignItems: 'center', justifyContent: 'center',
                           }}
@@ -540,7 +531,7 @@ export default function PlanDetailScreen() {
               {myRsvp === 'accepted' && (
                 <View
                   className="flex-row items-center gap-2 rounded-2xl px-4 py-3.5 shadow-sm"
-                  style={{ backgroundColor: 'rgba(35,116,77,0.10)', borderWidth: 1, borderColor: 'rgba(35,116,77,0.25)' }}
+                  style={{ backgroundColor: TINT.primarySubtle, borderWidth: 1, borderColor: TINT.primaryBorder }}
                 >
                   <Check size={18} color="#23744D" strokeWidth={2.5} />
                   <Text className="flex-1 font-sans text-sm font-semibold text-primary">
@@ -561,7 +552,7 @@ export default function PlanDetailScreen() {
               {myRsvp === 'declined' && (
                 <View
                   className="flex-row items-center gap-2 rounded-2xl px-4 py-3.5 shadow-sm"
-                  style={{ backgroundColor: 'rgba(212,101,73,0.08)', borderWidth: 1, borderColor: 'rgba(212,101,73,0.20)' }}
+                  style={{ backgroundColor: TINT.secondarySubtle, borderWidth: 1, borderColor: TINT.secondaryBorder }}
                 >
                   <X size={18} color="#D46549" strokeWidth={2.5} />
                   <Text className="flex-1 font-sans text-sm font-semibold text-secondary">
@@ -623,7 +614,7 @@ export default function PlanDetailScreen() {
           {!isOwner && !myParticipant && (
             <View
               className="bg-card rounded-2xl border overflow-hidden shadow-sm"
-              style={{ borderColor: 'rgba(35,116,77,0.30)' }}
+              style={{ borderColor: TINT.primaryStrong }}
             >
               <View className="px-4 py-3 gap-1">
                 <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-primary">
@@ -682,7 +673,7 @@ export default function PlanDetailScreen() {
           {isOwner && (pendingJoinRequests?.length ?? 0) > 0 && (
             <View
               className="bg-card rounded-2xl border overflow-hidden shadow-sm"
-              style={{ borderColor: 'rgba(35,116,77,0.30)' }}
+              style={{ borderColor: TINT.primaryStrong }}
             >
               <View className="px-4 py-3 border-b border-border/20">
                 <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-primary">
@@ -705,7 +696,7 @@ export default function PlanDetailScreen() {
                       }}
                       hitSlop={4}
                       className="w-8 h-8 rounded-full items-center justify-center"
-                      style={{ backgroundColor: 'rgba(212,101,73,0.12)' }}
+                      style={{ backgroundColor: TINT.secondarySubtle }}
                     >
                       <X size={14} color="#D46549" strokeWidth={2.5} />
                     </Pressable>

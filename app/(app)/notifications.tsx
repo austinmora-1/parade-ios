@@ -23,7 +23,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatDistanceToNow } from 'date-fns';
 import * as Haptics from 'expo-haptics';
 import {
-  ChevronLeft,
   Bell,
   UserPlus,
   CalendarCheck,
@@ -32,7 +31,8 @@ import {
 } from 'lucide-react-native';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { TC } from '@/lib/theme';
+import { ScreenHeader } from '@/components/primitives/ScreenHeader';
+import { TINT } from '@/lib/colors';
 
 // ─── Notification routing ────────────────────────────────────────────────────
 
@@ -226,8 +226,8 @@ export default function NotificationsScreen() {
                       className="w-9 h-9 rounded-xl items-center justify-center"
                       style={{
                         backgroundColor: isUnread
-                          ? 'rgba(35,116,77,0.10)'
-                          : 'rgba(146,146,152,0.10)',
+                          ? TINT.primarySubtle
+                          : TINT.grayFaint,
                       }}
                     >
                       {iconForType(n.type)}
