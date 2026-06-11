@@ -144,6 +144,7 @@ export default function DayDetailScreen() {
   const setLocationStatus  = usePlannerStore((s) => s.setLocationStatus);
   const homeAddress        = usePlannerStore((s) => s.homeAddress);
   const setUserId          = usePlannerStore((s) => s.setUserId);
+  const availabilityMap    = usePlannerStore((s) => s.availabilityMap);
 
   const { data, isLoading, refetch } = useDayData(user?.id, date);
   const [refreshing, setRefreshing] = useState(false);
@@ -198,10 +199,20 @@ export default function DayDetailScreen() {
     locOverride ?? (avail?.location_status === 'away' ? 'away' : 'home');
   const tripLocDirty = tripLoc.trim() !== (avail?.trip_location ?? '').trim();
 
-  /** True if this slot is marked free (optimistic > server) */
+  /** True if this slot is marked free (optimistic > server > store defaults).
+   *  Mirrors how the Plans list resolves availability (mapAvailabilityRow /
+   *  createDefaultAvailability): a null column in an existing row means free,
+   *  and a day with no row at all falls back to the synthesized defaults in
+   *  the planner store so both screens always agree. */
   const slotIsFree = (slotCol: string): boolean => {
     if (slotCol in optimistic) return optimistic[slotCol];
-    return isFree(avail?.[slotCol]);
+    if (avail) {
+      const v = avail[slotCol];
+      return v === null || v === undefined ? true : isFree(v);
+    }
+    const storeDay = date ? availabilityMap[date] : undefined;
+    if (storeDay) return !!storeDay.slots[normalizeSlot(slotCol) as TimeSlot];
+    return true;
   };
 
   const freeCount = SLOTS.filter((s) => slotIsFree(s.col)).length;

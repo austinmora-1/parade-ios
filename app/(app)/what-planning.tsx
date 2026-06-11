@@ -91,6 +91,14 @@ export default function WhatPlanningScreen() {
         </Text>
 
         <PathRow
+          icon={<Zap size={20} color="#23744D" strokeWidth={2} />}
+          iconBg={TINT.primarySubtle}
+          title="Quick plan"
+          subtitle="Already made plans outside Parade? Log them in seconds — no RSVPs."
+          onPress={() => go('/(app)/quick-plan?mode=log')}
+        />
+
+        <PathRow
           icon={<CalendarCheck size={20} color="#23744D" strokeWidth={2} />}
           iconBg={TINT.primarySubtle}
           title="Find time with friends"
@@ -112,14 +120,6 @@ export default function WhatPlanningScreen() {
           title="Go somewhere"
           subtitle="Plan a trip or visit — find weekends that work for everyone."
           onPress={() => go('/(app)/go-somewhere')}
-        />
-
-        <PathRow
-          icon={<Zap size={20} color="#23744D" strokeWidth={2} />}
-          iconBg={TINT.primarySubtle}
-          title="Quick plan"
-          subtitle="Already made plans outside Parade? Log them in seconds — no RSVPs."
-          onPress={() => go('/(app)/quick-plan?mode=log')}
         />
 
         <View className="h-px bg-border/30 my-1 mx-2" />
