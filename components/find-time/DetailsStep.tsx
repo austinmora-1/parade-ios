@@ -3,16 +3,16 @@
  * summary card. Presentational only; form state lives in
  * app/(app)/find-time.tsx.
  */
-import { ScrollView, View, Text, Pressable, TextInput } from 'react-native';
+import { ScrollView, View, Text, TextInput } from 'react-native';
 import { format } from 'date-fns';
-import * as Haptics from 'expo-haptics';
 import { Users as UsersIcon } from 'lucide-react-native';
 import { LocationAutocomplete } from '@/components/primitives/LocationAutocomplete';
 import { slotRangeLabel } from '@/lib/socialSlots';
-import { FieldLabel } from '@/components/find-time/FormBits';
+import { ActivityPicker, type ActivityOption } from '@/components/primitives/ActivityPicker';
+import { FieldLabel } from '@/components/primitives/FieldLabel';
 import type { TimeSlot } from '@/types/planner';
 
-const ACTIVITIES = [
+const ACTIVITIES: ActivityOption[] = [
   { id: 'drinks', label: 'Drinks', emoji: '🍹' },
   { id: 'dinner', label: 'Dinner', emoji: '🍝' },
   { id: 'brunch', label: 'Brunch', emoji: '🥞' },
@@ -68,20 +68,7 @@ export function DetailsStep({
         />
       </View>
 
-      <View>
-        <FieldLabel>Activity</FieldLabel>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2 px-0.5 pb-1">
-          {ACTIVITIES.map((a) => {
-            const selected = activity === a.id;
-            return (
-              <Pressable key={a.id} onPress={() => { Haptics.selectionAsync(); onActivityChange(a.id); }} className={`rounded-xl px-3 py-2.5 border flex-row items-center gap-1.5 active:opacity-70 ${selected ? 'bg-primary border-primary' : 'bg-card border-border/40'}`}>
-                <Text style={{ fontSize: 14 }}>{a.emoji}</Text>
-                <Text className={`font-sans text-xs font-medium ${selected ? 'text-white' : 'text-foreground'}`}>{a.label}</Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      </View>
+      <ActivityPicker activities={ACTIVITIES} activity={activity} onSelect={onActivityChange} />
 
       <View>
         <FieldLabel>Where (optional)</FieldLabel>

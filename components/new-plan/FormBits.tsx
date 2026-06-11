@@ -1,35 +1,8 @@
-import { View, Text, Pressable, TextInput } from 'react-native';
+import { View, Text, TextInput } from 'react-native';
+import { FieldLabel } from '@/components/primitives/FieldLabel';
 
-export function FieldLabel({ children }: { children: string }) {
-  return (
-    <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
-      {children}
-    </Text>
-  );
-}
-
-export function Chip({
-  selected,
-  onPress,
-  children,
-}: {
-  selected: boolean;
-  onPress: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      className={`rounded-xl px-3 py-2.5 border active:opacity-70 ${
-        selected
-          ? 'bg-primary border-primary'
-          : 'bg-card border-border/40'
-      }`}
-    >
-      <View className="flex-row items-center gap-1.5">{children}</View>
-    </Pressable>
-  );
-}
+// Re-export for callers that import FieldLabel from FormBits (new-plan.tsx)
+export { FieldLabel };
 
 export function OpenInviteBanner() {
   return (

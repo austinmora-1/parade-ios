@@ -3,9 +3,11 @@
  * Presentational only; all state lives in app/(app)/find-time.tsx.
  */
 import { ScrollView, View, Text, Pressable, TextInput } from 'react-native';
-import { X, Check, UserPlus, Search } from 'lucide-react-native';
+import { X, UserPlus, Search } from 'lucide-react-native';
 import { Avatar } from '@/components/primitives/Avatar';
-import { FieldLabel } from '@/components/find-time/FormBits';
+import { CheckCircle } from '@/components/primitives/CheckCircle';
+import { Chip } from '@/components/primitives/Chip';
+import { FieldLabel } from '@/components/primitives/FieldLabel';
 import type { Friend } from '@/types/planner';
 import type { Pod } from '@/hooks/usePods';
 
@@ -84,15 +86,16 @@ export function WhoStep({
                 );
                 const active = members.length > 0 && members.every((id) => selectedFriendIds.has(id));
                 return (
-                  <Pressable
+                  <Chip
                     key={pod.id}
+                    selected={active}
                     onPress={() => onTogglePod(pod.memberIds)}
-                    className={`flex-row items-center gap-1.5 rounded-full px-3 py-2 border active:opacity-70 ${active ? 'bg-primary border-primary' : 'bg-card border-border/40'}`}
+                    className="rounded-full px-3 py-2"
                   >
                     <Text style={{ fontSize: 13 }}>{pod.emoji ?? '💜'}</Text>
                     <Text className={`font-sans text-xs font-semibold ${active ? 'text-white' : 'text-foreground'}`}>{pod.name}</Text>
                     <Text className={`font-sans text-[10px] ${active ? 'text-white/70' : 'text-muted-foreground'}`}>{members.length}</Text>
-                  </Pressable>
+                  </Chip>
                 );
               })}
             </ScrollView>
@@ -162,17 +165,15 @@ export function WhoStep({
                     >
                       <Avatar url={f.avatar} displayName={f.name} size="lg" />
                       {checked && (
-                        <View
-                          style={{
-                            position: 'absolute', bottom: 0, right: 0,
-                            width: 22, height: 22, borderRadius: 11,
-                            backgroundColor: '#23744D',
-                            borderWidth: 2, borderColor: '#FBF9F4',
-                            alignItems: 'center', justifyContent: 'center',
-                          }}
-                        >
-                          <Check size={12} color="#FFFFFF" strokeWidth={3} />
-                        </View>
+                        <CheckCircle
+                          checked
+                          size={22}
+                          borderWidth={2}
+                          borderColor="#FBF9F4"
+                          checkSize={12}
+                          checkStrokeWidth={3}
+                          style={{ position: 'absolute', bottom: 0, right: 0 }}
+                        />
                       )}
                     </View>
                     <Text className="font-sans text-xs text-foreground mt-1.5 text-center" numberOfLines={1}>

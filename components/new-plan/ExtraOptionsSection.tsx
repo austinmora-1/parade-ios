@@ -6,7 +6,7 @@ import { View, Text, Pressable } from 'react-native';
 import { format } from 'date-fns';
 import * as Haptics from 'expo-haptics';
 import { X } from 'lucide-react-native';
-import { SLOTS } from '@/components/new-plan/TimeSlotPicker';
+import { SLOT_OPTIONS } from '@/lib/socialSlots';
 import type { TimeSlot } from '@/types/planner';
 
 export function ExtraOptionsSection({
@@ -46,7 +46,7 @@ export function ExtraOptionsSection({
               <View className="px-4 py-3 flex-row items-center gap-2">
                 <Text className="flex-1 font-sans text-sm text-foreground">
                   {format(opt.date, 'EEE, MMM d')} ·{' '}
-                  {SLOTS.find((s) => s.id === opt.slot)?.label ?? opt.slot}
+                  {SLOT_OPTIONS.find((s) => s.id === opt.slot)?.label ?? opt.slot}
                 </Text>
                 <Pressable
                   onPress={() => {

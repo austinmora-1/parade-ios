@@ -26,8 +26,10 @@ import {
   addDays,
   addWeeks,
   isToday,
+  isTomorrow,
   isSameDay,
   isSameMonth,
+  differenceInCalendarDays,
 } from 'date-fns';
 import {
   ChevronLeft,
@@ -35,9 +37,10 @@ import {
   CalendarDays,
   ArrowLeft,
   Plus,
-  Clock,
   MapPin,
   Plane,
+  Zap,
+  Users,
 } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
@@ -73,9 +76,118 @@ function getWeekLabel(start: Date, end: Date): string {
   return `${format(start, 'MMM d')} – ${format(end, 'MMM d')}`;
 }
 
-function planDayLabel(date: Date): string {
-  if (isToday(date)) return 'Today';
-  return format(date, 'EEE, MMM d');
+function casualDayLabel(date: Date): string {
+  if (isToday(date)) return 'today';
+  if (isTomorrow(date)) return 'tomorrow';
+  return format(date, 'EEEE');
+}
+
+/** Hour each slot ends — used to skip windows already past today */
+const SLOT_END_HOUR: Record<string, number> = {
+  'early-morning':   9,
+  'late-morning':    12,
+  'early-afternoon': 15,
+  'late-afternoon':  18,
+  'evening':         22,
+  'late-night':      26,
+};
+
+const SLOT_ORDER: TimeSlot[] = [
+  'early-morning', 'late-morning', 'early-afternoon',
+  'late-afternoon', 'evening', 'late-night',
+];
+
+interface FreeWindow { date: Date; slot: TimeSlot }
+
+/** First upcoming free window in the given days with no plan in it yet */
+function findNextFreeWindow(
+  days: Date[],
+  availability: DayAvailability[],
+  plans: Plan[],
+): FreeWindow | null {
+  const now = new Date();
+  const todayStr = format(now, 'yyyy-MM-dd');
+
+  for (const day of days) {
+    const dateStr = format(day, 'yyyy-MM-dd');
+    if (dateStr < todayStr) continue;
+    const dayAvail = availability.find(
+      (a) => format(a.date, 'yyyy-MM-dd') === dateStr,
+    );
+    if (!dayAvail) continue;
+
+    const dayPlans = plans.filter((p) =>
+      isSameDay(p.date instanceof Date ? p.date : new Date(p.date), day),
+    );
+
+    for (const slot of SLOT_ORDER) {
+      if (!dayAvail.slots[slot]) continue;
+      if (dateStr === todayStr && now.getHours() >= SLOT_END_HOUR[slot]) continue;
+      if (dayPlans.some((p) => p.timeSlot === slot)) continue;
+      return { date: day, slot };
+    }
+  }
+  return null;
+}
+
+/** Availability-driven CTA — replaces the old "All Upcoming" list */
+function AvailabilityCTA({ nextFree }: { nextFree: FreeWindow | null }) {
+  if (nextFree) {
+    const slotMeta = TIME_SLOT_LABELS[nextFree.slot];
+    const dateStr = format(nextFree.date, 'yyyy-MM-dd');
+    return (
+      <Pressable
+        onPress={() => router.push(`/(app)/quick-plan?date=${dateStr}&slot=${nextFree.slot}`)}
+        className="mx-5 rounded-2xl px-4 py-3.5 flex-row items-center gap-3 active:opacity-80"
+        style={{ backgroundColor: TINT.primarySubtle, borderWidth: 1, borderColor: TINT.primaryBorder }}
+      >
+        <View
+          className="w-9 h-9 rounded-full items-center justify-center"
+          style={{ backgroundColor: PARADE_GREEN }}
+        >
+          <Zap size={16} color="#FFFFFF" strokeWidth={2.25} />
+        </View>
+        <View className="flex-1">
+          <Text className="font-display text-sm" style={{ color: PARADE_GREEN }}>
+            You're free {casualDayLabel(nextFree.date)} {slotMeta.label.toLowerCase()}
+          </Text>
+          <Text className="font-sans text-xs text-muted-foreground mt-0.5">
+            {slotMeta.time} · grab the window before it fills up
+          </Text>
+        </View>
+        <View className="bg-primary rounded-full px-3 py-1.5">
+          <Text className="font-sans text-xs font-semibold text-white">Quick plan</Text>
+        </View>
+      </Pressable>
+    );
+  }
+
+  // No free windows left this week — point at find-time instead
+  return (
+    <Pressable
+      onPress={() => router.push('/(app)/find-time')}
+      className="mx-5 rounded-2xl px-4 py-3.5 flex-row items-center gap-3 active:opacity-80"
+      style={{ backgroundColor: TINT.secondarySubtle, borderWidth: 1, borderColor: TINT.secondaryBorder }}
+    >
+      <View
+        className="w-9 h-9 rounded-full items-center justify-center"
+        style={{ backgroundColor: '#D46549' }}
+      >
+        <Users size={16} color="#FFFFFF" strokeWidth={2.25} />
+      </View>
+      <View className="flex-1">
+        <Text className="font-display text-sm" style={{ color: '#D46549' }}>
+          Booked up this week
+        </Text>
+        <Text className="font-sans text-xs text-muted-foreground mt-0.5">
+          See where your time overlaps with friends
+        </Text>
+      </View>
+      <View className="rounded-full px-3 py-1.5" style={{ backgroundColor: '#D46549' }}>
+        <Text className="font-sans text-xs font-semibold text-white">Find time</Text>
+      </View>
+    </Pressable>
+  );
 }
 
 /** "Ben" / "Ben & Jules" / "Ben, Jules & Erin" from first names */
@@ -557,109 +669,76 @@ function tripOverlapsDays(trip: any, days: Date[]): boolean {
   });
 }
 
-/** Trip card row */
-function TripCard({ trip }: { trip: any }) {
+/** Countdown label for the next-trip card */
+function tripCountdown(start: Date, end: Date): string {
+  const now = new Date();
+  if (start.getTime() <= now.getTime() && now.getTime() <= end.getTime()) {
+    return 'Trip in progress';
+  }
+  const days = differenceInCalendarDays(start, now);
+  if (days <= 0) return 'Trip in progress';
+  if (days === 1) return 'Next trip tomorrow';
+  if (days < 7) return `Next trip in ${days} days`;
+  const weeks = Math.round(days / 7);
+  return `Next trip in ${weeks} week${weeks > 1 ? 's' : ''}`;
+}
+
+/** Single next-trip card — replaces the old trips list */
+function NextTripCard({ trip }: { trip: any }) {
   const start = new Date(trip.start_date);
   const end   = new Date(trip.end_date);
   const sameMonth = format(start, 'MMM') === format(end, 'MMM');
   const range = sameMonth
     ? `${format(start, 'MMM d')} – ${format(end, 'd')}`
     : `${format(start, 'MMM d')} – ${format(end, 'MMM d')}`;
-  const inProgress =
-    start.getTime() <= Date.now() && Date.now() <= end.getTime();
+  const others: TripPerson[] = (trip.people ?? []).filter((p: TripPerson) => !p.isSelf);
 
   return (
     <Pressable
       onPress={() => router.push(`/(app)/trip/${trip.id}`)}
       className="bg-card rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm active:opacity-80"
     >
-      <View style={{ width: 4, backgroundColor: '#23744D' }} />
-      <View className="flex-1 px-4 py-3 gap-0.5">
-        <View className="flex-row items-start justify-between gap-2">
-          <View className="flex-row items-center gap-1.5 flex-1">
-            <Plane size={12} color="#23744D" strokeWidth={2} />
-            <Text
-              className="font-display text-sm text-foreground flex-1"
-              numberOfLines={1}
-            >
-              {trip.name || 'Untitled trip'}
-            </Text>
-          </View>
-          <Text className="font-sans text-xs text-muted-foreground">{range}</Text>
-        </View>
-        {trip.location && (
-          <View className="flex-row items-center gap-1 mt-0.5">
-            <MapPin size={11} color="#929298" strokeWidth={1.75} />
-            <Text
-              className="font-sans text-xs text-muted-foreground"
-              numberOfLines={1}
-            >
-              {trip.location}
-            </Text>
-          </View>
-        )}
-        {inProgress && (
-          <View className="bg-primary/15 rounded-full px-2 py-0.5 self-start mt-1">
-            <Text className="font-sans text-[10px] font-semibold text-primary uppercase tracking-wider">
-              In progress
-            </Text>
-          </View>
-        )}
-      </View>
-    </Pressable>
-  );
-}
-
-/** Plan card for "All Upcoming" section — left-border accent strip */
-function UpcomingPlanCard({ plan }: { plan: Plan }) {
-  const planDate = plan.date instanceof Date ? plan.date : new Date(plan.date);
-  const accentColor = activityAccent(plan.activity as string | undefined);
-  const slotLabel = TIME_SLOT_LABELS[plan.timeSlot as TimeSlot]?.time ?? '';
-  const locationStr =
-    typeof plan.location === 'string'
-      ? plan.location
-      : (plan.location as any)?.name ?? '';
-
-  return (
-    <Pressable
-      onPress={() => router.push(`/(app)/plan/${plan.id}`)}
-      className="bg-card rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm active:opacity-80"
-    >
-      {/* Left accent bar */}
-      <View style={{ width: 4, backgroundColor: accentColor }} />
-
-      {/* Content */}
+      <View style={{ width: 4, backgroundColor: PARADE_GREEN }} />
       <View className="flex-1 px-4 py-3 gap-1">
-        <View className="flex-row items-start justify-between gap-2">
-          <Text
-            className="font-display text-sm text-evergreen flex-1"
-            numberOfLines={1}
-          >
-            {plan.title || 'Untitled plan'}
-          </Text>
-          <Text className="font-sans text-xs text-muted-foreground">
-            {planDayLabel(planDate)}
+        {/* Countdown eyebrow */}
+        <View className="flex-row items-center gap-1.5">
+          <Plane size={12} color={PARADE_GREEN} strokeWidth={2} />
+          <Text className="font-sans text-[11px] font-bold uppercase tracking-wider text-primary">
+            {tripCountdown(start, end)}
           </Text>
         </View>
 
-        {(slotLabel || locationStr) ? (
-          <View className="flex-row items-center gap-3">
-            {slotLabel ? (
-              <View className="flex-row items-center gap-1">
-                <Clock size={11} color="#929298" strokeWidth={1.75} />
-                <Text className="font-sans text-xs text-muted-foreground">{slotLabel}</Text>
-              </View>
-            ) : null}
-            {locationStr ? (
-              <View className="flex-row items-center gap-1 flex-1">
-                <MapPin size={11} color="#929298" strokeWidth={1.75} />
-                <Text className="font-sans text-xs text-muted-foreground" numberOfLines={1}>
-                  {locationStr}
-                </Text>
-              </View>
-            ) : null}
-          </View>
-        ) : null}
+        <View className="flex-row items-center justify-between gap-2">
+          <Text className="font-display text-base text-foreground flex-1" numberOfLines={1}>
+            {trip.name || (trip.location ? `Trip to ${formatCityForDisplay(trip.location)}` : 'Untitled trip')}
+          </Text>
+          <ChevronRight size={14} color="#929298" strokeWidth={2} />
+        </View>
+
+        <View className="flex-row items-center gap-3">
+          <Text className="font-sans text-xs text-muted-foreground">{range}</Text>
+          {trip.location ? (
+            <View className="flex-row items-center gap-1 flex-1">
+              <MapPin size={11} color="#929298" strokeWidth={1.75} />
+              <Text className="font-sans text-xs text-muted-foreground" numberOfLines={1}>
+                {trip.location}
+              </Text>
+            </View>
+          ) : null}
+          {others.length > 0 && (
+            <View className="flex-row" style={{ gap: -6 }}>
+              {others.slice(0, 3).map((p, i) => (
+                <Avatar
+                  key={i}
+                  url={p.avatar}
+                  displayName={p.name}
+                  size="xs"
+                  className="border border-white"
+                />
+              ))}
+            </View>
+          )}
+        </View>
       </View>
     </Pressable>
   );
@@ -700,6 +779,13 @@ export default function PlansTab() {
   const weekdays  = days.slice(0, 5);   // Mon–Fri
   const weekend   = [days[5], days[6]]; // Sat, Sun
   const label     = getWeekLabel(weekStart, weekEnd);
+
+  // First upcoming free window in the displayed week → drives the CTA
+  const nextFreeWindow = findNextFreeWindow(days, availability, plans);
+
+  // Next trip card skips any trip already underway — only future starts
+  const todayStr = format(today, 'yyyy-MM-dd');
+  const nextTrip = (trips ?? []).find((t) => t.start_date > todayStr);
 
   // ── Upcoming plans (all future, sorted) ────────────────────────────────────
   const upcomingPlans = plans
@@ -818,50 +904,30 @@ export default function PlansTab() {
             })}
           </View>
 
-          {/* ── All upcoming plans ────────────────────────────────────── */}
-          {!isLoading && upcomingPlans.length > 0 && (
-            <View className="px-5 gap-2">
-              <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground px-1">
-                All Upcoming
-              </Text>
-              {upcomingPlans.map((plan) => (
-                <UpcomingPlanCard key={plan.id} plan={plan} />
-              ))}
-            </View>
+          {/* ── Availability CTA — not shown for past weeks ───────────── */}
+          {!isLoading && format(weekEnd, 'yyyy-MM-dd') >= format(today, 'yyyy-MM-dd') && (
+            <AvailabilityCTA nextFree={nextFreeWindow} />
           )}
 
-          {/* ── Trips section ─────────────────────────────────────────── */}
-          <View className="px-5 gap-2">
-            <View className="flex-row items-center justify-between px-1">
-              <View className="flex-row items-center gap-1.5">
-                <Plane size={12} color="#23744D" strokeWidth={2} />
-                <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                  Trips
-                </Text>
-              </View>
+          {/* ── Next trip ─────────────────────────────────────────────── */}
+          <View className="px-5">
+            {nextTrip ? (
+              <NextTripCard trip={nextTrip} />
+            ) : (
               <Pressable
                 onPress={() => router.push('/(app)/new-trip')}
-                hitSlop={6}
-                className="flex-row items-center gap-1 active:opacity-60"
+                className="bg-card rounded-2xl border border-dashed border-border/40 px-4 py-5 items-center gap-1 active:opacity-70"
               >
-                <Plus size={12} color="#23744D" strokeWidth={2.5} />
-                <Text className="font-sans text-xs font-semibold text-primary">
-                  New trip
-                </Text>
-              </Pressable>
-            </View>
-
-            {(trips ?? []).length > 0 ? (
-              (trips ?? []).map((trip) => <TripCard key={trip.id} trip={trip} />)
-            ) : (
-              <View className="bg-card rounded-2xl border border-dashed border-border/40 px-4 py-5 items-center gap-1">
-                <Text className="font-sans text-sm text-muted-foreground">
-                  No upcoming trips
-                </Text>
+                <View className="flex-row items-center gap-1.5">
+                  <Plus size={13} color="#23744D" strokeWidth={2.5} />
+                  <Text className="font-sans text-sm font-semibold text-primary">
+                    Plan a trip
+                  </Text>
+                </View>
                 <Text className="font-sans text-xs text-muted-foreground/60">
                   Add one when you're traveling so friends know
                 </Text>
-              </View>
+              </Pressable>
             )}
           </View>
 

@@ -1,7 +1,6 @@
 import { View, Text, Pressable } from 'react-native';
-import { Check } from 'lucide-react-native';
 import { Avatar } from '@/components/primitives/Avatar';
-import { TINT } from '@/lib/colors';
+import { CheckCircle } from '@/components/primitives/CheckCircle';
 import type { Friend } from '@/types/planner';
 
 export function FriendSelector({
@@ -45,17 +44,7 @@ export function FriendSelector({
                 >
                   {f.name}
                 </Text>
-                <View
-                  style={{
-                    width: 22, height: 22, borderRadius: 6,
-                    borderWidth: 1.5,
-                    borderColor: checked ? '#23744D' : TINT.grayStrong,
-                    backgroundColor: checked ? '#23744D' : 'transparent',
-                    alignItems: 'center', justifyContent: 'center',
-                  }}
-                >
-                  {checked && <Check size={14} color="#FFFFFF" strokeWidth={2.5} />}
-                </View>
+                <CheckCircle checked={checked} size={22} radius={6} checkSize={14} />
               </Pressable>
               {i < connectedFriends.length - 1 && (
                 <View className="h-px bg-border/30 mx-4" />

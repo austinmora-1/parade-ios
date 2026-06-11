@@ -7,10 +7,10 @@ import { ScrollView, View, Text, Pressable, ActivityIndicator } from 'react-nati
 import { router } from 'expo-router';
 import { format } from 'date-fns';
 import * as Haptics from 'expo-haptics';
-import { Check, ChevronDown } from 'lucide-react-native';
-import { slotRangeLabel } from '@/lib/socialSlots';
-import { TINT } from '@/lib/colors';
-import { SLOT_LABEL, type MonthGroup } from '@/components/find-time/slots';
+import { ChevronDown } from 'lucide-react-native';
+import { CheckCircle } from '@/components/primitives/CheckCircle';
+import { SLOT_LABEL, slotRangeLabel } from '@/lib/socialSlots';
+import type { MonthGroup } from '@/components/find-time/slots';
 import type { TimeSlot } from '@/types/planner';
 
 interface WhenStepProps {
@@ -138,9 +138,7 @@ export function WhenStep({
                             <Text className="font-sans text-sm font-semibold text-foreground">{SLOT_LABEL[slot]}</Text>
                             <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">{slotRangeLabel(slot)}</Text>
                           </View>
-                          <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: selected ? '#23744D' : TINT.grayStrong, backgroundColor: selected ? '#23744D' : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
-                            {selected && <Check size={13} color="#FFFFFF" strokeWidth={2.5} />}
-                          </View>
+                          <CheckCircle checked={selected} />
                         </Pressable>
                       );
                     })}

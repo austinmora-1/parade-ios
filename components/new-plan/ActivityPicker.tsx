@@ -1,8 +1,9 @@
-import { ScrollView, View, Text } from 'react-native';
-import * as Haptics from 'expo-haptics';
-import { FieldLabel, Chip } from '@/components/new-plan/FormBits';
+import {
+  ActivityPicker as ActivityChipRow,
+  type ActivityOption,
+} from '@/components/primitives/ActivityPicker';
 
-const ACTIVITIES = [
+const ACTIVITIES: ActivityOption[] = [
   { id: 'drinks',      label: 'Drinks',     emoji: '🍹' },
   { id: 'dinner',      label: 'Dinner',     emoji: '🍝' },
   { id: 'brunch',      label: 'Brunch',     emoji: '🥞' },
@@ -29,33 +30,10 @@ export function ActivityPicker({
   onSelect: (id: string) => void;
 }) {
   return (
-    <View>
-      <FieldLabel>Activity</FieldLabel>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerClassName="gap-2 px-0.5 pb-1"
-      >
-        {ACTIVITIES.map((a) => {
-          const selected = activity === a.id;
-          return (
-            <Chip
-              key={a.id}
-              selected={selected}
-              onPress={() => { Haptics.selectionAsync(); onSelect(a.id); }}
-            >
-              <Text style={{ fontSize: 14 }}>{a.emoji}</Text>
-              <Text
-                className={`font-sans text-xs font-medium ${
-                  selected ? 'text-white' : 'text-foreground'
-                }`}
-              >
-                {a.label}
-              </Text>
-            </Chip>
-          );
-        })}
-      </ScrollView>
-    </View>
+    <ActivityChipRow
+      activities={ACTIVITIES}
+      activity={activity}
+      onSelect={onSelect}
+    />
   );
 }

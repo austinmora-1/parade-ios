@@ -18,15 +18,6 @@ export const SLOT_COLS: { col: string; slot: TimeSlot }[] = [
 // note: late_night column name uses underscore
 SLOT_COLS[5].col = 'late_night';
 
-export const SLOT_LABEL: Record<TimeSlot, string> = {
-  'early-morning': 'Early morning',
-  'late-morning': 'Late morning',
-  'early-afternoon': 'Early afternoon',
-  'late-afternoon': 'Late afternoon',
-  'evening': 'Evening',
-  'late-night': 'Late night',
-};
-
 export interface GroupSlot {
   date: string;       // yyyy-MM-dd
   slot: TimeSlot;

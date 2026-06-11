@@ -75,7 +75,7 @@ function dateLabel(d: Date): string {
 function StepDots({ step }: { step: number }) {
   return (
     <View className="flex-row items-center gap-1.5">
-      {[1, 2, 3].map((i) => (
+      {[1, 2, 3, 4].map((i) => (
         <View
           key={i}
           style={{
@@ -156,7 +156,7 @@ export default function FindPeopleScreen() {
       .slice(0, 10);
   }, [plans]);
 
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
 
   // Step 1 — describe
   const [anchorPlanId, setAnchorPlanId] = useState<string | null>(null);
@@ -175,10 +175,13 @@ export default function FindPeopleScreen() {
     [],
   );
 
+  // Step 1 chooser: pick an existing plan (prefills describe) or start fresh.
   const pickAnchor = useCallback((p: any | null) => {
     Haptics.selectionAsync();
     if (!p) {
+      // "Create a new plan" — clear any previous anchor prefill
       setAnchorPlanId(null);
+      setStep(2);
       return;
     }
     setAnchorPlanId(p.id);
@@ -188,6 +191,7 @@ export default function FindPeopleScreen() {
     if (p.timeSlot) setTimeSlot(p.timeSlot as TimeSlot);
     setLocation(typeof p.location === 'string' ? p.location : p.location?.name ?? '');
     if (p.notes) setNotes(p.notes);
+    setStep(2);
   }, []);
 
   const toggleAudienceFriend = useCallback((fid: string) => {
@@ -248,7 +252,7 @@ export default function FindPeopleScreen() {
         expires_at: addHours(new Date(), 48).toISOString(),
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setStep(4);
+      setStep(5);
     } catch (err: any) {
       console.error('open invite send failed', err);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -257,12 +261,13 @@ export default function FindPeopleScreen() {
   }, [audience, title, activity, date, timeSlot, location, notes, anchorPlanId, createMut]);
 
   const stepTitle =
-    step === 1 ? "What's the plan?"
-    : step === 2 ? 'Who should see it?'
-    : step === 3 ? 'Preview'
+    step === 1 ? 'What are you broadcasting?'
+    : step === 2 ? anchorPlanId ? 'Check the details' : "What's the plan?"
+    : step === 3 ? 'Who should see it?'
+    : step === 4 ? 'Preview'
     : 'Invite sent';
 
-  const goBack = () => (step === 1 || step === 4 ? router.back() : setStep((s) => (s - 1) as any));
+  const goBack = () => (step === 1 || step === 5 ? router.back() : setStep((s) => (s - 1) as any));
   const slotMeta = TIME_SLOT_LABELS[timeSlot];
   const activityMeta = ACTIVITIES.find((a) => a.id === activity);
 
@@ -271,11 +276,11 @@ export default function FindPeopleScreen() {
       {/* Header */}
       <View className="flex-row items-center justify-between px-3 py-2 border-b border-border/20">
         <Pressable onPress={goBack} hitSlop={8} className="w-9 h-9 rounded-full items-center justify-center active:opacity-70">
-          {step === 1 || step === 4
+          {step === 1 || step === 5
             ? <X size={20} color={TC.icon} strokeWidth={2} />
             : <ChevronLeft size={22} color={TC.icon} strokeWidth={2} />}
         </Pressable>
-        {step < 4 ? <StepDots step={step} /> : <View />}
+        {step < 5 ? <StepDots step={step} /> : <View />}
         <View className="w-9 h-9" />
       </View>
 
@@ -284,37 +289,80 @@ export default function FindPeopleScreen() {
       </View>
 
       <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        {/* ── STEP 1: DESCRIBE ────────────────────────────────────────── */}
+        {/* ── STEP 1: PICK A PLAN OR CREATE NEW ───────────────────────── */}
         {step === 1 && (
-          <ScrollView className="flex-1" contentContainerClassName="px-5 py-4 gap-5" keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
-            {/* Anchor an existing plan */}
+          <ScrollView className="flex-1" contentContainerClassName="px-5 py-4 gap-4">
+            {/* Create new — pinned to top */}
+            <Pressable
+              onPress={() => pickAnchor(null)}
+              className="rounded-2xl border border-primary/40 bg-primary/10 px-4 py-4 flex-row items-center gap-3 active:opacity-80"
+            >
+              <View className="w-11 h-11 rounded-xl items-center justify-center" style={{ backgroundColor: 'rgba(35,116,77,0.15)' }}>
+                <Megaphone size={20} color={TC.primary} strokeWidth={2} />
+              </View>
+              <View className="flex-1 gap-0.5">
+                <Text className="font-display text-base text-foreground">Create a new plan</Text>
+                <Text className="font-sans text-xs text-muted-foreground leading-relaxed">
+                  Describe something fresh and see who's in.
+                </Text>
+              </View>
+              <ChevronRight size={16} color={TC.primary} strokeWidth={2} />
+            </Pressable>
+
+            {/* Existing plans */}
             {anchorPlans.length > 0 && (
               <View>
-                <FieldLabel>Broadcast an existing plan (optional)</FieldLabel>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2 px-0.5 pb-1">
+                <FieldLabel>Or broadcast an existing plan</FieldLabel>
+                <View className="gap-2">
                   {anchorPlans.map((p) => {
-                    const selected = anchorPlanId === p.id;
                     const d = p.date instanceof Date ? p.date : new Date(p.date);
+                    const slotTime = p.timeSlot
+                      ? TIME_SLOT_LABELS[p.timeSlot as TimeSlot]?.time
+                      : null;
+                    const loc = typeof p.location === 'string' ? p.location : p.location?.name;
                     return (
                       <Pressable
                         key={p.id}
-                        onPress={() => pickAnchor(selected ? null : p)}
-                        className={`rounded-xl px-3 py-2.5 border active:opacity-70 ${selected ? 'bg-primary border-primary' : 'bg-card border-border/40'}`}
-                        style={{ maxWidth: 200 }}
+                        onPress={() => pickAnchor(p)}
+                        className="bg-card rounded-2xl border border-border/30 px-4 py-3 flex-row items-center gap-3 shadow-sm active:opacity-80"
                       >
-                        <Text className={`font-sans text-xs font-semibold ${selected ? 'text-white' : 'text-foreground'}`} numberOfLines={1}>
-                          {p.title || 'Untitled plan'}
-                        </Text>
-                        <Text className={`font-sans text-[10px] ${selected ? 'text-white/70' : 'text-muted-foreground'}`}>
-                          {format(d, 'EEE, MMM d')}
-                        </Text>
+                        <View className="flex-1 gap-0.5">
+                          <Text className="font-display text-sm text-foreground" numberOfLines={1}>
+                            {p.title || 'Untitled plan'}
+                          </Text>
+                          <View className="flex-row items-center gap-3 flex-wrap">
+                            <Text className="font-sans text-xs text-muted-foreground">
+                              {format(d, 'EEE, MMM d')}{slotTime ? ` · ${slotTime}` : ''}
+                            </Text>
+                            {loc ? (
+                              <View className="flex-row items-center gap-1 flex-shrink">
+                                <MapPin size={10} color={TC.muted} strokeWidth={1.75} />
+                                <Text className="font-sans text-xs text-muted-foreground" numberOfLines={1}>
+                                  {loc}
+                                </Text>
+                              </View>
+                            ) : null}
+                          </View>
+                        </View>
+                        <ChevronRight size={16} color={TINT.graySolid} strokeWidth={2} />
                       </Pressable>
                     );
                   })}
-                </ScrollView>
+                </View>
               </View>
             )}
 
+            {anchorPlans.length === 0 && (
+              <Text className="font-sans text-xs text-muted-foreground px-1">
+                No upcoming plans yet — create one above to broadcast it.
+              </Text>
+            )}
+          </ScrollView>
+        )}
+
+        {/* ── STEP 2: DESCRIBE ────────────────────────────────────────── */}
+        {step === 2 && (
+          <ScrollView className="flex-1" contentContainerClassName="px-5 py-4 gap-5" keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
             <View>
               <FieldLabel>Title</FieldLabel>
               <TextInput
@@ -401,8 +449,8 @@ export default function FindPeopleScreen() {
           </ScrollView>
         )}
 
-        {/* ── STEP 2: AUDIENCE ────────────────────────────────────────── */}
-        {step === 2 && (
+        {/* ── STEP 3: AUDIENCE ────────────────────────────────────────── */}
+        {step === 3 && (
           <ScrollView className="flex-1" contentContainerClassName="px-5 py-4 gap-4" keyboardShouldPersistTaps="handled">
             {/* All friends */}
             <Pressable
@@ -498,8 +546,8 @@ export default function FindPeopleScreen() {
           </ScrollView>
         )}
 
-        {/* ── STEP 3: PREVIEW ─────────────────────────────────────────── */}
-        {step === 3 && (
+        {/* ── STEP 4: PREVIEW ─────────────────────────────────────────── */}
+        {step === 4 && (
           <ScrollView className="flex-1" contentContainerClassName="px-5 py-4 gap-4">
             <Text className="font-sans text-xs text-muted-foreground px-1">
               Here's what your friends will see:
@@ -560,8 +608,8 @@ export default function FindPeopleScreen() {
           </ScrollView>
         )}
 
-        {/* ── STEP 4: SENT ────────────────────────────────────────────── */}
-        {step === 4 && (
+        {/* ── STEP 5: SENT ────────────────────────────────────────────── */}
+        {step === 5 && (
           <View className="flex-1 items-center justify-center px-8 gap-3">
             <Text style={{ fontSize: 44 }}>📣</Text>
             <Text className="font-display text-xl text-foreground text-center">Invite sent!</Text>
@@ -577,19 +625,19 @@ export default function FindPeopleScreen() {
           </View>
         )}
 
-        {/* ── Footer CTA ──────────────────────────────────────────────── */}
-        {step < 4 && (
+        {/* ── Footer CTA (hidden on the chooser + sent screens) ───────── */}
+        {step >= 2 && step < 5 && (
           <View className="px-5 pt-2 pb-4 border-t border-border/20">
-            {step < 3 ? (
+            {step < 4 ? (
               <Pressable
                 onPress={() => { Haptics.selectionAsync(); setStep((s) => (s + 1) as any); }}
-                disabled={step === 1 ? !canNext1 : !canNext2}
-                className={`rounded-2xl py-3.5 flex-row items-center justify-center gap-2 ${(step === 1 ? canNext1 : canNext2) ? 'bg-primary active:opacity-80' : 'bg-muted'}`}
+                disabled={step === 2 ? !canNext1 : !canNext2}
+                className={`rounded-2xl py-3.5 flex-row items-center justify-center gap-2 ${(step === 2 ? canNext1 : canNext2) ? 'bg-primary active:opacity-80' : 'bg-muted'}`}
               >
-                <Text className={`font-sans text-sm font-semibold ${(step === 1 ? canNext1 : canNext2) ? 'text-white' : 'text-muted-foreground'}`}>
-                  {step === 1 ? 'Choose audience' : 'Preview'}
+                <Text className={`font-sans text-sm font-semibold ${(step === 2 ? canNext1 : canNext2) ? 'text-white' : 'text-muted-foreground'}`}>
+                  {step === 2 ? 'Choose audience' : 'Preview'}
                 </Text>
-                <ChevronRight size={16} color={(step === 1 ? canNext1 : canNext2) ? '#FFFFFF' : TINT.graySolid} strokeWidth={2.5} />
+                <ChevronRight size={16} color={(step === 2 ? canNext1 : canNext2) ? '#FFFFFF' : TINT.graySolid} strokeWidth={2.5} />
               </Pressable>
             ) : (
               <Pressable

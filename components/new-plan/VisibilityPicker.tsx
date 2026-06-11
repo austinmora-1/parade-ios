@@ -1,7 +1,8 @@
 import { View, Text } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Users as UsersIcon, Lock } from 'lucide-react-native';
-import { FieldLabel, Chip } from '@/components/new-plan/FormBits';
+import { FieldLabel } from '@/components/primitives/FieldLabel';
+import { Chip } from '@/components/primitives/Chip';
 import { TC } from '@/lib/theme';
 import type { Pod } from '@/hooks/usePods';
 

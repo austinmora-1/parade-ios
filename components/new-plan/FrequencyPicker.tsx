@@ -1,7 +1,8 @@
 import { View, Text } from 'react-native';
 import { format } from 'date-fns';
 import * as Haptics from 'expo-haptics';
-import { FieldLabel, Chip } from '@/components/new-plan/FormBits';
+import { FieldLabel } from '@/components/primitives/FieldLabel';
+import { Chip } from '@/components/primitives/Chip';
 
 export type Frequency = 'once' | 'weekly' | 'biweekly' | 'monthly';
 

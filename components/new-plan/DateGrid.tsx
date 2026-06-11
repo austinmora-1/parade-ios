@@ -1,7 +1,8 @@
 import { ScrollView, View, Text } from 'react-native';
 import { format, isToday, isTomorrow, isSameDay } from 'date-fns';
 import * as Haptics from 'expo-haptics';
-import { FieldLabel, Chip } from '@/components/new-plan/FormBits';
+import { FieldLabel } from '@/components/primitives/FieldLabel';
+import { Chip } from '@/components/primitives/Chip';
 
 function dateLabel(d: Date): string {
   if (isToday(d))    return 'Today';
