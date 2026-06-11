@@ -36,26 +36,18 @@ export function toLocalDate(d: string | Date): Date {
 }
 
 /**
- * Reliable bulk block/release: one upsert covering every day of the trip
- * (all 6 slots), throwing on failure so callers can react — unlike the
- * per-slot path, which fans out 6×days writes through a store method that
- * swallows errors. Also mirrors the result into the availability store so
- * the Plans tab updates without a refetch.
+ * Reliable bulk block/release of whole days: one upsert covering every
+ * given date (all 6 slots), throwing on failure so callers can react —
+ * unlike the per-slot path, which fans out 6×days writes through a store
+ * method that swallows errors. Also mirrors the result into the
+ * availability store so the Plans tab updates without a refetch.
  */
-export async function setTripAvailabilityBulk(
+export async function setDatesAvailability(
   userId: string,
-  startDate: string | Date,
-  endDate: string | Date,
+  dates: string[], // yyyy-MM-dd
   /** false = mark busy (away); true = release */
   available: boolean,
 ): Promise<{ daysAffected: number }> {
-  const start = toLocalDate(startDate);
-  const last  = toLocalDate(endDate);
-
-  const dates: string[] = [];
-  for (let d = start; d.getTime() <= last.getTime(); d = addDays(d, 1)) {
-    dates.push(format(d, 'yyyy-MM-dd'));
-  }
   if (dates.length === 0) return { daysAffected: 0 };
 
   const rows = dates.map((date) => {
@@ -97,6 +89,23 @@ export async function setTripAvailabilityBulk(
   });
 
   return { daysAffected: dates.length };
+}
+
+/** Bulk block/release for a trip's full date range (inclusive). */
+export async function setTripAvailabilityBulk(
+  userId: string,
+  startDate: string | Date,
+  endDate: string | Date,
+  /** false = mark busy (away); true = release */
+  available: boolean,
+): Promise<{ daysAffected: number }> {
+  const start = toLocalDate(startDate);
+  const last  = toLocalDate(endDate);
+  const dates: string[] = [];
+  for (let d = start; d.getTime() <= last.getTime(); d = addDays(d, 1)) {
+    dates.push(format(d, 'yyyy-MM-dd'));
+  }
+  return setDatesAvailability(userId, dates, available);
 }
 
 /**

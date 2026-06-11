@@ -317,7 +317,9 @@ export default function FindTimeScreen() {
     : step === 2 ? 'When works?'
     : 'Plan details';
 
-  const canNext = step === 1 ? true : step === 2 ? selectedSlots.length > 0 : true;
+  // Step 1 requires at least one Parade friend (no solo path here —
+  // Quick plan covers solo logging).
+  const canNext = step === 1 ? selectedFriendIds.size > 0 : step === 2 ? selectedSlots.length > 0 : true;
 
   const goBack = () => (step === 1 ? router.back() : setStep((s) => (s - 1) as any));
   const goNext = () => setStep((s) => (s + 1) as any);
@@ -399,7 +401,7 @@ export default function FindTimeScreen() {
               className={`rounded-2xl py-3.5 flex-row items-center justify-center gap-2 ${canNext ? 'bg-primary active:opacity-80' : 'bg-muted'}`}
             >
               <Text className={`font-sans text-sm font-semibold ${canNext ? 'text-white' : 'text-muted-foreground'}`}>
-                {step === 1 ? (participantCount > 0 ? 'See when everyone\'s free' : 'Continue solo') : 'Next'}
+                {step === 1 ? "See when everyone's free" : 'Next'}
               </Text>
               <ChevronRight size={16} color={canNext ? '#FFFFFF' : '#929298'} strokeWidth={2.5} />
             </Pressable>
