@@ -201,8 +201,12 @@ export function WhenStep({
                                   ? undefined
                                   : {
                                       backgroundColor: level.bg,
+                                      // Preferred social days get a thicker
+                                      // ring, but always in the day's own
+                                      // availability color (yellow days stay
+                                      // dark yellow, never green).
                                       borderWidth: preferred ? 2 : 1,
-                                      borderColor: preferred ? PARADE_GREEN : level.border,
+                                      borderColor: level.border,
                                     }
                               }
                             >

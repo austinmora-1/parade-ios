@@ -105,6 +105,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const { resetCalendarSyncCache } = await import('@/lib/calendarSync');
       resetCalendarSyncCache();
+      const { resetReconcileCache } = await import('@/lib/availabilityReconcile');
+      resetReconcileCache();
     } catch {}
     return { error };
   }, []);

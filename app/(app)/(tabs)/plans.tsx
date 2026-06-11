@@ -58,6 +58,7 @@ import { Avatar } from '@/components/primitives/Avatar';
 import { formatDisplayName } from '@/lib/utils';
 import { citiesMatch, normalizeCity } from '@/lib/locationMatch';
 import { formatCityForDisplay } from '@/lib/formatCity';
+import { reconcileStaleBusyDays } from '@/lib/availabilityReconcile';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -777,6 +778,13 @@ export default function PlansTab() {
     if (user?.id) {
       setUserId(user.id);
       loadAllData();
+      // One-time baseline reset: release stale all-busy days left behind by
+      // old trip-deletion bugs (no trip / plan / calendar event explains them)
+      reconcileStaleBusyDays(user.id)
+        .then(({ released }) => {
+          if (released > 0) loadAllData(true);
+        })
+        .catch(() => {});
     }
   }, [user?.id]);
 
