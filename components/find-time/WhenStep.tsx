@@ -31,7 +31,7 @@ const WEEKDAY_INITIALS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 // Availability traffic light
 const LEVEL = {
   high:  { bg: 'rgba(35,116,77,0.16)',  border: 'rgba(35,116,77,0.55)',  text: '#23744D' },
-  some:  { bg: 'rgba(223,165,58,0.16)', border: 'rgba(223,165,58,0.55)', text: '#9A6B14' },
+  some:  { bg: 'rgba(223,165,58,0.16)', border: '#A87618', text: '#9A6B14' },
   none:  { bg: 'rgba(212,101,73,0.10)', border: 'rgba(212,101,73,0.25)', text: 'rgba(212,101,73,0.55)' },
 } as const;
 
@@ -279,15 +279,15 @@ export function WhenStep({
                   <Pressable
                     key={slot}
                     onPress={() => onToggleSlot({ date: openDay, slot })}
-                    className={`rounded-xl border px-3.5 py-2.5 flex-row items-center gap-3 ${selected ? 'bg-primary/10 border-primary/50' : preferred ? 'bg-marigold/10 border-marigold/40' : 'bg-card border-border/30'} active:opacity-80`}
+                    className={`rounded-xl border px-3.5 py-2.5 flex-row items-center gap-3 ${selected ? 'bg-primary/15 border-primary/60' : preferred ? 'bg-primary/5 border-primary/30' : 'bg-card border-border/30'} active:opacity-80`}
                   >
                     <View className="flex-1">
                       <View className="flex-row items-center gap-1.5">
                         <Text className="font-sans text-sm font-semibold text-foreground">{SLOT_LABEL[slot]}</Text>
                         {preferred && (
-                          <View className="flex-row items-center gap-0.5 bg-marigold/15 rounded-full px-1.5 py-px">
-                            <Sparkles size={9} color="#DFA53A" strokeWidth={2} />
-                            <Text className="font-sans text-[9px] font-semibold uppercase tracking-wide text-marigold">Pick</Text>
+                          <View className="flex-row items-center gap-0.5 bg-primary/10 rounded-full px-1.5 py-px">
+                            <Sparkles size={9} color={PARADE_GREEN} strokeWidth={2} />
+                            <Text className="font-sans text-[9px] font-semibold uppercase tracking-wide text-primary">Pick</Text>
                           </View>
                         )}
                       </View>
