@@ -1633,6 +1633,42 @@ END;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.enforce_plan_participant_update()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'public'
+AS $function$
+BEGIN
+  -- Owner edits and non-API contexts (service role / triggers: auth.uid() is
+  -- NULL) are unrestricted.
+  IF auth.uid() IS NULL OR auth.uid() = OLD.user_id THEN
+    RETURN NEW;
+  END IF;
+  IF NEW.user_id                  IS DISTINCT FROM OLD.user_id
+     OR NEW.date                  IS DISTINCT FROM OLD.date
+     OR NEW.end_date              IS DISTINCT FROM OLD.end_date
+     OR NEW.time_slot             IS DISTINCT FROM OLD.time_slot
+     OR NEW.start_time            IS DISTINCT FROM OLD.start_time
+     OR NEW.end_time              IS DISTINCT FROM OLD.end_time
+     OR NEW.duration              IS DISTINCT FROM OLD.duration
+     OR NEW.feed_visibility       IS DISTINCT FROM OLD.feed_visibility
+     OR NEW.blocks_availability   IS DISTINCT FROM OLD.blocks_availability
+     OR NEW.source                IS DISTINCT FROM OLD.source
+     OR NEW.source_event_id       IS DISTINCT FROM OLD.source_event_id
+     OR NEW.source_timezone       IS DISTINCT FROM OLD.source_timezone
+     OR NEW.recurring_plan_id     IS DISTINCT FROM OLD.recurring_plan_id
+     OR NEW.proposed_by           IS DISTINCT FROM OLD.proposed_by
+     OR NEW.merged_source_event_ids IS DISTINCT FROM OLD.merged_source_event_ids
+     OR NEW.created_at            IS DISTINCT FROM OLD.created_at
+  THEN
+    RAISE EXCEPTION 'Only the plan owner can change ownership, timing, visibility, or source fields'
+      USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.generate_share_code(length integer DEFAULT 8)
  RETURNS text
  LANGUAGE plpgsql
@@ -1735,6 +1771,110 @@ AS $function$
     AND a.end_date >= CURRENT_DATE
     AND b.end_date >= CURRENT_DATE
   ORDER BY a.start_date;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.get_dashboard_data(p_user_id uuid)
+ RETURNS json
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_avail_start date := (CURRENT_DATE - interval '7 days')::date;
+  v_avail_end   date := (CURRENT_DATE + interval '35 days')::date;
+  v_plan_start  date := (CURRENT_DATE - interval '14 days')::date;
+  v_result      json;
+BEGIN
+  WITH
+  own_plans AS (
+    SELECT p.id, p.user_id, p.title, p.activity, p.date, p.time_slot,
+      p.duration, p.start_time, p.end_time, p.location, p.notes,
+      p.status, p.feed_visibility, p.source, p.source_timezone,
+      p.end_date, p.recurring_plan_id, p.created_at
+    FROM public.plans p WHERE p.user_id = p_user_id AND p.date >= v_plan_start ORDER BY p.date ASC LIMIT 200
+  ),
+  participated_plan_ids AS (
+    SELECT pp.plan_id FROM public.plan_participants pp WHERE pp.friend_id = p_user_id
+  ),
+  participated_plans AS (
+    SELECT p.id, p.user_id, p.title, p.activity, p.date, p.time_slot,
+      p.duration, p.start_time, p.end_time, p.location, p.notes,
+      p.status, p.feed_visibility, p.source, p.source_timezone,
+      p.end_date, p.recurring_plan_id, p.created_at
+    FROM public.plans p INNER JOIN participated_plan_ids pid ON pid.plan_id = p.id
+    WHERE p.user_id <> p_user_id AND p.date >= v_plan_start ORDER BY p.date ASC LIMIT 200
+  ),
+  all_plan_ids AS (
+    SELECT id FROM own_plans UNION SELECT id FROM participated_plans
+  ),
+  plan_participants_data AS (
+    SELECT pp.plan_id, pp.friend_id, pp.status, pp.role, pp.responded_at
+    FROM public.plan_participants pp WHERE pp.plan_id IN (SELECT id FROM all_plan_ids)
+  ),
+  participant_user_ids AS (
+    SELECT DISTINCT pp.friend_id AS uid FROM plan_participants_data pp
+    UNION SELECT DISTINCT pp2.user_id AS uid FROM participated_plans pp2
+  ),
+  participant_profiles AS (
+    SELECT pr.user_id, pr.display_name, pr.avatar_url
+    FROM public.profile_cache pr
+    WHERE pr.user_id IN (SELECT uid FROM participant_user_ids) AND pr.user_id <> p_user_id
+  ),
+  outgoing_friendships AS (
+    SELECT f.id, f.user_id, f.friend_user_id, f.friend_name, f.friend_email,
+      f.status, f.is_pod_member, f.created_at, f.updated_at
+    FROM public.friendships f WHERE f.user_id = p_user_id
+  ),
+  outgoing_friend_user_ids AS (
+    SELECT DISTINCT f.friend_user_id AS uid FROM outgoing_friendships f WHERE f.friend_user_id IS NOT NULL
+  ),
+  outgoing_friend_profiles AS (
+    SELECT pr.user_id, pr.avatar_url FROM public.profile_cache pr
+    WHERE pr.user_id IN (SELECT uid FROM outgoing_friend_user_ids)
+  ),
+  incoming_friendships AS (
+    SELECT f.id, f.user_id, f.friend_user_id, f.friend_name, f.status, f.created_at, f.updated_at
+    FROM public.friendships f WHERE f.friend_user_id = p_user_id
+  ),
+  incoming_friend_user_ids AS (
+    SELECT DISTINCT f.user_id AS uid FROM incoming_friendships f
+  ),
+  incoming_friend_profiles AS (
+    SELECT pr.user_id, pr.display_name, pr.avatar_url FROM public.profile_cache pr
+    WHERE pr.user_id IN (SELECT uid FROM incoming_friend_user_ids)
+  ),
+  avail_data AS (
+    SELECT a.date, a.early_morning, a.late_morning, a.early_afternoon,
+      a.late_afternoon, a.evening, a.late_night,
+      a.location_status, a.trip_location, a.vibe,
+      a.slot_location_early_morning, a.slot_location_late_morning,
+      a.slot_location_early_afternoon, a.slot_location_late_afternoon,
+      a.slot_location_evening, a.slot_location_late_night
+    FROM public.availability a
+    WHERE a.user_id = p_user_id AND a.date >= v_avail_start AND a.date <= v_avail_end
+  ),
+  caller_profile AS (
+    SELECT pr.current_vibe, pr.location_status, pr.custom_vibe_tags,
+      pr.vibe_gif_url, pr.default_work_days, pr.default_work_start_hour,
+      pr.default_work_end_hour, pr.default_availability_status,
+      pr.default_vibes, pr.home_address, pr.timezone
+    FROM public.profiles pr WHERE pr.user_id = p_user_id
+  )
+  SELECT json_build_object(
+    'own_plans',               COALESCE((SELECT json_agg(row_to_json(op)) FROM own_plans op), '[]'::json),
+    'participated_plans',      COALESCE((SELECT json_agg(row_to_json(pp)) FROM participated_plans pp), '[]'::json),
+    'plan_participants',       COALESCE((SELECT json_agg(row_to_json(pd)) FROM plan_participants_data pd), '[]'::json),
+    'participant_profiles',    COALESCE((SELECT json_agg(row_to_json(prof)) FROM participant_profiles prof), '[]'::json),
+    'outgoing_friendships',    COALESCE((SELECT json_agg(row_to_json(of2)) FROM outgoing_friendships of2), '[]'::json),
+    'outgoing_friend_profiles',COALESCE((SELECT json_agg(row_to_json(ofp)) FROM outgoing_friend_profiles ofp), '[]'::json),
+    'incoming_friendships',    COALESCE((SELECT json_agg(row_to_json(inf)) FROM incoming_friendships inf), '[]'::json),
+    'incoming_friend_profiles',COALESCE((SELECT json_agg(row_to_json(ifp)) FROM incoming_friend_profiles ifp), '[]'::json),
+    'availability',            COALESCE((SELECT json_agg(row_to_json(av)) FROM avail_data av), '[]'::json),
+    'profile',                 (SELECT row_to_json(cp) FROM caller_profile cp)
+  ) INTO v_result;
+  RETURN v_result;
+END;
 $function$
 ;
 
@@ -1858,110 +1998,6 @@ BEGIN
     'availability',            COALESCE((SELECT json_agg(row_to_json(av)) FROM avail_data av), '[]'::json),
     'profile',                 (SELECT row_to_json(cp) FROM caller_profile cp),
     'has_more_plans',          (SELECT val FROM has_more)
-  ) INTO v_result;
-  RETURN v_result;
-END;
-$function$
-;
-
-CREATE OR REPLACE FUNCTION public.get_dashboard_data(p_user_id uuid)
- RETURNS json
- LANGUAGE plpgsql
- STABLE SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
-DECLARE
-  v_avail_start date := (CURRENT_DATE - interval '7 days')::date;
-  v_avail_end   date := (CURRENT_DATE + interval '35 days')::date;
-  v_plan_start  date := (CURRENT_DATE - interval '14 days')::date;
-  v_result      json;
-BEGIN
-  WITH
-  own_plans AS (
-    SELECT p.id, p.user_id, p.title, p.activity, p.date, p.time_slot,
-      p.duration, p.start_time, p.end_time, p.location, p.notes,
-      p.status, p.feed_visibility, p.source, p.source_timezone,
-      p.end_date, p.recurring_plan_id, p.created_at
-    FROM public.plans p WHERE p.user_id = p_user_id AND p.date >= v_plan_start ORDER BY p.date ASC LIMIT 200
-  ),
-  participated_plan_ids AS (
-    SELECT pp.plan_id FROM public.plan_participants pp WHERE pp.friend_id = p_user_id
-  ),
-  participated_plans AS (
-    SELECT p.id, p.user_id, p.title, p.activity, p.date, p.time_slot,
-      p.duration, p.start_time, p.end_time, p.location, p.notes,
-      p.status, p.feed_visibility, p.source, p.source_timezone,
-      p.end_date, p.recurring_plan_id, p.created_at
-    FROM public.plans p INNER JOIN participated_plan_ids pid ON pid.plan_id = p.id
-    WHERE p.user_id <> p_user_id AND p.date >= v_plan_start ORDER BY p.date ASC LIMIT 200
-  ),
-  all_plan_ids AS (
-    SELECT id FROM own_plans UNION SELECT id FROM participated_plans
-  ),
-  plan_participants_data AS (
-    SELECT pp.plan_id, pp.friend_id, pp.status, pp.role, pp.responded_at
-    FROM public.plan_participants pp WHERE pp.plan_id IN (SELECT id FROM all_plan_ids)
-  ),
-  participant_user_ids AS (
-    SELECT DISTINCT pp.friend_id AS uid FROM plan_participants_data pp
-    UNION SELECT DISTINCT pp2.user_id AS uid FROM participated_plans pp2
-  ),
-  participant_profiles AS (
-    SELECT pr.user_id, pr.display_name, pr.avatar_url
-    FROM public.profile_cache pr
-    WHERE pr.user_id IN (SELECT uid FROM participant_user_ids) AND pr.user_id <> p_user_id
-  ),
-  outgoing_friendships AS (
-    SELECT f.id, f.user_id, f.friend_user_id, f.friend_name, f.friend_email,
-      f.status, f.is_pod_member, f.created_at, f.updated_at
-    FROM public.friendships f WHERE f.user_id = p_user_id
-  ),
-  outgoing_friend_user_ids AS (
-    SELECT DISTINCT f.friend_user_id AS uid FROM outgoing_friendships f WHERE f.friend_user_id IS NOT NULL
-  ),
-  outgoing_friend_profiles AS (
-    SELECT pr.user_id, pr.avatar_url FROM public.profile_cache pr
-    WHERE pr.user_id IN (SELECT uid FROM outgoing_friend_user_ids)
-  ),
-  incoming_friendships AS (
-    SELECT f.id, f.user_id, f.friend_user_id, f.friend_name, f.status, f.created_at, f.updated_at
-    FROM public.friendships f WHERE f.friend_user_id = p_user_id
-  ),
-  incoming_friend_user_ids AS (
-    SELECT DISTINCT f.user_id AS uid FROM incoming_friendships f
-  ),
-  incoming_friend_profiles AS (
-    SELECT pr.user_id, pr.display_name, pr.avatar_url FROM public.profile_cache pr
-    WHERE pr.user_id IN (SELECT uid FROM incoming_friend_user_ids)
-  ),
-  avail_data AS (
-    SELECT a.date, a.early_morning, a.late_morning, a.early_afternoon,
-      a.late_afternoon, a.evening, a.late_night,
-      a.location_status, a.trip_location, a.vibe,
-      a.slot_location_early_morning, a.slot_location_late_morning,
-      a.slot_location_early_afternoon, a.slot_location_late_afternoon,
-      a.slot_location_evening, a.slot_location_late_night
-    FROM public.availability a
-    WHERE a.user_id = p_user_id AND a.date >= v_avail_start AND a.date <= v_avail_end
-  ),
-  caller_profile AS (
-    SELECT pr.current_vibe, pr.location_status, pr.custom_vibe_tags,
-      pr.vibe_gif_url, pr.default_work_days, pr.default_work_start_hour,
-      pr.default_work_end_hour, pr.default_availability_status,
-      pr.default_vibes, pr.home_address, pr.timezone
-    FROM public.profiles pr WHERE pr.user_id = p_user_id
-  )
-  SELECT json_build_object(
-    'own_plans',               COALESCE((SELECT json_agg(row_to_json(op)) FROM own_plans op), '[]'::json),
-    'participated_plans',      COALESCE((SELECT json_agg(row_to_json(pp)) FROM participated_plans pp), '[]'::json),
-    'plan_participants',       COALESCE((SELECT json_agg(row_to_json(pd)) FROM plan_participants_data pd), '[]'::json),
-    'participant_profiles',    COALESCE((SELECT json_agg(row_to_json(prof)) FROM participant_profiles prof), '[]'::json),
-    'outgoing_friendships',    COALESCE((SELECT json_agg(row_to_json(of2)) FROM outgoing_friendships of2), '[]'::json),
-    'outgoing_friend_profiles',COALESCE((SELECT json_agg(row_to_json(ofp)) FROM outgoing_friend_profiles ofp), '[]'::json),
-    'incoming_friendships',    COALESCE((SELECT json_agg(row_to_json(inf)) FROM incoming_friendships inf), '[]'::json),
-    'incoming_friend_profiles',COALESCE((SELECT json_agg(row_to_json(ifp)) FROM incoming_friend_profiles ifp), '[]'::json),
-    'availability',            COALESCE((SELECT json_agg(row_to_json(av)) FROM avail_data av), '[]'::json),
-    'profile',                 (SELECT row_to_json(cp) FROM caller_profile cp)
   ) INTO v_result;
   RETURN v_result;
 END;
@@ -2913,6 +2949,7 @@ CREATE TRIGGER update_open_invites_updated_at BEFORE UPDATE ON open_invites FOR 
 CREATE TRIGGER validate_open_invite_anchor_trigger BEFORE INSERT OR UPDATE ON open_invites FOR EACH ROW EXECUTE FUNCTION validate_open_invite_anchor();
 CREATE TRIGGER on_plan_change_response AFTER UPDATE ON plan_change_responses FOR EACH ROW EXECUTE FUNCTION check_and_apply_plan_change();
 CREATE TRIGGER trg_notify_plan_invite AFTER INSERT ON plan_participants FOR EACH ROW EXECUTE FUNCTION notify_plan_invite();
+CREATE TRIGGER enforce_plan_participant_update BEFORE UPDATE ON plans FOR EACH ROW EXECUTE FUNCTION enforce_plan_participant_update();
 CREATE TRIGGER update_plans_updated_at BEFORE UPDATE ON plans FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_pods_updated_at BEFORE UPDATE ON pods FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER sync_friend_name_on_profile_update AFTER UPDATE ON profiles FOR EACH ROW EXECUTE FUNCTION sync_friend_name_on_profile_update();
@@ -3135,9 +3172,6 @@ CREATE POLICY "Users can submit their votes" ON public.plan_proposal_votes FOR I
   WHERE ((ppo.id = plan_proposal_votes.option_id) AND ((p.user_id = auth.uid()) OR (ppo.plan_id IN ( SELECT user_participated_plan_ids(auth.uid()) AS user_participated_plan_ids))))))));
 CREATE POLICY "Users can update their votes" ON public.plan_proposal_votes FOR UPDATE TO public USING ((auth.uid() = user_id)) WITH CHECK ((auth.uid() = user_id));
 CREATE POLICY "Users can view their own reminders" ON public.plan_reminders_sent FOR SELECT TO public USING ((auth.uid() = user_id));
-CREATE POLICY "Authenticated friends can view plans" ON public.plans FOR SELECT TO authenticated USING (((auth.uid() = user_id) OR (id IN ( SELECT user_participated_plan_ids(auth.uid()) AS user_participated_plan_ids)) OR (EXISTS ( SELECT 1
-   FROM friendships
-  WHERE ((friendships.user_id = auth.uid()) AND (friendships.friend_user_id = plans.user_id) AND (friendships.status = 'connected'::text))))));
 CREATE POLICY "Friends can view public plans" ON public.plans FOR SELECT TO public USING (((feed_visibility = 'friends'::text) AND (EXISTS ( SELECT 1
    FROM friendships
   WHERE ((friendships.user_id = ( SELECT auth.uid() AS uid)) AND (friendships.friend_user_id = plans.user_id) AND (friendships.status = 'connected'::text))))));
