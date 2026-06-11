@@ -26,7 +26,7 @@ import { format, differenceInDays, isAfter } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlannerStore } from '@/stores/plannerStore';
-import { setTripAvailability } from '@/lib/tripBusy';
+import { setTripAvailabilityBulk } from '@/lib/tripBusy';
 import { resetCalendarSyncCache, syncCalendarBusyTimes } from '@/lib/calendarSync';
 import * as ExpoCalendar from 'expo-calendar';
 import { TripActivitiesSection } from '@/components/trip/TripActivitiesSection';
@@ -106,32 +106,44 @@ export default function TripDetailScreen() {
             setDeleting(true);
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
             try {
+              // 1. Release the blocked days FIRST — if this fails, the trip
+              //    row survives and the user can simply retry the delete.
+              //    (Deleting first stranded the blocked days forever when the
+              //    release failed, with no trip left to retry against.)
+              if (user?.id && trip?.start_date && trip?.end_date) {
+                await setTripAvailabilityBulk(
+                  user.id,
+                  trip.start_date,
+                  trip.end_date,
+                  true, // mark free
+                );
+              }
+
+              // 2. Delete the trip row; on failure re-block so availability
+              //    stays consistent with the surviving trip.
               const { error: delErr } = await supabase
                 .from('trips')
                 .delete()
                 .eq('id', tripId);
-              if (delErr) throw delErr;
-
-              // Release slots that were blocked when this trip was created
-              if (trip?.start_date && trip?.end_date) {
-                await setTripAvailability(
-                  setAvailability,
-                  new Date(trip.start_date),
-                  new Date(trip.end_date),
-                  true, // mark free
-                );
-
-                // Re-mark any underlying calendar event slots as busy. Reset
-                // the sync cache so reconciliation re-discovers every event.
-                try {
-                  const { status } = await ExpoCalendar.getCalendarPermissionsAsync();
-                  if (status === 'granted') {
-                    resetCalendarSyncCache();
-                    await syncCalendarBusyTimes(setAvailability, 14);
-                  }
-                } catch {
-                  /* best-effort */
+              if (delErr) {
+                if (user?.id && trip?.start_date && trip?.end_date) {
+                  try {
+                    await setTripAvailabilityBulk(user.id, trip.start_date, trip.end_date, false);
+                  } catch { /* best-effort restore */ }
                 }
+                throw delErr;
+              }
+
+              // 3. Re-mark any underlying calendar event slots as busy. Reset
+              //    the sync cache so reconciliation re-discovers every event.
+              try {
+                const { status } = await ExpoCalendar.getCalendarPermissionsAsync();
+                if (status === 'granted') {
+                  resetCalendarSyncCache();
+                  await syncCalendarBusyTimes(setAvailability, 14);
+                }
+              } catch {
+                /* best-effort */
               }
 
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

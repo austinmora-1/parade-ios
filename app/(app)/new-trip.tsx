@@ -29,7 +29,7 @@ import { X, Plane } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlannerStore } from '@/stores/plannerStore';
-import { setTripAvailability } from '@/lib/tripBusy';
+import { setTripAvailabilityBulk } from '@/lib/tripBusy';
 import { LocationAutocomplete } from '@/components/primitives/LocationAutocomplete';
 import { TC } from '@/lib/theme';
 
@@ -80,7 +80,6 @@ function Chip({
 export default function NewTripScreen() {
   const { user } = useAuth();
   const queryClient     = useQueryClient();
-  const setAvailability = usePlannerStore((s) => s.setAvailability);
   const setUserId       = usePlannerStore((s) => s.setUserId);
 
   // Ensure planner store has userId for the block-availability writes
@@ -127,8 +126,9 @@ export default function NewTripScreen() {
       } as any);
       if (insertErr) throw insertErr;
 
-      // Block all 6 slots on every day of the trip so friends see "away"
-      await setTripAvailability(setAvailability, startDate, endDate, false);
+      // Block all 6 slots on every day of the trip so friends see "away" —
+      // single bulk upsert that throws on failure
+      await setTripAvailabilityBulk(user.id, startDate, endDate, false);
 
       // Refresh anything that lists trips
       await queryClient.invalidateQueries({ queryKey: ['trips'] });

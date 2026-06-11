@@ -48,6 +48,26 @@ export default function FindTimeScreen() {
   const forceRefresh = usePlannerStore((s) => s.forceRefresh);
   const { data: pods } = usePods();
 
+  // My social preference settings — rank/emphasize days & slots in step 2.
+  const { data: socialPrefs } = useQuery({
+    enabled: !!user?.id,
+    queryKey: ['my-social-prefs', user?.id],
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('preferred_social_days, preferred_social_times')
+        .eq('user_id', user!.id)
+        .maybeSingle();
+      return {
+        days: ((data as any)?.preferred_social_days as string[] | null) ?? [],
+        times: new Set<string>(
+          ((data as any)?.preferred_social_times as string[] | null) ?? [],
+        ),
+      };
+    },
+  });
+
   const connectedFriends = useMemo(
     () => friends.filter((f) => f.status === 'connected' && f.friendUserId),
     [friends],
@@ -173,7 +193,6 @@ export default function FindTimeScreen() {
 
   // Everything starts collapsed — the user sees just the months at a glance.
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
-  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
 
   const toggleMonth = useCallback((key: string) => {
     Haptics.selectionAsync();
@@ -184,14 +203,6 @@ export default function FindTimeScreen() {
     });
   }, []);
 
-  const toggleDay = useCallback((date: string) => {
-    Haptics.selectionAsync();
-    setExpandedDays((prev) => {
-      const next = new Set(prev);
-      next.has(date) ? next.delete(date) : next.add(date);
-      return next;
-    });
-  }, []);
 
   const toggleSlot = useCallback((s: { date: string; slot: TimeSlot }) => {
     Haptics.selectionAsync();
@@ -354,11 +365,11 @@ export default function FindTimeScreen() {
             hasSlots={groupSlots.length > 0}
             grouped={grouped}
             expandedMonths={expandedMonths}
-            expandedDays={expandedDays}
             selectedSlots={selectedSlots}
             onToggleMonth={toggleMonth}
-            onToggleDay={toggleDay}
             onToggleSlot={toggleSlot}
+            preferredDays={socialPrefs?.days ?? []}
+            preferredTimes={socialPrefs?.times ?? new Set()}
           />
         )}
 

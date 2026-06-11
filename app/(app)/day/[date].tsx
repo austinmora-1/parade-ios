@@ -30,6 +30,8 @@ import {
   Plane,
   ChevronLeft,
   ChevronRight,
+  CalendarDays,
+  Clock,
 } from 'lucide-react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO, isToday, addDays } from 'date-fns';
@@ -40,6 +42,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { usePlannerStore } from '@/stores/plannerStore';
 import type { TimeSlot, LocationStatus } from '@/types/planner';
 import { activityAccent } from '@/lib/activityColors';
+import { getPlanSlotCoverage } from '@/lib/planSlotCoverage';
+import { getCalendarBusyTitlesForDate } from '@/lib/calendarSync';
 import { ScreenHeader } from '@/components/primitives/ScreenHeader';
 import { LocationAutocomplete } from '@/components/primitives/LocationAutocomplete';
 import {
@@ -87,7 +91,7 @@ function useDayData(userId: string | undefined, date: string) {
     enabled: !!userId,
     queryKey: ['day', userId, date],
     queryFn: async () => {
-      const [{ data: avail }, { data: plans }] = await Promise.all([
+      const [{ data: avail }, { data: plans }, { data: trips }] = await Promise.all([
         supabase
           .from('availability')
           .select('*')
@@ -96,16 +100,46 @@ function useDayData(userId: string | undefined, date: string) {
           .maybeSingle(),
         supabase
           .from('plans')
-          .select('id, title, time_slot, location, activity')
+          .select('id, title, time_slot, start_time, end_time, location, activity')
           .eq('user_id', userId!)
           .eq('date', date),
+        supabase
+          .from('trips')
+          .select('id, name, location')
+          .eq('user_id', userId!)
+          .lte('start_date', date)
+          .gte('end_date', date),
       ]);
-      return { avail, plans: plans ?? [] };
+      return { avail, plans: plans ?? [], trip: (trips ?? [])[0] ?? null };
     },
   });
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
+
+/** Small gray chip explaining why a busy slot is blocked */
+function BusySourceChip({
+  icon: Icon,
+  label,
+}: {
+  icon: typeof CalendarDays;
+  label: string;
+}) {
+  return (
+    <View
+      className="flex-row items-center gap-1 rounded-full px-2 py-1"
+      style={{ backgroundColor: TINT.grayFaint, maxWidth: 150 }}
+    >
+      <Icon size={10} color={ELEPHANT} strokeWidth={2} />
+      <Text
+        className="font-sans text-[10px] font-medium text-muted-foreground"
+        numberOfLines={1}
+      >
+        {label}
+      </Text>
+    </View>
+  );
+}
 
 /** Compact plan row rendered inline under its time slot */
 function SlotPlanRow({ plan }: { plan: any }) {
@@ -157,6 +191,34 @@ export default function DayDetailScreen() {
   }, [refetch]);
   const avail: any = data?.avail;
   const plans = (data?.plans ?? []) as any[];
+  const dayTrip: any = data?.trip ?? null;
+
+  // Calendar events blocking slots on this day (empty without permission)
+  const [calBlockers, setCalBlockers] = useState<Partial<Record<TimeSlot, string>>>({});
+  useEffect(() => {
+    let cancelled = false;
+    setCalBlockers({});
+    if (date) {
+      getCalendarBusyTitlesForDate(date).then((map) => {
+        if (!cancelled) setCalBlockers(map);
+      });
+    }
+    return () => { cancelled = true; };
+  }, [date]);
+
+  // Slots covered by a plan's actual start/end times — catches spillover
+  // into slots other than the plan's primary one
+  const planBlockers = new Map<string, string>();
+  for (const p of plans) {
+    const coverage = getPlanSlotCoverage({
+      timeSlot: normalizeSlot(p.time_slot) as TimeSlot,
+      startTime: p.start_time,
+      endTime: p.end_time,
+    });
+    for (const c of coverage) {
+      if (!planBlockers.has(c.slot)) planBlockers.set(c.slot, p.title || 'Plan');
+    }
+  }
 
   const parsedDate = date ? parseISO(date) : new Date();
   const today = isToday(parsedDate);
@@ -422,6 +484,26 @@ export default function DayDetailScreen() {
                   : 'No plans yet'}
                 {isDefaultDay ? ' · based on your default schedule' : ''}
               </Text>
+
+              {/* Trip covering this day — explains an all-busy day */}
+              {dayTrip && (
+                <Pressable
+                  onPress={() => router.push(`/(app)/trip/${dayTrip.id}`)}
+                  className="flex-row items-center gap-1.5 active:opacity-70"
+                >
+                  <Plane size={11} color={EMBER} strokeWidth={2} />
+                  <Text
+                    className="font-sans text-xs font-medium flex-1"
+                    style={{ color: EMBER }}
+                    numberOfLines={1}
+                  >
+                    {dayTrip.name ||
+                      (dayTrip.location ? `Trip to ${dayTrip.location}` : 'On a trip')}{' '}
+                    — blocks this day
+                  </Text>
+                  <ChevronRight size={12} color={EMBER} strokeWidth={2} />
+                </Pressable>
+              )}
             </View>
           </View>
 
@@ -566,9 +648,21 @@ export default function DayDetailScreen() {
                           </Text>
                         </Pressable>
                       ) : !free && slotPlans.length === 0 ? (
-                        <Text className="font-sans text-xs text-muted-foreground/40">
-                          Busy
-                        </Text>
+                        // Explain the block: plan spillover > calendar > trip > manual
+                        planBlockers.has(slotDef.slot) ? (
+                          <BusySourceChip icon={Clock} label={planBlockers.get(slotDef.slot)!} />
+                        ) : calBlockers[slotDef.slot] ? (
+                          <BusySourceChip icon={CalendarDays} label={calBlockers[slotDef.slot]!} />
+                        ) : dayTrip ? (
+                          <BusySourceChip
+                            icon={Plane}
+                            label={dayTrip.location ? `Trip · ${dayTrip.location}` : 'Trip'}
+                          />
+                        ) : (
+                          <Text className="font-sans text-xs text-muted-foreground/40">
+                            Busy
+                          </Text>
+                        )
                       ) : null}
                     </View>
 
