@@ -5,8 +5,8 @@
  * different planning intents:
  *
  *   - Find time with friends   → /(app)/new-plan (standard guided flow)
- *   - Find friends to join     → /(app)/new-plan?openInvite=true (open call,
- *                                no specific invitees, feed_visibility=friends)
+ *   - Find friends to join     → /(app)/find-people (open-invite broadcast
+ *                                wizard writing to open_invites)
  *   - Go somewhere             → /(app)/new-trip
  *   - Invite friends to Parade → /(app)/add-friend
  *
@@ -102,7 +102,7 @@ export default function WhatPlanningScreen() {
           iconBg={TINT.marigoldSubtle}
           title="Find friends to join"
           subtitle="Open call: 'I'm getting drinks Friday — who's in?' No invitee list needed."
-          onPress={() => go('/(app)/new-plan?openInvite=true')}
+          onPress={() => go('/(app)/find-people')}
         />
 
         <PathRow

@@ -1,113 +1,111 @@
 /**
- * DiscoverableInvitesWidget — open invites you could claim.
+ * DiscoverableInvitesWidget — friends' OPEN INVITES you could claim.
  *
- * Distinct from OpenInvitesWidget (which surfaces plans you were specifically
- * invited to). This widget surfaces public/friends-scoped plans owned by your
- * friends where you're NOT a participant yet — you can opt in with one tap.
+ * Reads the open_invites table (audience-scoped by RLS, 48h expiry) — the
+ * same surface the PWA's incoming-invites widget reads, so broadcasts from
+ * either platform appear here. Claiming calls the claim-open-invite edge
+ * function; the first claimer locks in the plan.
  *
+ * Distinct from OpenInvitesWidget (plans you were specifically invited to).
  * Returns null when nothing to surface.
  */
 import { View, Text, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { useState, useCallback } from 'react';
-import { format, isToday, isTomorrow } from 'date-fns';
+import { format, isToday, isTomorrow, formatDistanceToNow, parseISO } from 'date-fns';
 import * as Haptics from 'expo-haptics';
-import { Compass, Check, ChevronRight, Clock, MapPin } from 'lucide-react-native';
-import { useAuth } from '@/hooks/useAuth';
-import { useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { Megaphone, Check, X as XIcon, Clock, MapPin } from 'lucide-react-native';
 import { usePlannerStore } from '@/stores/plannerStore';
-import { useDiscoverableInvites } from '@/hooks/useDiscoverableInvites';
+import {
+  useIncomingOpenInvites,
+  useClaimOpenInvite,
+  useDeclineOpenInvite,
+} from '@/hooks/useOpenInvites';
 import { TIME_SLOT_LABELS } from '@/types/planner';
 import type { TimeSlot } from '@/types/planner';
 import { activityAccent } from '@/lib/activityColors';
+import { TC } from '@/lib/theme';
+import { TINT } from '@/lib/colors';
 
-const DEFAULT_ACCENT = '#DFA53A'; // marigold for discovery (distinct from invites)
+const DEFAULT_ACCENT = '#DFA53A'; // marigold for discovery
 
-function dayLabel(d: Date): string {
-  if (isToday(d))    return 'Today';
+function dayLabel(dateStr: string): string {
+  const d = parseISO(dateStr);
+  if (isToday(d)) return 'Today';
   if (isTomorrow(d)) return 'Tomorrow';
   return format(d, 'EEE, MMM d');
 }
 
 export function DiscoverableInvitesWidget() {
-  const { user } = useAuth();
-  const queryClient = useQueryClient();
-  const loadAll = usePlannerStore((s) => s.loadAllData);
-  const { data: invites, isLoading } = useDiscoverableInvites();
+  const friends = usePlannerStore((s) => s.friends);
+  const { data: invites, isLoading } = useIncomingOpenInvites();
+  const claimMut = useClaimOpenInvite();
+  const declineMut = useDeclineOpenInvite();
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
 
-  const handleJoin = useCallback(async (planId: string) => {
-    if (!user?.id) return;
-    setBusyId(planId);
+  const nameFor = useCallback(
+    (userId: string) =>
+      friends.find((f) => f.friendUserId === userId)?.name?.split(' ')[0] ?? 'A friend',
+    [friends],
+  );
+
+  const handleClaim = useCallback(async (inviteId: string) => {
+    setBusyId(inviteId);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
-      // Insert ourselves as a participant with status='accepted'
-      const { error } = await (supabase as any)
-        .from('plan_participants')
-        .insert({
-          plan_id:      planId,
-          friend_id:    user.id,
-          status:       'accepted',
-          role:         'participant',
-          responded_at: new Date().toISOString(),
-        });
-      if (error) throw error;
-
-      // Refresh queries that depend on participant state
-      await Promise.all([
-        loadAll(true),
-        queryClient.invalidateQueries({ queryKey: ['discoverable-invites'] }),
-      ]);
+      const result = await claimMut.mutateAsync(inviteId);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (result?.plan_id) router.push(`/(app)/plan/${result.plan_id}`);
     } catch (err: any) {
-      console.error('Join open invite failed', err);
+      console.error('Claim open invite failed', err);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert(
-        "Couldn't join",
-        err?.message ?? 'The plan owner may need to accept join requests.',
-      );
+      Alert.alert("Couldn't claim", err?.message ?? 'It may have just been claimed by someone else.');
     } finally {
       setBusyId(null);
     }
-  }, [user?.id, loadAll, queryClient]);
+  }, [claimMut]);
 
-  if (isLoading || !invites || invites.length === 0) return null;
+  const handleDecline = useCallback(async (inviteId: string) => {
+    Haptics.selectionAsync();
+    setHidden((prev) => new Set(prev).add(inviteId));
+    declineMut.mutate(inviteId);
+  }, [declineMut]);
+
+  const visible = (invites ?? []).filter((i) => !hidden.has(i.id));
+  if (isLoading || visible.length === 0) return null;
 
   return (
     <View className="gap-3">
       <View className="flex-row items-center gap-1.5 px-0.5">
-        <Compass size={12} color="#DFA53A" strokeWidth={2} />
+        <Megaphone size={12} color="#DFA53A" strokeWidth={2} />
         <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-          Discover
+          Open invites
         </Text>
         <View className="ml-auto bg-marigold/15 rounded-full px-2 py-0.5">
           <Text className="font-sans text-xs text-marigold font-semibold">
-            {invites.length}
+            {visible.length}
           </Text>
         </View>
       </View>
 
       <View className="gap-2">
-        {invites.slice(0, 5).map((inv) => {
-          const accent    = activityAccent(inv.activity, DEFAULT_ACCENT);
-          const slotLabel = TIME_SLOT_LABELS[inv.timeSlot as TimeSlot]?.time ?? '';
-          const busy      = busyId === inv.id;
+        {visible.slice(0, 5).map((inv) => {
+          const accent = activityAccent(inv.activity, DEFAULT_ACCENT);
+          const slotLabel = TIME_SLOT_LABELS[inv.time_slot as TimeSlot]?.time ?? '';
+          const busy = busyId === inv.id;
+          const owner = nameFor(inv.user_id);
 
           return (
-            <Pressable
+            <View
               key={inv.id}
-              onPress={() => router.push(`/(app)/plan/${inv.id}`)}
-              className="bg-card rounded-2xl border border-border/30 overflow-hidden shadow-sm active:opacity-80"
+              className="bg-card rounded-2xl border border-border/30 overflow-hidden shadow-sm"
             >
               <View className="flex-row">
                 <View style={{ width: 4, backgroundColor: accent }} />
                 <View className="flex-1 px-4 py-3 gap-1">
                   <View className="flex-row items-start justify-between gap-2">
-                    <Text
-                      className="font-display text-sm text-foreground flex-1"
-                      numberOfLines={1}
-                    >
+                    <Text className="font-display text-sm text-foreground flex-1" numberOfLines={1}>
                       {inv.title}
                     </Text>
                     <Text className="font-sans text-xs text-muted-foreground">
@@ -116,61 +114,57 @@ export function DiscoverableInvitesWidget() {
                   </View>
 
                   <View className="flex-row items-center gap-3 flex-wrap">
-                    {slotLabel && (
+                    {slotLabel ? (
                       <View className="flex-row items-center gap-1">
-                        <Clock size={11} color="#929298" strokeWidth={1.75} />
-                        <Text className="font-sans text-xs text-muted-foreground">
-                          {slotLabel}
-                        </Text>
+                        <Clock size={11} color={TC.muted} strokeWidth={1.75} />
+                        <Text className="font-sans text-xs text-muted-foreground">{slotLabel}</Text>
                       </View>
-                    )}
-                    {inv.location && (
+                    ) : null}
+                    {inv.location ? (
                       <View className="flex-row items-center gap-1 flex-shrink">
-                        <MapPin size={11} color="#929298" strokeWidth={1.75} />
-                        <Text
-                          className="font-sans text-xs text-muted-foreground"
-                          numberOfLines={1}
-                        >
+                        <MapPin size={11} color={TC.muted} strokeWidth={1.75} />
+                        <Text className="font-sans text-xs text-muted-foreground" numberOfLines={1}>
                           {inv.location}
                         </Text>
                       </View>
-                    )}
+                    ) : null}
                   </View>
 
+                  {inv.notes ? (
+                    <Text className="font-sans text-[11px] text-foreground/70 leading-relaxed" numberOfLines={2}>
+                      "{inv.notes}"
+                    </Text>
+                  ) : null}
+
                   <Text className="font-sans text-[11px] text-muted-foreground/80 mt-0.5">
-                    {inv.ownerName} is open to friends joining
+                    {owner} is looking for company · expires{' '}
+                    {formatDistanceToNow(parseISO(inv.expires_at), { addSuffix: true })}
                   </Text>
                 </View>
               </View>
 
-              {/* Action row: I'm in */}
+              {/* Action row: Not now / I'm in (claim) */}
               <View className="flex-row border-t border-border/20">
                 <Pressable
-                  onPress={(e) => {
-                    e.stopPropagation?.();
-                    router.push(`/(app)/plan/${inv.id}`);
-                  }}
+                  onPress={() => handleDecline(inv.id)}
                   className="flex-1 flex-row items-center justify-center gap-1.5 py-3 active:bg-muted/20"
                 >
+                  <XIcon size={14} color={TINT.graySolid} strokeWidth={2} />
                   <Text className="font-sans text-sm font-semibold text-muted-foreground">
-                    See details
+                    Not now
                   </Text>
-                  <ChevronRight size={14} color="#929298" strokeWidth={2} />
                 </Pressable>
                 <View className="w-px bg-border/30" />
                 <Pressable
-                  onPress={(e) => {
-                    e.stopPropagation?.();
-                    handleJoin(inv.id);
-                  }}
+                  onPress={() => handleClaim(inv.id)}
                   disabled={busy}
                   className="flex-1 flex-row items-center justify-center gap-1.5 py-3 active:bg-primary/5"
                 >
                   {busy ? (
-                    <ActivityIndicator size="small" color="#23744D" />
+                    <ActivityIndicator size="small" color={TC.primary} />
                   ) : (
                     <>
-                      <Check size={14} color="#23744D" strokeWidth={2.5} />
+                      <Check size={14} color={TC.primary} strokeWidth={2.5} />
                       <Text className="font-sans text-sm font-semibold text-primary">
                         I'm in
                       </Text>
@@ -178,7 +172,7 @@ export function DiscoverableInvitesWidget() {
                   )}
                 </Pressable>
               </View>
-            </Pressable>
+            </View>
           );
         })}
       </View>
