@@ -159,8 +159,13 @@ export const usePlansStore = create<PlansState & PlansActions>((set, get) => ({
         .map(p => ({
           plan_id: data.id,
           friend_id: p.friendUserId!,
-          status: 'invited',
+          // Logged/committed plans pass rsvpStatus 'accepted' so friends
+          // don't need to RSVP; default stays 'invited'.
+          status: p.rsvpStatus || 'invited',
           role: p.role || 'participant',
+          ...(p.rsvpStatus === 'accepted'
+            ? { responded_at: new Date().toISOString() }
+            : {}),
         }));
 
       if (participantRows.length > 0) {

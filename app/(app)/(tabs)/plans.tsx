@@ -863,8 +863,8 @@ export default function PlansTab() {
             className="flex-1 flex-row items-center justify-center gap-1.5 rounded-lg py-1 active:opacity-70"
           >
             <CalendarDays size={15} color="#929298" strokeWidth={1.75} />
-            {/* Fraunces for the date range — same size as the "Plans & Trips" header */}
-            <Text className="font-display text-2xl text-foreground">{label}</Text>
+            {/* Fraunces for the date range — slightly under the page title size */}
+            <Text className="font-display text-xl text-foreground">{label}</Text>
           </Pressable>
 
           <Pressable

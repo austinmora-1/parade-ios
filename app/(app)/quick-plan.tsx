@@ -22,7 +22,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { format, parseISO, isToday, isTomorrow } from 'date-fns';
+import { format, parseISO, isToday, isTomorrow, addDays } from 'date-fns';
 import * as Haptics from 'expo-haptics';
 import { X, Calendar, Clock, Users, Send } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
@@ -47,42 +47,57 @@ function dayLabel(d: Date): string {
 }
 
 export default function QuickPlanScreen() {
-  const { date: dateParam, slot: slotParam } = useLocalSearchParams<{
+  const { date: dateParam, slot: slotParam, mode } = useLocalSearchParams<{
     date?: string;
     slot?: string;
+    mode?: string;
   }>();
+  // Log mode: record a plan you've ALREADY committed to outside Parade.
+  // Hard-confirmed on create — friends are attached as accepted, no RSVP.
+  const isLogMode = mode === 'log';
   const { user } = useAuth();
   const friends = usePlannerStore((s) => s.friends);
   const addPlan = usePlannerStore((s) => s.addPlan);
   const forceRefresh = usePlannerStore((s) => s.forceRefresh);
   const { data: friendData } = useFriendDashboardData();
 
-  const slot = (slotParam ?? 'evening') as TimeSlot;
-  const date = useMemo(
-    () => parseISO(`${dateParam ?? format(new Date(), 'yyyy-MM-dd')}T12:00:00`),
-    [dateParam],
+  const [pickedDate, setPickedDate] = useState<string>(
+    dateParam ?? format(new Date(), 'yyyy-MM-dd'),
   );
+  const [pickedSlot, setPickedSlot] = useState<TimeSlot>(
+    (slotParam ?? 'evening') as TimeSlot,
+  );
+  const slot = pickedSlot;
+  const date = useMemo(() => parseISO(`${pickedDate}T12:00:00`), [pickedDate]);
   const slotMeta = TIME_SLOT_LABELS[slot];
-
-  // Friends mutually free in this exact window — full overlap data, not the
-  // trimmed pill view, so nobody free in this slot is hidden.
-  const freeFriends = useMemo(
-    () =>
-      (friendData ?? [])
-        .filter((f) =>
-          f.overlapSlots.some((o) => o.date === dateParam && o.slot === slot),
-        )
-        .map((f) => ({
-          userId: f.userId,
-          name: formatDisplayName({
-            firstName: f.firstName,
-            lastName: f.lastName,
-            displayName: f.displayName ?? '',
-          }) || 'Friend',
-          avatar: f.avatarUrl,
-        })),
-    [friendData, dateParam, slot],
+  const dateOptions = useMemo(
+    () => Array.from({ length: 14 }, (_, i) => format(addDays(new Date(), i), 'yyyy-MM-dd')),
+    [],
   );
+
+  // Friend pool: log mode lists ALL connected friends (they already said
+  // yes outside Parade); suggest mode lists friends mutually free in the
+  // exact window.
+  const freeFriends = useMemo(() => {
+    if (isLogMode) {
+      return friends
+        .filter((f) => f.status === 'connected' && f.friendUserId)
+        .map((f) => ({ userId: f.friendUserId!, name: f.name, avatar: f.avatar ?? null }));
+    }
+    return (friendData ?? [])
+      .filter((f) =>
+        f.overlapSlots.some((o) => o.date === pickedDate && o.slot === slot),
+      )
+      .map((f) => ({
+        userId: f.userId,
+        name: formatDisplayName({
+          firstName: f.firstName,
+          lastName: f.lastName,
+          displayName: f.displayName ?? '',
+        }) || 'Friend',
+        avatar: f.avatarUrl,
+      }));
+  }, [isLogMode, friends, friendData, pickedDate, slot]);
 
   const [selectedFriendIds, setSelectedFriendIds] = useState<Set<string>>(new Set());
   const [title, setTitle] = useState('');
@@ -132,6 +147,8 @@ export default function QuickPlanScreen() {
         .map((f) => ({
           id: f.id, friendUserId: f.friendUserId, name: f.name,
           avatar: f.avatar, status: 'connected', role: 'participant',
+          // Already committed outside Parade — attach as accepted, no RSVP.
+          ...(isLogMode ? { rsvpStatus: 'accepted' } : {}),
         }));
 
       await addPlan({
@@ -142,7 +159,7 @@ export default function QuickPlanScreen() {
         duration: 60,
         notes: note.trim() || undefined,
         participants: participants as any,
-        status: hasFriends ? 'proposed' : 'confirmed',
+        status: isLogMode ? 'confirmed' : hasFriends ? 'proposed' : 'confirmed',
         feedVisibility: 'private',
         blocksAvailability: true,
       } as any);
@@ -175,7 +192,7 @@ export default function QuickPlanScreen() {
       setSaving(false);
     }
   }, [saving, customActivity, activity, friends, selectedFriendIds, note, title,
-      date, slot, hasFriends, addPlan, forceRefresh, user?.id]);
+      date, slot, hasFriends, isLogMode, addPlan, forceRefresh, user?.id]);
 
   return (
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
@@ -189,7 +206,7 @@ export default function QuickPlanScreen() {
           <X size={20} color={TC.icon} strokeWidth={2} />
         </Pressable>
         <Text className="font-display text-base text-foreground">
-          {hasFriends ? 'Suggest this plan' : 'Make this plan'}
+          {isLogMode ? 'Log a plan' : hasFriends ? 'Suggest this plan' : 'Make this plan'}
         </Text>
         <View className="w-9 h-9" />
       </View>
@@ -204,7 +221,61 @@ export default function QuickPlanScreen() {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
         >
-          {/* Pre-filled window summary */}
+          {/* Log mode: editable when picker */}
+          {isLogMode && (
+            <View className="gap-4">
+              <View>
+                <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
+                  When
+                </Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2 px-0.5 pb-1">
+                  {dateOptions.map((d) => {
+                    const dObj = parseISO(`${d}T12:00:00`);
+                    const selected = pickedDate === d;
+                    return (
+                      <Pressable
+                        key={d}
+                        onPress={() => { Haptics.selectionAsync(); setPickedDate(d); }}
+                        className={`rounded-xl px-3 py-2.5 border active:opacity-70 ${selected ? 'bg-primary border-primary' : 'bg-card border-border/40'}`}
+                      >
+                        <View className="items-center">
+                          <Text className={`font-sans text-[10px] font-semibold uppercase tracking-wider ${selected ? 'text-white/80' : 'text-muted-foreground'}`}>
+                            {dayLabel(dObj)}
+                          </Text>
+                          <Text className={`font-display text-base ${selected ? 'text-white' : 'text-foreground'}`}>
+                            {format(dObj, 'MMM d')}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+              <View>
+                <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
+                  Time
+                </Text>
+                <View className="flex-row flex-wrap gap-2">
+                  {(Object.entries(TIME_SLOT_LABELS) as [TimeSlot, { label: string; time: string }][]).map(([id, meta]) => {
+                    const selected = pickedSlot === id;
+                    return (
+                      <Pressable
+                        key={id}
+                        onPress={() => { Haptics.selectionAsync(); setPickedSlot(id); }}
+                        className={`rounded-xl px-3 py-2 border active:opacity-70 ${selected ? 'bg-primary border-primary' : 'bg-card border-border/40'}`}
+                      >
+                        <Text className={`font-sans text-xs font-semibold ${selected ? 'text-white' : 'text-foreground'}`}>{meta.label}</Text>
+                        <Text className={`font-sans text-[10px] ${selected ? 'text-white/70' : 'text-muted-foreground'}`}>{meta.time}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* Pre-filled window summary (suggest mode) */}
+          {!isLogMode && (
           <View className="bg-card rounded-2xl border border-border/30 p-4 gap-2.5 shadow-sm">
             <View className="flex-row items-center gap-2">
               <Calendar size={15} color={PARADE_GREEN} strokeWidth={2} />
@@ -233,13 +304,14 @@ export default function QuickPlanScreen() {
               </View>
             )}
           </View>
+          )}
 
           {/* Friend multi-select */}
           {freeFriends.length > 0 && (
             <View>
               <View className="flex-row items-center justify-between px-0.5 mb-2">
                 <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                  Invite friends
+                  {isLogMode ? "Who's in (already confirmed)" : 'Invite friends'}
                 </Text>
                 <Text className="font-sans text-[11px] text-muted-foreground">
                   {selectedFriends.length} selected
@@ -358,7 +430,7 @@ export default function QuickPlanScreen() {
               <Send size={15} color="#FFFFFF" strokeWidth={2} />
             )}
             <Text className={`font-sans text-sm font-semibold ${saving ? 'text-muted-foreground' : 'text-white'}`}>
-              {saving ? 'Sending…' : hasFriends ? 'Send suggestion' : 'Add plan'}
+              {saving ? 'Saving…' : isLogMode ? 'Log plan' : hasFriends ? 'Send suggestion' : 'Add plan'}
             </Text>
           </Pressable>
         </View>

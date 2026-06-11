@@ -20,7 +20,8 @@ import * as Haptics from 'expo-haptics';
 import {
   X,
   CalendarCheck,
-  Sparkles,
+  Megaphone,
+  Zap,
   Plane,
   UserPlus,
   ChevronRight,
@@ -98,9 +99,9 @@ export default function WhatPlanningScreen() {
         />
 
         <PathRow
-          icon={<Sparkles size={20} color="#DFA53A" strokeWidth={2} />}
+          icon={<Megaphone size={20} color="#DFA53A" strokeWidth={2} />}
           iconBg={TINT.marigoldSubtle}
-          title="Find friends to join"
+          title="Ask friends to join"
           subtitle="Open call: 'I'm getting drinks Friday — who's in?' No invitee list needed."
           onPress={() => go('/(app)/find-people')}
         />
@@ -111,6 +112,14 @@ export default function WhatPlanningScreen() {
           title="Go somewhere"
           subtitle="Plan a trip or visit — find weekends that work for everyone."
           onPress={() => go('/(app)/go-somewhere')}
+        />
+
+        <PathRow
+          icon={<Zap size={20} color="#23744D" strokeWidth={2} />}
+          iconBg={TINT.primarySubtle}
+          title="Quick plan"
+          subtitle="Already made plans outside Parade? Log them in seconds — no RSVPs."
+          onPress={() => go('/(app)/quick-plan?mode=log')}
         />
 
         <View className="h-px bg-border/30 my-1 mx-2" />
