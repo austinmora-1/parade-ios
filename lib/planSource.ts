@@ -52,6 +52,67 @@ export function isImportedAllDayEvent(plan: {
   return HOLIDAY_PATTERN.test(plan.title ?? '');
 }
 
+/**
+ * Flight + hotel reservation imports. Title-based: airline/lodging brand
+ * names, travel keywords, and airport-code pairs ("JFK → BOS", "SFO-LAX").
+ */
+const FLIGHT_PATTERN = new RegExp(
+  [
+    '\\bflights?\\b', '✈', '\\bboarding\\b', '\\bdeparture\\b', '\\blayover\\b',
+    '\\bdelta\\b', '\\bunited\\b', 'american airlines', '\\bjetblue\\b',
+    '\\bsouthwest\\b', 'alaska air', '\\bspirit air', '\\bfrontier\\b',
+    'british airways', '\\blufthansa\\b', 'air france', '\\bemirates\\b',
+    '\\bqantas\\b', 'air canada', '\\bklm\\b', '\\bryanair\\b', '\\beasyjet\\b',
+  ].join('|'),
+  'i',
+);
+// Airport-code pair, e.g. "JFK → BOS", "SFO-LAX", "AUS to BNA" (uppercase only)
+const AIRPORT_PAIR_PATTERN = /\b[A-Z]{3}\s*(?:→|->|–|—|-|to)\s*[A-Z]{3}\b/;
+
+const HOTEL_PATTERN = new RegExp(
+  [
+    '\\bhotels?\\b', '\\bmotel\\b', '\\binn\\b', '\\bresorts?\\b', '\\bhostel\\b',
+    '\\blodge\\b', '\\bsuites?\\b', '\\bairbnb\\b', '\\bvrbo\\b',
+    'check[ -]?in', 'check[ -]?out',
+    '\\bmarriott\\b', '\\bhilton\\b', '\\bhyatt\\b', '\\bsheraton\\b',
+    '\\bwestin\\b', '\\britz\\b', 'four seasons', '\\bdoubletree\\b',
+    '\\bcourtyard\\b', 'residence inn', '\\bhampton\\b', 'holiday inn',
+    '\\bintercontinental\\b', '\\bradisson\\b', '\\bwyndham\\b',
+    'best western', '\\bfairmont\\b',
+  ].join('|'),
+  'i',
+);
+
+/**
+ * Flight or hotel reservation imported from a calendar — logistics, not a
+ * social plan, so it shouldn't surface as a broadcast/anchor suggestion.
+ */
+export function isTravelReservationEvent(plan: {
+  source?: string | null;
+  title?: string | null;
+}): boolean {
+  if (!isCalendarSourced(plan)) return false;
+  const title = plan.title ?? '';
+  return (
+    FLIGHT_PATTERN.test(title) ||
+    AIRPORT_PAIR_PATTERN.test(title) ||
+    HOTEL_PATTERN.test(title)
+  );
+}
+
+/**
+ * Anything imported that isn't a real social plan: all-day observances
+ * (holidays, birthdays) and flight/hotel reservations. Use to filter
+ * suggestion surfaces like the broadcast chooser.
+ */
+export function isNonSocialImport(plan: {
+  source?: string | null;
+  startTime?: string | null;
+  title?: string | null;
+}): boolean {
+  return isImportedAllDayEvent(plan) || isTravelReservationEvent(plan);
+}
+
 export function getCalendarSourceLabel(source?: string | null): string {
   switch (String(source || '').toLowerCase()) {
     case 'google':

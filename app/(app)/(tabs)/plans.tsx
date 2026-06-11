@@ -30,6 +30,7 @@ import {
   isSameDay,
   isSameMonth,
   differenceInCalendarDays,
+  differenceInCalendarWeeks,
 } from 'date-fns';
 import {
   ChevronLeft,
@@ -52,6 +53,7 @@ import { activityAccent } from '@/lib/activityColors';
 import { TC } from '@/lib/theme';
 import { TINT, PARADE_GREEN, MARIGOLD } from '@/lib/colors';
 import { DateDial, getDayStatus } from '@/components/plans/DateDial';
+import { WeekPickerModal } from '@/components/plans/WeekPickerModal';
 import { Avatar } from '@/components/primitives/Avatar';
 import { formatDisplayName } from '@/lib/utils';
 import { citiesMatch, normalizeCity } from '@/lib/locationMatch';
@@ -684,7 +686,7 @@ function tripCountdown(start: Date, end: Date): string {
 }
 
 /** Single next-trip card — replaces the old trips list */
-function NextTripCard({ trip }: { trip: any }) {
+function NextTripCard({ trip, eyebrow }: { trip: any; eyebrow: string }) {
   const start = new Date(trip.start_date);
   const end   = new Date(trip.end_date);
   const sameMonth = format(start, 'MMM') === format(end, 'MMM');
@@ -704,7 +706,7 @@ function NextTripCard({ trip }: { trip: any }) {
         <View className="flex-row items-center gap-1.5">
           <Plane size={12} color={PARADE_GREEN} strokeWidth={2} />
           <Text className="font-sans text-[11px] font-bold uppercase tracking-wider text-primary">
-            {tripCountdown(start, end)}
+            {eyebrow}
           </Text>
         </View>
 
@@ -756,6 +758,7 @@ export default function PlansTab() {
   const { data: trips, refetch: refetchTrips } = useUpcomingTrips(user?.id);
 
   const [weekOffset, setWeekOffset] = useState(0);
+  const [weekPickerOpen, setWeekPickerOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
@@ -783,14 +786,34 @@ export default function PlansTab() {
   // First upcoming free window in the displayed week → drives the CTA
   const nextFreeWindow = findNextFreeWindow(days, availability, plans);
 
-  // Next trip card skips anything starting within the current week cycle
-  // (Mon–Sun of the week in progress) — those already show in the hero and
-  // weekday rows. Only trips starting after this Sunday qualify.
-  const currentWeekEnd = format(
-    addDays(startOfWeek(today, { weekStartsOn: 1 }), 6),
-    'yyyy-MM-dd',
+  // ── Week-relative trip lookahead ────────────────────────────────────────────
+  // The next-trip card is relative to the *selected* week: trips inside the
+  // selected week already show in the hero/weekday rows, so the card surfaces
+  // the first trip starting after that week's Sunday, plus a count of trips
+  // sitting between today and the selected week.
+  const todayStr        = format(today, 'yyyy-MM-dd');
+  const selWeekStartStr = format(weekStart, 'yyyy-MM-dd');
+  const selWeekEndStr   = format(weekEnd, 'yyyy-MM-dd');
+
+  const tripsBetween = (trips ?? []).filter(
+    (t) => t.start_date > todayStr && t.start_date < selWeekStartStr,
   );
-  const nextTrip = (trips ?? []).find((t) => t.start_date > currentWeekEnd);
+  const nextTrip = (trips ?? []).find((t) => t.start_date > selWeekEndStr);
+
+  const nextTripEyebrow = nextTrip
+    ? weekOffset === 0
+      ? tripCountdown(new Date(nextTrip.start_date), new Date(nextTrip.end_date))
+      : (() => {
+          const weeksAfter = differenceInCalendarWeeks(
+            new Date(nextTrip.start_date),
+            weekStart,
+            { weekStartsOn: 1 },
+          );
+          return weeksAfter <= 1
+            ? 'Trip the week after this'
+            : `Trip ${weeksAfter} weeks after this week`;
+        })()
+    : '';
 
   // ── Upcoming plans (all future, sorted) ────────────────────────────────────
   const upcomingPlans = plans
@@ -836,7 +859,7 @@ export default function PlansTab() {
           </Pressable>
 
           <Pressable
-            onPress={() => setWeekOffset(0)}
+            onPress={() => setWeekPickerOpen(true)}
             className="flex-1 flex-row items-center justify-center gap-1.5 rounded-lg py-1 active:opacity-70"
           >
             <CalendarDays size={15} color="#929298" strokeWidth={1.75} />
@@ -914,10 +937,21 @@ export default function PlansTab() {
             <AvailabilityCTA nextFree={nextFreeWindow} />
           )}
 
-          {/* ── Next trip ─────────────────────────────────────────────── */}
-          <View className="px-5">
+          {/* ── Next trip (relative to the selected week) ─────────────── */}
+          <View className="px-5 gap-2">
+            {/* Trips sitting between today and the selected week */}
+            {weekOffset > 0 && tripsBetween.length > 0 && (
+              <View className="flex-row items-center gap-1.5 px-1">
+                <Plane size={11} color="#929298" strokeWidth={1.75} />
+                <Text className="font-sans text-xs text-muted-foreground">
+                  {tripsBetween.length} trip{tripsBetween.length > 1 ? 's' : ''} planned
+                  between today and {format(weekStart, 'MMM d')}
+                </Text>
+              </View>
+            )}
+
             {nextTrip ? (
-              <NextTripCard trip={nextTrip} />
+              <NextTripCard trip={nextTrip} eyebrow={nextTripEyebrow} />
             ) : (
               <Pressable
                 onPress={() => router.push('/(app)/new-trip')}
@@ -952,6 +986,21 @@ export default function PlansTab() {
           )}
         </View>
       </ScrollView>
+
+      {/* Week picker — jump to any week from a month calendar */}
+      <WeekPickerModal
+        visible={weekPickerOpen}
+        onClose={() => setWeekPickerOpen(false)}
+        selectedWeekStart={weekStart}
+        onSelectWeek={(ws) => {
+          setWeekOffset(
+            differenceInCalendarWeeks(ws, startOfWeek(new Date(), { weekStartsOn: 1 }), {
+              weekStartsOn: 1,
+            }),
+          );
+          setWeekPickerOpen(false);
+        }}
+      />
     </SafeAreaView>
   );
 }
