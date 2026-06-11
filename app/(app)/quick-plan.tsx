@@ -238,7 +238,7 @@ export default function QuickPlanScreen() {
           <X size={20} color={TC.icon} strokeWidth={2} />
         </Pressable>
         <Text className="font-display text-base text-foreground">
-          {isLogMode ? 'Log a plan' : hasFriends ? 'Suggest this plan' : 'Make this plan'}
+          {isLogMode ? 'Quick plan' : hasFriends ? 'Suggest this plan' : 'Make this plan'}
         </Text>
         <View className="w-9 h-9" />
       </View>
@@ -483,7 +483,7 @@ export default function QuickPlanScreen() {
               <Send size={15} color="#FFFFFF" strokeWidth={2} />
             )}
             <Text className={`font-sans text-sm font-semibold ${saving ? 'text-muted-foreground' : 'text-white'}`}>
-              {saving ? 'Saving…' : isLogMode ? 'Log plan' : hasFriends ? 'Send suggestion' : 'Add plan'}
+              {saving ? 'Saving…' : isLogMode ? 'Make it happen!' : hasFriends ? 'Send suggestion' : 'Add plan'}
             </Text>
           </Pressable>
         </View>

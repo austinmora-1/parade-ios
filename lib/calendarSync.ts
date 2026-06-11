@@ -201,3 +201,40 @@ export function resetCalendarSyncCache() {
   cache.remove(LAST_KEYS_KEY);
   cache.remove(LAST_SYNC_AT);
 }
+
+/**
+ * Which calendar event (if any) blocks each slot on a given day — used by
+ * the day detail screen to explain busy slots that have no Parade plan.
+ * Returns an empty map when calendar permission isn't granted.
+ */
+export async function getCalendarBusyTitlesForDate(
+  dateStr: string,
+): Promise<Partial<Record<TimeSlot, string>>> {
+  try {
+    const perm = await Calendar.getCalendarPermissionsAsync();
+    if (!perm.granted) return {};
+
+    const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+    if (calendars.length === 0) return {};
+
+    const dayStart = parseISO(`${dateStr}T00:00:00`);
+    const dayEnd   = parseISO(`${dateStr}T23:59:59`);
+    const events = await Calendar.getEventsAsync(
+      calendars.map((c) => c.id),
+      dayStart,
+      dayEnd,
+    );
+
+    const out: Partial<Record<TimeSlot, string>> = {};
+    for (const ev of events) {
+      for (const key of eventToSlotKeys(ev)) {
+        const [d, slot] = key.split(':');
+        if (d !== dateStr) continue;
+        if (!out[slot as TimeSlot]) out[slot as TimeSlot] = ev.title || 'Calendar event';
+      }
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
