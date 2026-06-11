@@ -783,9 +783,14 @@ export default function PlansTab() {
   // First upcoming free window in the displayed week → drives the CTA
   const nextFreeWindow = findNextFreeWindow(days, availability, plans);
 
-  // Next trip card skips any trip already underway — only future starts
-  const todayStr = format(today, 'yyyy-MM-dd');
-  const nextTrip = (trips ?? []).find((t) => t.start_date > todayStr);
+  // Next trip card skips anything starting within the current week cycle
+  // (Mon–Sun of the week in progress) — those already show in the hero and
+  // weekday rows. Only trips starting after this Sunday qualify.
+  const currentWeekEnd = format(
+    addDays(startOfWeek(today, { weekStartsOn: 1 }), 6),
+    'yyyy-MM-dd',
+  );
+  const nextTrip = (trips ?? []).find((t) => t.start_date > currentWeekEnd);
 
   // ── Upcoming plans (all future, sorted) ────────────────────────────────────
   const upcomingPlans = plans
@@ -835,8 +840,8 @@ export default function PlansTab() {
             className="flex-1 flex-row items-center justify-center gap-1.5 rounded-lg py-1 active:opacity-70"
           >
             <CalendarDays size={15} color="#929298" strokeWidth={1.75} />
-            {/* Fraunces for the date range — matches PWA font-display font-bold */}
-            <Text className="font-display text-base text-foreground">{label}</Text>
+            {/* Fraunces for the date range — same size as the "Plans & Trips" header */}
+            <Text className="font-display text-2xl text-foreground">{label}</Text>
           </Pressable>
 
           <Pressable

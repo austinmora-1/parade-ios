@@ -345,7 +345,7 @@ export default function HomeTab() {
                         className="text-muted-foreground"
                         style={{
                           fontFamily: 'Inter_400Regular',
-                          fontSize: 13,
+                          fontSize: 14,
                         }}
                       >
                         {new Date().toLocaleDateString('en-US', {
@@ -364,7 +364,7 @@ export default function HomeTab() {
                           className="text-primary"
                           style={{
                             fontFamily: 'Inter_600SemiBold',
-                            fontSize: 13,
+                            fontSize: 14,
                           }}
                           numberOfLines={1}
                         >
@@ -435,13 +435,13 @@ export default function HomeTab() {
                 <Text style={{ fontSize: 18 }}>🧳</Text>
               </View>
               <View className="flex-1">
-                <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-primary/70">
+                <Text className="font-sans text-xs font-semibold uppercase tracking-widest text-primary/70">
                   Upcoming trip
                 </Text>
-                <Text className="font-display text-lg text-primary" numberOfLines={1}>
+                <Text className="font-display text-xl text-primary" numberOfLines={1}>
                   {tripLabel}
                 </Text>
-                <Text className="font-sans text-xs text-primary/70 mt-0.5">
+                <Text className="font-sans text-[13px] text-primary/70 mt-0.5">
                   {format(parseISO(nextTrip.start_date), 'EEE, MMM d')} – {format(parseISO(nextTrip.end_date), 'EEE, MMM d')}
                 </Text>
               </View>
@@ -456,7 +456,7 @@ export default function HomeTab() {
             {stats.upcomingCount > 0 && (
               <View className="flex-row items-center gap-1.5 bg-evergreen/8 rounded-full px-3 py-1.5">
                 <Text style={{ fontSize: 12 }}>📅</Text>
-                <Text className="font-sans text-[13px] text-evergreen font-medium">
+                <Text className="font-sans text-sm text-evergreen font-medium">
                   {stats.upcomingCount} {stats.upcomingCount === 1 ? 'plan' : 'plans'} this week
                 </Text>
               </View>
@@ -464,7 +464,7 @@ export default function HomeTab() {
             {stats.friendsFreeWeekend > 0 && (
               <View className="flex-row items-center gap-1.5 bg-marigold/10 rounded-full px-3 py-1.5">
                 <Text style={{ fontSize: 12 }}>👥</Text>
-                <Text className="font-sans text-[13px] text-marigold font-medium">
+                <Text className="font-sans text-sm text-marigold font-medium">
                   {stats.friendsFreeWeekend} free this weekend
                 </Text>
               </View>

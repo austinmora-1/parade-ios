@@ -79,11 +79,11 @@ export function DiscoverableInvitesWidget() {
     <View className="gap-3">
       <View className="flex-row items-center gap-1.5 px-0.5">
         <Megaphone size={12} color="#DFA53A" strokeWidth={2} />
-        <Text className="font-sans text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+        <Text className="font-sans text-[13px] font-semibold uppercase tracking-widest text-muted-foreground">
           Open invites
         </Text>
         <View className="ml-auto bg-marigold/15 rounded-full px-2 py-0.5">
-          <Text className="font-sans text-[13px] text-marigold font-semibold">
+          <Text className="font-sans text-sm text-marigold font-semibold">
             {visible.length}
           </Text>
         </View>
@@ -105,10 +105,10 @@ export function DiscoverableInvitesWidget() {
                 <View style={{ width: 4, backgroundColor: accent }} />
                 <View className="flex-1 px-4 py-3 gap-1">
                   <View className="flex-row items-start justify-between gap-2">
-                    <Text className="font-display text-base text-foreground flex-1" numberOfLines={1}>
+                    <Text className="font-display text-xl text-foreground flex-1" numberOfLines={1}>
                       {inv.title}
                     </Text>
-                    <Text className="font-sans text-[13px] text-muted-foreground">
+                    <Text className="font-sans text-sm text-muted-foreground">
                       {dayLabel(inv.date)}
                     </Text>
                   </View>
@@ -117,13 +117,13 @@ export function DiscoverableInvitesWidget() {
                     {slotLabel ? (
                       <View className="flex-row items-center gap-1">
                         <Clock size={11} color={TC.muted} strokeWidth={1.75} />
-                        <Text className="font-sans text-[13px] text-muted-foreground">{slotLabel}</Text>
+                        <Text className="font-sans text-sm text-muted-foreground">{slotLabel}</Text>
                       </View>
                     ) : null}
                     {inv.location ? (
                       <View className="flex-row items-center gap-1 flex-shrink">
                         <MapPin size={11} color={TC.muted} strokeWidth={1.75} />
-                        <Text className="font-sans text-[13px] text-muted-foreground" numberOfLines={1}>
+                        <Text className="font-sans text-sm text-muted-foreground" numberOfLines={1}>
                           {inv.location}
                         </Text>
                       </View>
@@ -131,12 +131,12 @@ export function DiscoverableInvitesWidget() {
                   </View>
 
                   {inv.notes ? (
-                    <Text className="font-sans text-xs text-foreground/70 leading-relaxed" numberOfLines={2}>
+                    <Text className="font-sans text-[13px] text-foreground/70 leading-relaxed" numberOfLines={2}>
                       "{inv.notes}"
                     </Text>
                   ) : null}
 
-                  <Text className="font-sans text-xs text-muted-foreground/80 mt-0.5">
+                  <Text className="font-sans text-[13px] text-muted-foreground/80 mt-0.5">
                     {owner} is looking for company · expires{' '}
                     {formatDistanceToNow(parseISO(inv.expires_at), { addSuffix: true })}
                   </Text>
@@ -150,7 +150,7 @@ export function DiscoverableInvitesWidget() {
                   className="flex-1 flex-row items-center justify-center gap-1.5 py-3 active:bg-muted/20"
                 >
                   <XIcon size={14} color={TINT.graySolid} strokeWidth={2} />
-                  <Text className="font-sans text-sm font-semibold text-muted-foreground">
+                  <Text className="font-sans text-[15px] font-semibold text-muted-foreground">
                     Not now
                   </Text>
                 </Pressable>
@@ -165,7 +165,7 @@ export function DiscoverableInvitesWidget() {
                   ) : (
                     <>
                       <Check size={14} color={TC.primary} strokeWidth={2.5} />
-                      <Text className="font-sans text-sm font-semibold text-primary">
+                      <Text className="font-sans text-[15px] font-semibold text-primary">
                         I'm in
                       </Text>
                     </>

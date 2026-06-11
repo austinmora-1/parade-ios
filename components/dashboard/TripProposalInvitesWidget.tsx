@@ -17,11 +17,11 @@ export function TripProposalInvitesWidget() {
     <View className="gap-3">
       <View className="flex-row items-center gap-1.5 px-0.5">
         <Plane size={12} color="#23744D" strokeWidth={2} />
-        <Text className="font-sans text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+        <Text className="font-sans text-[13px] font-semibold uppercase tracking-widest text-muted-foreground">
           Trips to vote on
         </Text>
         <View className="ml-auto bg-primary/10 rounded-full px-2 py-0.5">
-          <Text className="font-sans text-[13px] text-primary font-semibold">
+          <Text className="font-sans text-sm text-primary font-semibold">
             {invites.length}
           </Text>
         </View>
@@ -38,12 +38,12 @@ export function TripProposalInvitesWidget() {
             <View className="flex-1 px-4 py-3 gap-1">
               <View className="flex-row items-center gap-1.5">
                 <Plane size={11} color="#23744D" strokeWidth={2} />
-                <Text className="font-sans text-[11px] font-semibold uppercase tracking-wider text-primary">
+                <Text className="font-sans text-xs font-semibold uppercase tracking-wider text-primary">
                   From {inv.hostName}
                 </Text>
               </View>
               <Text
-                className="font-display text-base text-foreground"
+                className="font-display text-xl text-foreground"
                 numberOfLines={1}
               >
                 {inv.proposalName || 'Untitled trip'}
@@ -53,14 +53,14 @@ export function TripProposalInvitesWidget() {
                   <View className="flex-row items-center gap-1">
                     <MapPin size={11} color="#929298" strokeWidth={1.75} />
                     <Text
-                      className="font-sans text-[13px] text-muted-foreground"
+                      className="font-sans text-sm text-muted-foreground"
                       numberOfLines={1}
                     >
                       {inv.destination}
                     </Text>
                   </View>
                 )}
-                <Text className="font-sans text-[13px] text-muted-foreground">
+                <Text className="font-sans text-sm text-muted-foreground">
                   {inv.dateCount} date {inv.dateCount === 1 ? 'option' : 'options'}
                 </Text>
               </View>

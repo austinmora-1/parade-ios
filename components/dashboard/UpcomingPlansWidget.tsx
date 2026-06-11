@@ -50,12 +50,12 @@ export function UpcomingPlansWidget() {
       {/* Section eyebrow */}
       <View className="flex-row items-center gap-1.5 px-0.5">
         <CalendarCheck size={12} color="#929298" strokeWidth={2} />
-        <Text className="font-sans text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+        <Text className="font-sans text-[13px] font-semibold uppercase tracking-widest text-muted-foreground">
           Upcoming Plans
         </Text>
         {!isLoading && totalCount > 0 && (
           <View className="ml-auto bg-muted rounded-full px-2 py-0.5">
-            <Text className="font-sans text-[13px] text-muted-foreground font-medium">
+            <Text className="font-sans text-sm text-muted-foreground font-medium">
               {totalCount}
             </Text>
           </View>
@@ -81,7 +81,7 @@ export function UpcomingPlansWidget() {
       ) : upcoming.length === 0 ? (
         <View className="bg-card rounded-2xl border border-dashed border-border/40 px-4 py-6 items-center gap-1">
           <Text className="text-2xl">📅</Text>
-          <Text className="font-sans text-[15px] text-muted-foreground mt-1">
+          <Text className="font-sans text-base text-muted-foreground mt-1">
             No plans this week
           </Text>
         </View>
@@ -110,12 +110,12 @@ export function UpcomingPlansWidget() {
                   {/* Title row + date badge */}
                   <View className="flex-row items-start justify-between gap-2">
                     <Text
-                      className="font-display text-base text-evergreen flex-1"
+                      className="font-display text-xl text-evergreen flex-1"
                       numberOfLines={1}
                     >
                       {plan.title || 'Untitled plan'}
                     </Text>
-                    <Text className="font-sans text-[13px] text-muted-foreground whitespace-nowrap">
+                    <Text className="font-sans text-sm text-muted-foreground whitespace-nowrap">
                       {planDayLabel(planDate)}
                     </Text>
                   </View>
@@ -126,7 +126,7 @@ export function UpcomingPlansWidget() {
                       {slotLabel ? (
                         <View className="flex-row items-center gap-1">
                           <Clock size={11} color="#929298" strokeWidth={1.75} />
-                          <Text className="font-sans text-[13px] text-muted-foreground">
+                          <Text className="font-sans text-sm text-muted-foreground">
                             {slotLabel}
                           </Text>
                         </View>
@@ -135,7 +135,7 @@ export function UpcomingPlansWidget() {
                         <View className="flex-row items-center gap-1 flex-1">
                           <MapPin size={11} color="#929298" strokeWidth={1.75} />
                           <Text
-                            className="font-sans text-[13px] text-muted-foreground"
+                            className="font-sans text-sm text-muted-foreground"
                             numberOfLines={1}
                           >
                             {locationStr}
@@ -155,7 +155,7 @@ export function UpcomingPlansWidget() {
               onPress={() => router.push('/(app)/(tabs)/plans')}
               className="flex-row items-center justify-center gap-1 py-2"
             >
-              <Text className="font-sans text-[13px] text-muted-foreground font-medium">
+              <Text className="font-sans text-sm text-muted-foreground font-medium">
                 See all {totalCount} plans
               </Text>
               <ChevronRight size={12} color="#929298" strokeWidth={2} />

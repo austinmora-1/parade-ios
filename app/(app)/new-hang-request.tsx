@@ -36,44 +36,14 @@ import type { TimeSlot } from '@/types/planner';
 import { TC } from '@/lib/theme';
 
 import { TINT } from '@/lib/colors';
-const SLOTS: { id: TimeSlot; label: string; range: string }[] = [
-  { id: 'early-morning',   label: 'Early morning',   range: '7–9am' },
-  { id: 'late-morning',    label: 'Late morning',    range: '9am–12pm' },
-  { id: 'early-afternoon', label: 'Early afternoon', range: '12–3pm' },
-  { id: 'late-afternoon',  label: 'Late afternoon',  range: '3–6pm' },
-  { id: 'evening',         label: 'Evening',         range: '6–10pm' },
-  { id: 'late-night',      label: 'Late night',      range: '10pm–2am' },
-];
+import { Chip } from '@/components/primitives/Chip';
+import { FieldLabel } from '@/components/primitives/FieldLabel';
+import { SLOT_OPTIONS } from '@/lib/socialSlots';
 
 function dateLabel(d: Date): string {
   if (isToday(d))    return 'Today';
   if (isTomorrow(d)) return 'Tomorrow';
   return format(d, 'EEE');
-}
-
-function FieldLabel({ children }: { children: string }) {
-  return (
-    <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
-      {children}
-    </Text>
-  );
-}
-
-function Chip({ selected, onPress, children }: {
-  selected: boolean;
-  onPress: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      className={`rounded-xl px-3 py-2.5 border active:opacity-70 ${
-        selected ? 'bg-primary border-primary' : 'bg-card border-border/40'
-      }`}
-    >
-      <View className="flex-row items-center gap-1.5">{children}</View>
-    </Pressable>
-  );
 }
 
 /** Quick query to look up the requester's own display name */
@@ -301,7 +271,7 @@ export default function NewHangRequestScreen() {
           <View>
             <FieldLabel>Time</FieldLabel>
             <View className="flex-row flex-wrap gap-2">
-              {SLOTS.map((s) => {
+              {SLOT_OPTIONS.map((s) => {
                 const selected = slot === s.id;
                 return (
                   <Chip

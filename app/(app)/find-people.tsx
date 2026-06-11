@@ -41,6 +41,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Avatar } from '@/components/primitives/Avatar';
 import { LocationAutocomplete } from '@/components/primitives/LocationAutocomplete';
 import { TIME_SLOT_LABELS, type TimeSlot } from '@/types/planner';
+import { isImportedAllDayEvent } from '@/lib/planSource';
 import { TC } from '@/lib/theme';
 import { TINT } from '@/lib/colors';
 
@@ -145,13 +146,15 @@ export default function FindPeopleScreen() {
     },
   });
 
-  // Upcoming plans I own — anchor candidates
+  // Upcoming plans I own — anchor candidates. Imported all-day calendar
+  // events (Flag Day, Juneteenth, Father's Day, birthdays…) are filtered
+  // out: they're observances, not plans someone would broadcast.
   const anchorPlans = useMemo(() => {
     const now = new Date();
     return plans
       .filter((p) => {
         const d = p.date instanceof Date ? p.date : new Date(p.date);
-        return d >= now;
+        return d >= now && !isImportedAllDayEvent(p);
       })
       .slice(0, 10);
   }, [plans]);

@@ -97,12 +97,12 @@ export function UpcomingTripsWidget() {
       {/* Section eyebrow */}
       <View className="flex-row items-center gap-1.5 px-0.5">
         <Plane size={12} color={ELEPHANT} strokeWidth={2} />
-        <Text className="font-sans text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+        <Text className="font-sans text-[13px] font-semibold uppercase tracking-widest text-muted-foreground">
           Upcoming Trips
         </Text>
         {!isLoading && (trips?.length ?? 0) > 0 && (
           <View className="ml-auto bg-muted rounded-full px-2 py-0.5">
-            <Text className="font-sans text-[13px] text-muted-foreground font-medium">
+            <Text className="font-sans text-sm text-muted-foreground font-medium">
               {trips!.length}
             </Text>
           </View>
@@ -150,14 +150,14 @@ export function UpcomingTripsWidget() {
                   <View className="flex-row items-center gap-2">
                     <Icon size={15} color={accent} strokeWidth={2} />
                     <Text
-                      className="font-display text-base text-evergreen flex-1"
+                      className="font-display text-xl text-evergreen flex-1"
                       numberOfLines={1}
                     >
                       {title}
                     </Text>
                     {inProgress && (
                       <View className="bg-primary rounded-full px-2 py-0.5">
-                        <Text className="font-sans text-[10px] font-semibold text-white uppercase tracking-wide">
+                        <Text className="font-sans text-[11px] font-semibold text-white uppercase tracking-wide">
                           In progress
                         </Text>
                       </View>
@@ -167,7 +167,7 @@ export function UpcomingTripsWidget() {
                   <View className="flex-row items-center justify-between">
                     <View className="flex-row items-center gap-1">
                       <Clock size={11} color={ELEPHANT} strokeWidth={1.75} />
-                      <Text className="font-sans text-[13px] text-muted-foreground">
+                      <Text className="font-sans text-sm text-muted-foreground">
                         {format(parseISO(trip.start_date), 'MMM d')} – {format(parseISO(trip.end_date), 'MMM d')}
                       </Text>
                     </View>
@@ -184,7 +184,7 @@ export function UpcomingTripsWidget() {
                         ))}
                         {trip.friendProfiles.length > 4 && (
                           <View className="w-5 h-5 rounded-full bg-muted border border-white items-center justify-center">
-                            <Text className="font-sans text-[9px] font-medium text-muted-foreground">
+                            <Text className="font-sans text-[10px] font-medium text-muted-foreground">
                               +{trip.friendProfiles.length - 4}
                             </Text>
                           </View>

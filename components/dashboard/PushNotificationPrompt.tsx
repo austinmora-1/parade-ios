@@ -93,13 +93,13 @@ export function PushNotificationPrompt() {
         <Bell size={18} color="#23744D" strokeWidth={2} />
       </View>
       <View className="flex-1 gap-0.5">
-        <Text className="font-sans text-[11px] font-semibold uppercase tracking-wider text-primary">
+        <Text className="font-sans text-xs font-semibold uppercase tracking-wider text-primary">
           Don't miss a plan
         </Text>
-        <Text className="font-display text-base text-foreground">
+        <Text className="font-display text-xl text-foreground">
           Turn on push reminders
         </Text>
-        <Text className="font-sans text-[13px] text-muted-foreground leading-relaxed">
+        <Text className="font-sans text-sm text-muted-foreground leading-relaxed">
           Get a heads-up before plans + when friends invite you.
         </Text>
       </View>
@@ -120,7 +120,7 @@ export function PushNotificationPrompt() {
           {requesting ? (
             <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
-            <Text className="font-sans text-[13px] font-semibold text-white">
+            <Text className="font-sans text-sm font-semibold text-white">
               Turn on
             </Text>
           )}

@@ -118,11 +118,11 @@ export function HangRequestsWidget() {
     <View className="gap-3">
       <View className="flex-row items-center gap-1.5 px-0.5">
         <MessageCircle size={12} color="#D46549" strokeWidth={2} />
-        <Text className="font-sans text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+        <Text className="font-sans text-[13px] font-semibold uppercase tracking-widest text-muted-foreground">
           Pings for you
         </Text>
         <View className="ml-auto bg-secondary/15 rounded-full px-2 py-0.5">
-          <Text className="font-sans text-[13px] text-secondary font-semibold">
+          <Text className="font-sans text-sm text-secondary font-semibold">
             {requests.length}
           </Text>
         </View>
@@ -138,14 +138,14 @@ export function HangRequestsWidget() {
               className="bg-card rounded-2xl border border-border/30 overflow-hidden shadow-sm"
             >
               <View className="px-4 py-3 gap-1">
-                <Text className="font-display text-base text-foreground">
+                <Text className="font-display text-xl text-foreground">
                   {r.requesterName}
                 </Text>
-                <Text className="font-sans text-[13px] text-muted-foreground">
+                <Text className="font-sans text-sm text-muted-foreground">
                   {dayLabel(r.selectedDay)} · {slotLabel}
                 </Text>
                 {r.message && (
-                  <Text className="font-sans text-[13px] text-foreground/80 leading-relaxed mt-1">
+                  <Text className="font-sans text-sm text-foreground/80 leading-relaxed mt-1">
                     "{r.message}"
                   </Text>
                 )}
@@ -163,7 +163,7 @@ export function HangRequestsWidget() {
                   ) : (
                     <>
                       <X size={14} color="#D46549" strokeWidth={2.2} />
-                      <Text className="font-sans text-sm font-semibold text-secondary">
+                      <Text className="font-sans text-[15px] font-semibold text-secondary">
                         Pass
                       </Text>
                     </>
@@ -180,7 +180,7 @@ export function HangRequestsWidget() {
                   ) : (
                     <>
                       <Check size={14} color="#23744D" strokeWidth={2.5} />
-                      <Text className="font-sans text-sm font-semibold text-primary">
+                      <Text className="font-sans text-[15px] font-semibold text-primary">
                         Let's do it
                       </Text>
                     </>
