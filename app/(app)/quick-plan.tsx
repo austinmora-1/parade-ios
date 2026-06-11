@@ -24,7 +24,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { format, parseISO, isToday, isTomorrow, addDays } from 'date-fns';
 import * as Haptics from 'expo-haptics';
-import { X, Calendar, Clock, Users, Send } from 'lucide-react-native';
+import { X, Calendar, Clock, Users, Send, Search } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlannerStore } from '@/stores/plannerStore';
@@ -73,31 +73,65 @@ export default function QuickPlanScreen() {
   const date = useMemo(() => parseISO(`${pickedDate}T12:00:00`), [pickedDate]);
   const slotMeta = TIME_SLOT_LABELS[slot];
 
+  const plans = usePlannerStore((s) => s.plans);
+
+  // Shared-plan frequency per friend — ranks who you actually plan with.
+  const planFrequency = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const p of plans) {
+      for (const part of p.participants ?? []) {
+        if (part.friendUserId) {
+          counts[part.friendUserId] = (counts[part.friendUserId] ?? 0) + 1;
+        }
+      }
+    }
+    return counts;
+  }, [plans]);
+
   // Friend pool: log mode lists ALL connected friends (they already said
   // yes outside Parade); suggest mode lists friends mutually free in the
-  // exact window.
+  // exact window. Sorted by how often you plan together.
   const freeFriends = useMemo(() => {
-    if (isLogMode) {
-      return friends
-        .filter((f) => f.status === 'connected' && f.friendUserId)
-        .map((f) => ({ userId: f.friendUserId!, name: f.name, avatar: f.avatar ?? null }));
-    }
-    return (friendData ?? [])
-      .filter((f) =>
-        f.overlapSlots.some((o) => o.date === pickedDate && o.slot === slot),
-      )
-      .map((f) => ({
-        userId: f.userId,
-        name: formatDisplayName({
-          firstName: f.firstName,
-          lastName: f.lastName,
-          displayName: f.displayName ?? '',
-        }) || 'Friend',
-        avatar: f.avatarUrl,
-      }));
-  }, [isLogMode, friends, friendData, pickedDate, slot]);
+    const pool = isLogMode
+      ? friends
+          .filter((f) => f.status === 'connected' && f.friendUserId)
+          .map((f) => ({ userId: f.friendUserId!, name: f.name, avatar: f.avatar ?? null }))
+      : (friendData ?? [])
+          .filter((f) =>
+            f.overlapSlots.some((o) => o.date === pickedDate && o.slot === slot),
+          )
+          .map((f) => ({
+            userId: f.userId,
+            name: formatDisplayName({
+              firstName: f.firstName,
+              lastName: f.lastName,
+              displayName: f.displayName ?? '',
+            }) || 'Friend',
+            avatar: f.avatarUrl,
+          }));
+    return pool.sort(
+      (a, b) =>
+        (planFrequency[b.userId] ?? 0) - (planFrequency[a.userId] ?? 0) ||
+        a.name.localeCompare(b.name),
+    );
+  }, [isLogMode, friends, friendData, pickedDate, slot, planFrequency]);
 
   const [selectedFriendIds, setSelectedFriendIds] = useState<Set<string>>(new Set());
+  const [friendQuery, setFriendQuery] = useState('');
+
+  // Top 5 most-planned-with by default; search opens the full pool.
+  // Selected friends always stay visible so they can be untoggled.
+  const displayedFriends = useMemo(() => {
+    const q = friendQuery.trim().toLowerCase();
+    const base = q
+      ? freeFriends.filter((f) => f.name.toLowerCase().includes(q))
+      : freeFriends.slice(0, 5);
+    const shown = new Set(base.map((f) => f.userId));
+    const pinned = freeFriends.filter(
+      (f) => selectedFriendIds.has(f.userId) && !shown.has(f.userId),
+    );
+    return [...pinned, ...base];
+  }, [freeFriends, friendQuery, selectedFriendIds]);
   const [title, setTitle] = useState('');
   const [titleEdited, setTitleEdited] = useState(false);
   const [activity, setActivity] = useState<ActivityType | null>(null);
@@ -318,8 +352,26 @@ export default function QuickPlanScreen() {
                   {selectedFriends.length} selected
                 </Text>
               </View>
+              {freeFriends.length > 5 && (
+                <View className="flex-row items-center gap-2 bg-card rounded-xl border border-border/40 px-3 mb-2.5 shadow-sm">
+                  <Search size={14} color={ELEPHANT} strokeWidth={2} />
+                  <TextInput
+                    value={friendQuery}
+                    onChangeText={setFriendQuery}
+                    placeholder="Search friends"
+                    placeholderTextColor={ELEPHANT}
+                    className="flex-1 py-2 font-sans text-sm text-foreground"
+                    autoCorrect={false}
+                  />
+                  {friendQuery.length > 0 && (
+                    <Pressable onPress={() => setFriendQuery('')} hitSlop={6}>
+                      <X size={13} color={ELEPHANT} strokeWidth={2} />
+                    </Pressable>
+                  )}
+                </View>
+              )}
               <View className="flex-row flex-wrap gap-2">
-                {freeFriends.map((f) => {
+                {displayedFriends.map((f) => {
                   const isSel = selectedFriendIds.has(f.userId);
                   return (
                     <Pressable
