@@ -2,6 +2,9 @@
  * Plan detail — read-only Phase 1.
  * Matches PWA plan-card style: left-border activity accent, Fraunces title,
  * detail rows (Date / Time / Location / People), notes section.
+ *
+ * Sections live in components/plan/: PlanChangeBanner, PlanDetailsCard,
+ * ProposalVotingSection, RsvpSection, JoinRequestSection, photos, comments.
  */
 import {
   ScrollView,
@@ -14,53 +17,25 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Calendar, Clock, MapPin, Users, Check, X, MoreHorizontal, AlertCircle } from 'lucide-react-native';
+import { MoreHorizontal } from 'lucide-react-native';
 import { useActionSheet } from '@expo/react-native-action-sheet';
-import {
-  usePlanChangeRequest,
-  useRespondToChange,
-} from '@/hooks/usePlanChangeRequests';
-import { parseISO } from 'date-fns';
+import { useQuery } from '@tanstack/react-query';
+import { useState, useCallback } from 'react';
+import * as Haptics from 'expo-haptics';
+import { PlanChangeBanner } from '@/components/plan/PlanChangeBanner';
+import { PlanDetailsCard } from '@/components/plan/PlanDetailsCard';
+import { ProposalVotingSection } from '@/components/plan/ProposalVotingSection';
+import { RsvpSection } from '@/components/plan/RsvpSection';
+import { JoinRequestSection } from '@/components/plan/JoinRequestSection';
 import { PlanCommentsSection } from '@/components/plan/PlanCommentsSection';
 import { PlanPhotosSection } from '@/components/plan/PlanPhotosSection';
 import { ReactionBar } from '@/components/primitives/ReactionBar';
-import {
-  usePlanJoinRequests,
-  useMyJoinRequest,
-  useRequestToJoin,
-  useApproveJoinRequest,
-  useDeclineJoinRequest,
-} from '@/hooks/usePlanJoinRequests';
-import {
-  usePlanProposal,
-  useVoteForOption,
-  useFinalizeProposal,
-} from '@/hooks/usePlanProposal';
-import { formatDisplayName } from '@/lib/utils';
+import { ScreenHeader } from '@/components/primitives/ScreenHeader';
 import { activityAccent } from '@/lib/activityColors';
-import type { TimeSlot } from '@/types/planner';
-import { TIME_SLOT_LABELS } from '@/types/planner';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { format } from 'date-fns';
-import { useState, useCallback } from 'react';
-import * as Haptics from 'expo-haptics';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { TC } from '@/lib/theme';
-import { ScreenHeader } from '@/components/primitives/ScreenHeader';
-import { TINT } from '@/lib/colors';
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const SLOT_LABELS: Record<string, string> = {
-  early_morning:    'Early morning',
-  late_morning:     'Late morning',
-  early_afternoon:  'Afternoon',
-  late_afternoon:   'Late afternoon',
-  evening:          'Evening',
-  late_night:       'Late night',
-};
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
@@ -81,59 +56,18 @@ function usePlan(planId: string) {
   });
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-function DetailRow({
-  icon,
-  label,
-  children,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <View className="flex-row items-center px-4 py-3.5 gap-3">
-      {icon}
-      <Text className="font-sans text-xs text-muted-foreground w-16 uppercase tracking-wide">
-        {label}
-      </Text>
-      <Text className="font-sans text-sm text-foreground font-medium flex-1">
-        {children as string}
-      </Text>
-    </View>
-  );
-}
-
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function PlanDetailScreen() {
   const { planId } = useLocalSearchParams<{ planId: string }>();
   const { user } = useAuth();
-  const queryClient = useQueryClient();
-  const respondToProposal = usePlannerStore((s) => s.respondToProposal);
-  const deletePlan        = usePlannerStore((s) => s.deletePlan);
+  const deletePlan = usePlannerStore((s) => s.deletePlan);
   const { showActionSheetWithOptions } = useActionSheet();
 
   const { data, isLoading, error, refetch } = usePlan(planId);
   const plan = data?.plan as any;
   const participants = (data?.participants ?? []) as any[];
-  const { data: pendingChange } = usePlanChangeRequest(planId);
-  const respondChangeMut = useRespondToChange();
 
-  // Join-request hooks (owner sees pending requests; non-participants can request)
-  const { data: pendingJoinRequests } = usePlanJoinRequests(planId);
-  const { data: myJoinRequest }       = useMyJoinRequest(planId);
-  const requestJoinMut  = useRequestToJoin();
-  const approveJoinMut  = useApproveJoinRequest();
-  const declineJoinMut  = useDeclineJoinRequest();
-
-  // Proposal voting
-  const { data: proposalOptions } = usePlanProposal(planId);
-  const voteForOptionMut = useVoteForOption();
-  const finalizeMut      = useFinalizeProposal();
-
-  const [rsvpLoading, setRsvpLoading] = useState<'accepted' | 'declined' | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const onRefresh = useCallback(async () => {
@@ -145,29 +79,6 @@ export default function PlanDetailScreen() {
   const accentColor = activityAccent(plan?.activity);
   const isOwner = plan?.user_id === user?.id;
   const myParticipant = participants.find((p) => p.friend_id === user?.id);
-  const myRsvp = myParticipant?.status as
-    | 'invited'
-    | 'accepted'
-    | 'declined'
-    | undefined;
-
-  // Display name for the current user (to populate friend_name on join-request)
-  const { data: myProfile } = useQuery({
-    enabled: !!user?.id && !myParticipant && !isOwner,
-    queryKey: ['my-display-name', user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('display_name, first_name, last_name')
-        .eq('user_id', user!.id)
-        .maybeSingle();
-      return formatDisplayName({
-        firstName:   (data as any)?.first_name,
-        lastName:    (data as any)?.last_name,
-        displayName: (data as any)?.display_name,
-      }) || 'A friend';
-    },
-  });
 
   // ── Delete + Edit menu (owner only) ───────────────────────────────────────
   const handleDelete = useCallback(() => {
@@ -215,26 +126,6 @@ export default function PlanDetailScreen() {
       },
     );
   }, [showActionSheetWithOptions, planId, handleDelete]);
-
-  const handleRsvp = useCallback(
-    async (response: 'accepted' | 'declined') => {
-      if (!myParticipant?.id) return;
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      setRsvpLoading(response);
-      try {
-        await respondToProposal(planId, myParticipant.id, response);
-        await queryClient.invalidateQueries({ queryKey: ['plan', planId] });
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      } catch (err) {
-        console.error('RSVP failed', err);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        Alert.alert('Could not save RSVP', 'Please try again.');
-      } finally {
-        setRsvpLoading(null);
-      }
-    },
-    [myParticipant?.id, planId, respondToProposal, queryClient],
-  );
 
   return (
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
@@ -299,111 +190,9 @@ export default function PlanDetailScreen() {
             </View>
           </View>
 
-          {/* ── Pending change request banner ─────────────────────────── */}
-          {pendingChange && (
-            <View
-              className="bg-card rounded-2xl border overflow-hidden shadow-sm"
-              style={{ borderColor: TINT.amberStrong }}
-            >
-              <View className="px-4 py-3 gap-1">
-                <View className="flex-row items-center gap-1.5">
-                  <AlertCircle size={14} color="#92400E" strokeWidth={2} />
-                  <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest" style={{ color: '#92400E' }}>
-                    Change proposed
-                  </Text>
-                </View>
-                <Text className="font-display text-sm text-foreground mt-1">
-                  Move to{' '}
-                  {pendingChange.proposedDate
-                    ? format(parseISO(pendingChange.proposedDate), 'EEE, MMM d')
-                    : 'a new date'}
-                  {pendingChange.proposedTimeSlot ? ` · ${pendingChange.proposedTimeSlot.replace('-', ' ')}` : ''}
-                </Text>
-                <Text className="font-sans text-xs text-muted-foreground mt-0.5">
-                  Waiting for {pendingChange.responses.filter((r) => r.response === 'pending').length} response
-                  {pendingChange.responses.filter((r) => r.response === 'pending').length === 1 ? '' : 's'} · {
-                    pendingChange.responses.filter((r) => r.response === 'accepted').length
-                  } accepted
-                </Text>
-              </View>
+          <PlanChangeBanner planId={planId} currentUserId={user?.id} />
 
-              {/* Show Accept/Decline if user is a non-proposer participant with pending response */}
-              {pendingChange.proposedBy !== user?.id &&
-               pendingChange.responses.some((r) => r.participantId === user?.id && r.response === 'pending') && (
-                <View className="flex-row border-t border-border/20">
-                  <Pressable
-                    onPress={async () => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      try {
-                        await respondChangeMut.mutateAsync({
-                          changeRequestId: pendingChange.id,
-                          response:        'declined',
-                          planId,
-                        });
-                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                      } catch { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); }
-                    }}
-                    className="flex-1 flex-row items-center justify-center gap-1.5 py-3 active:bg-muted/20"
-                  >
-                    <X size={14} color="#D46549" strokeWidth={2.2} />
-                    <Text className="font-sans text-sm font-semibold text-secondary">
-                      Keep original
-                    </Text>
-                  </Pressable>
-                  <View className="w-px bg-border/30" />
-                  <Pressable
-                    onPress={async () => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                      try {
-                        await respondChangeMut.mutateAsync({
-                          changeRequestId: pendingChange.id,
-                          response:        'accepted',
-                          planId,
-                        });
-                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                      } catch { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); }
-                    }}
-                    className="flex-1 flex-row items-center justify-center gap-1.5 py-3 active:bg-primary/5"
-                  >
-                    <Check size={14} color="#23744D" strokeWidth={2.5} />
-                    <Text className="font-sans text-sm font-semibold text-primary">
-                      Accept change
-                    </Text>
-                  </Pressable>
-                </View>
-              )}
-            </View>
-          )}
-
-          {/* Details card */}
-          <View className="bg-card rounded-2xl border border-border/30 shadow-sm overflow-hidden">
-            <DetailRow icon={<Calendar size={15} color="#929298" strokeWidth={1.75} />} label="Date">
-              {format(new Date(plan.date), 'EEE, MMM d, yyyy')}
-            </DetailRow>
-            <View className="h-px bg-border/30 mx-4" />
-
-            {plan.time_slot && (
-              <>
-                <DetailRow icon={<Clock size={15} color="#929298" strokeWidth={1.75} />} label="Time">
-                  {SLOT_LABELS[plan.time_slot] ?? plan.time_slot}
-                </DetailRow>
-                <View className="h-px bg-border/30 mx-4" />
-              </>
-            )}
-
-            {plan.location && (
-              <>
-                <DetailRow icon={<MapPin size={15} color="#929298" strokeWidth={1.75} />} label="Where">
-                  {plan.location}
-                </DetailRow>
-                <View className="h-px bg-border/30 mx-4" />
-              </>
-            )}
-
-            <DetailRow icon={<Users size={15} color="#929298" strokeWidth={1.75} />} label="People">
-              {participants.length + 1} going
-            </DetailRow>
-          </View>
+          <PlanDetailsCard plan={plan} participantCount={participants.length} />
 
           {/* Notes */}
           {plan.notes ? (
@@ -417,314 +206,11 @@ export default function PlanDetailScreen() {
             </View>
           ) : null}
 
-          {/* ── Proposal voting ───────────────────────────────────────── */}
-          {(proposalOptions?.length ?? 0) > 0 && plan.status === 'proposed' && (
-            <View className="gap-2">
-              <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground px-1">
-                Vote on a time
-              </Text>
-              <View className="bg-card rounded-2xl border border-border/30 shadow-sm overflow-hidden">
-                {proposalOptions!.map((opt, i) => {
-                  const dateObj = parseISO(opt.date);
-                  const slotLabel = TIME_SLOT_LABELS[opt.timeSlot]?.time ?? '';
-                  const isMyPick = opt.myRank === 1;
-                  const otherIds = proposalOptions!.filter((o) => o.id !== opt.id).map((o) => o.id);
-                  return (
-                    <View key={opt.id}>
-                      <Pressable
-                        onPress={async () => {
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                          try {
-                            await voteForOptionMut.mutateAsync({
-                              planId,
-                              optionId: opt.id,
-                              otherOptionIds: otherIds,
-                            });
-                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                          } catch (err) {
-                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-                          }
-                        }}
-                        disabled={voteForOptionMut.isPending}
-                        className={`px-4 py-3 flex-row items-center gap-3 ${
-                          isMyPick ? 'bg-primary/8' : 'active:bg-muted/30'
-                        }`}
-                      >
-                        <View
-                          style={{
-                            width: 22, height: 22, borderRadius: 999,
-                            borderWidth: 2,
-                            borderColor: isMyPick ? '#23744D' : TINT.grayStrong,
-                            backgroundColor: isMyPick ? '#23744D' : 'transparent',
-                            alignItems: 'center', justifyContent: 'center',
-                          }}
-                        >
-                          {isMyPick && <Check size={12} color="#FFFFFF" strokeWidth={3} />}
-                        </View>
-                        <View className="flex-1">
-                          <Text className="font-display text-sm text-foreground">
-                            {format(dateObj, 'EEE, MMM d')}
-                          </Text>
-                          {slotLabel && (
-                            <Text className="font-sans text-xs text-muted-foreground mt-0.5">
-                              {slotLabel}
-                            </Text>
-                          )}
-                        </View>
-                        <View className="items-end">
-                          <Text className="font-display text-sm text-foreground">
-                            {opt.voteCount}
-                          </Text>
-                          <Text className="font-sans text-[10px] text-muted-foreground">
-                            vote{opt.voteCount === 1 ? '' : 's'}
-                          </Text>
-                        </View>
-                        {/* Owner finalize */}
-                        {isOwner && (
-                          <Pressable
-                            onPress={async (e) => {
-                              e.stopPropagation?.();
-                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                              try {
-                                await finalizeMut.mutateAsync({
-                                  planId,
-                                  date: opt.date,
-                                  timeSlot: opt.timeSlot,
-                                });
-                                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                              } catch (err: any) {
-                                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-                                Alert.alert('Could not finalize', err?.message ?? 'Please try again.');
-                              }
-                            }}
-                            hitSlop={4}
-                            className="bg-primary/10 rounded-xl px-2 py-1 ml-1 active:opacity-70"
-                          >
-                            <Text className="font-sans text-[11px] font-semibold text-primary">
-                              Pick this
-                            </Text>
-                          </Pressable>
-                        )}
-                      </Pressable>
-                      {i < proposalOptions!.length - 1 && (
-                        <View className="h-px bg-border/30 mx-4" />
-                      )}
-                    </View>
-                  );
-                })}
-              </View>
-              <Text className="font-sans text-[11px] text-muted-foreground px-1">
-                {isOwner
-                  ? 'Tap "Pick this" once everyone has voted to confirm the time.'
-                  : 'Tap to vote for your top choice.'}
-              </Text>
-            </View>
-          )}
+          <ProposalVotingSection planId={planId} planStatus={plan.status} isOwner={isOwner} />
 
-          {/* ── RSVP block (non-owner participants only) ─────────────────── */}
-          {!isOwner && myParticipant && (
-            <View className="gap-2">
-              <Text className="font-sans text-[11px] font-semibold text-muted-foreground uppercase tracking-widest px-1">
-                Your RSVP
-              </Text>
+          <RsvpSection planId={planId} isOwner={isOwner} myParticipant={myParticipant} />
 
-              {myRsvp === 'accepted' && (
-                <View
-                  className="flex-row items-center gap-2 rounded-2xl px-4 py-3.5 shadow-sm"
-                  style={{ backgroundColor: TINT.primarySubtle, borderWidth: 1, borderColor: TINT.primaryBorder }}
-                >
-                  <Check size={18} color="#23744D" strokeWidth={2.5} />
-                  <Text className="flex-1 font-sans text-sm font-semibold text-primary">
-                    You're going
-                  </Text>
-                  <Pressable
-                    onPress={() => handleRsvp('declined')}
-                    disabled={rsvpLoading !== null}
-                    hitSlop={4}
-                  >
-                    <Text className="font-sans text-xs font-semibold text-muted-foreground underline">
-                      Change to no
-                    </Text>
-                  </Pressable>
-                </View>
-              )}
-
-              {myRsvp === 'declined' && (
-                <View
-                  className="flex-row items-center gap-2 rounded-2xl px-4 py-3.5 shadow-sm"
-                  style={{ backgroundColor: TINT.secondarySubtle, borderWidth: 1, borderColor: TINT.secondaryBorder }}
-                >
-                  <X size={18} color="#D46549" strokeWidth={2.5} />
-                  <Text className="flex-1 font-sans text-sm font-semibold text-secondary">
-                    You declined
-                  </Text>
-                  <Pressable
-                    onPress={() => handleRsvp('accepted')}
-                    disabled={rsvpLoading !== null}
-                    hitSlop={4}
-                  >
-                    <Text className="font-sans text-xs font-semibold text-muted-foreground underline">
-                      Change to yes
-                    </Text>
-                  </Pressable>
-                </View>
-              )}
-
-              {(!myRsvp || myRsvp === 'invited') && (
-                <View className="flex-row gap-2">
-                  <Pressable
-                    onPress={() => handleRsvp('declined')}
-                    disabled={rsvpLoading !== null}
-                    className="flex-1 flex-row items-center justify-center gap-1.5 bg-card border border-border/40 rounded-2xl py-3.5 active:opacity-70 shadow-sm"
-                  >
-                    {rsvpLoading === 'declined' ? (
-                      <ActivityIndicator size="small" color="#D46549" />
-                    ) : (
-                      <>
-                        <X size={16} color="#D46549" strokeWidth={2.2} />
-                        <Text className="font-sans text-sm font-semibold text-secondary">
-                          Can't make it
-                        </Text>
-                      </>
-                    )}
-                  </Pressable>
-                  <Pressable
-                    onPress={() => handleRsvp('accepted')}
-                    disabled={rsvpLoading !== null}
-                    className="flex-1 flex-row items-center justify-center gap-1.5 bg-primary rounded-2xl py-3.5 active:opacity-80 shadow-sm"
-                  >
-                    {rsvpLoading === 'accepted' ? (
-                      <ActivityIndicator size="small" color="#FFFFFF" />
-                    ) : (
-                      <>
-                        <Check size={16} color="#FFFFFF" strokeWidth={2.5} />
-                        <Text className="font-sans text-sm font-semibold text-white">
-                          I'm in
-                        </Text>
-                      </>
-                    )}
-                  </Pressable>
-                </View>
-              )}
-            </View>
-          )}
-
-          {/* ── Join-request UI ───────────────────────────────────────── */}
-          {/* Non-participant, non-owner → Request to join */}
-          {!isOwner && !myParticipant && (
-            <View
-              className="bg-card rounded-2xl border overflow-hidden shadow-sm"
-              style={{ borderColor: TINT.primaryStrong }}
-            >
-              <View className="px-4 py-3 gap-1">
-                <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-primary">
-                  Join this plan
-                </Text>
-                {myJoinRequest?.status === 'pending' ? (
-                  <Text className="font-sans text-sm text-foreground mt-1">
-                    Request sent — waiting on the host.
-                  </Text>
-                ) : myJoinRequest?.status === 'approved' ? (
-                  <Text className="font-sans text-sm text-primary mt-1">
-                    Approved! Reload to see yourself on the plan.
-                  </Text>
-                ) : myJoinRequest?.status === 'declined' ? (
-                  <Text className="font-sans text-sm text-secondary mt-1">
-                    The host declined your request.
-                  </Text>
-                ) : (
-                  <>
-                    <Text className="font-sans text-xs text-muted-foreground mt-0.5">
-                      Ask the host to add you.
-                    </Text>
-                    <Pressable
-                      onPress={async () => {
-                        if (!myProfile) return;
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                        try {
-                          await requestJoinMut.mutateAsync({
-                            planId,
-                            friendName: myProfile,
-                          });
-                          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                        } catch (err: any) {
-                          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-                          Alert.alert('Could not send request', err?.message ?? 'Please try again.');
-                        }
-                      }}
-                      disabled={requestJoinMut.isPending}
-                      className="bg-primary rounded-xl py-2.5 items-center mt-2 active:opacity-80"
-                    >
-                      {requestJoinMut.isPending ? (
-                        <ActivityIndicator size="small" color="#FFFFFF" />
-                      ) : (
-                        <Text className="font-sans text-sm font-semibold text-white">
-                          Request to join
-                        </Text>
-                      )}
-                    </Pressable>
-                  </>
-                )}
-              </View>
-            </View>
-          )}
-
-          {/* Owner sees pending join requests */}
-          {isOwner && (pendingJoinRequests?.length ?? 0) > 0 && (
-            <View
-              className="bg-card rounded-2xl border overflow-hidden shadow-sm"
-              style={{ borderColor: TINT.primaryStrong }}
-            >
-              <View className="px-4 py-3 border-b border-border/20">
-                <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-primary">
-                  {pendingJoinRequests!.length} request{pendingJoinRequests!.length === 1 ? '' : 's'} to join
-                </Text>
-              </View>
-              {pendingJoinRequests!.map((req, i) => (
-                <View key={req.id}>
-                  <View className="px-4 py-3 flex-row items-center gap-3">
-                    <Text className="flex-1 font-sans text-sm font-medium text-foreground" numberOfLines={1}>
-                      {req.friendName}
-                    </Text>
-                    <Pressable
-                      onPress={async () => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        try {
-                          await declineJoinMut.mutateAsync({ requestId: req.id, planId });
-                          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                        } catch { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); }
-                      }}
-                      hitSlop={4}
-                      className="w-8 h-8 rounded-full items-center justify-center"
-                      style={{ backgroundColor: TINT.secondarySubtle }}
-                    >
-                      <X size={14} color="#D46549" strokeWidth={2.5} />
-                    </Pressable>
-                    <Pressable
-                      onPress={async () => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                        try {
-                          await approveJoinMut.mutateAsync({ requestId: req.id, planId });
-                          await queryClient.invalidateQueries({ queryKey: ['plan', planId] });
-                          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                        } catch (err: any) {
-                          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-                          Alert.alert('Could not approve', err?.message ?? 'Please try again.');
-                        }
-                      }}
-                      hitSlop={4}
-                      className="w-8 h-8 rounded-full items-center justify-center bg-primary"
-                    >
-                      <Check size={14} color="#FFFFFF" strokeWidth={2.5} />
-                    </Pressable>
-                  </View>
-                  {i < pendingJoinRequests!.length - 1 && (
-                    <View className="h-px bg-border/30 mx-4" />
-                  )}
-                </View>
-              ))}
-            </View>
-          )}
+          <JoinRequestSection planId={planId} isOwner={isOwner} isParticipant={!!myParticipant} />
 
           {/* Owner sees a small "You proposed this plan" hint instead */}
           {isOwner && participants.length > 0 && (

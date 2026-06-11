@@ -8,7 +8,7 @@
  * lockstep across platforms.
  */
 import { useQuery } from '@tanstack/react-query';
-import { format, addDays } from 'date-fns';
+import { format, addDays, parseISO } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { resolveEffectiveCity, isFriendInMyCity } from '@/lib/effectiveCity';
@@ -27,7 +27,22 @@ const SLOT_KEYS: { col: string; slot: TimeSlot }[] = [
 export interface OverlapSlot {
   date: string;     // yyyy-MM-dd
   slot: TimeSlot;
+  /** Matches one of my preferred social times (e.g. "friday:evening"). */
+  preferred?: boolean;
 }
+
+/** App TimeSlot → preferred_social_times bucket id (matches PWA). */
+export const SLOT_TO_PREF_BUCKET: Record<TimeSlot, string> = {
+  'early-morning':   'morning',
+  'late-morning':    'morning',
+  'early-afternoon': 'afternoon',
+  'late-afternoon':  'afternoon',
+  'evening':         'evening',
+  'late-night':      'late-night',
+};
+
+/** Pills surface at most this many prioritized slots per friend (PWA parity). */
+export const MAX_RECOMMENDED_SLOTS = 5;
 
 export interface FriendVibe {
   userId: string;
@@ -40,9 +55,15 @@ export interface FriendVibe {
   city: string | null;
   /** Distinct yyyy-MM-dd dates where there's at least one mutual slot. */
   freeDates: string[];
-  /** Mutual same-city overlap slots between me and this friend. */
+  /** All mutual same-city overlap slots between me and this friend. */
   overlapSlots: OverlapSlot[];
-  /** Convenience: overlapSlots.length. */
+  /**
+   * Top prioritized mutual slots (≤ MAX_RECOMMENDED_SLOTS) — slots matching
+   * my preferred social times first, chronological fallback. This is what
+   * the "Who's around this week" pill shows and what suggest-hang offers.
+   */
+  topSlots: OverlapSlot[];
+  /** Convenience: topSlots.length. */
   freeSlotCount: number;
 }
 
@@ -71,7 +92,9 @@ export function useFriendDashboardData() {
         format(addDays(new Date(), i), 'yyyy-MM-dd'),
       );
 
-      const [profilesRes, availRes] = await Promise.all([
+      const { data: { user: me } = { user: null } } = await supabase.auth.getUser();
+
+      const [profilesRes, availRes, myProfileRes] = await Promise.all([
         supabase
           .from('profiles')
           .select('user_id, display_name, first_name, last_name, avatar_url, current_vibe, home_address')
@@ -81,10 +104,35 @@ export function useFriendDashboardData() {
           .select('user_id, date, early_morning, late_morning, early_afternoon, late_afternoon, evening, late_night, location_status, trip_location')
           .in('user_id', friendUserIds)
           .in('date', weekDates),
+        me?.id
+          ? supabase
+              .from('profiles')
+              .select('preferred_social_times')
+              .eq('user_id', me.id)
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
       ]);
 
       const profiles = profilesRes.data ?? [];
       const avail = availRes.data ?? [];
+
+      // My preferred social times (e.g. "friday:evening") — used to rank
+      // which overlap slots surface on the pill (PWA pickRecommended parity).
+      const preferredTimes = new Set<string>(
+        ((myProfileRes.data as any)?.preferred_social_times as string[] | null) ?? [],
+      );
+      const hasPreferences = preferredTimes.size > 0;
+      const isPreferred = (s: OverlapSlot) => {
+        const day = format(parseISO(s.date), 'EEEE').toLowerCase();
+        return preferredTimes.has(`${day}:${SLOT_TO_PREF_BUCKET[s.slot]}`);
+      };
+      // Preferred slots first (chronological), then the rest — capped at 5.
+      const pickRecommended = (slots: OverlapSlot[]): OverlapSlot[] => {
+        const preferred = slots.filter(isPreferred);
+        const rest = slots.filter((s) => !isPreferred(s));
+        const pool = hasPreferences ? [...preferred, ...rest] : slots;
+        return pool.slice(0, MAX_RECOMMENDED_SLOTS);
+      };
 
       // Map: userId+date → availability row
       const availByUserDate = new Map<string, any>();
@@ -179,6 +227,9 @@ export function useFriendDashboardData() {
 
           if (overlap.length === 0) return null;
 
+          for (const s of overlap) s.preferred = isPreferred(s);
+          const topSlots = pickRecommended(overlap);
+
           // Format city for display (e.g. "Brooklyn, NY" → "New York")
           let cityDisplay: string | null = null;
           if (friendCityRaw) {
@@ -199,7 +250,8 @@ export function useFriendDashboardData() {
             city:          cityDisplay,
             freeDates:     Array.from(dayDates).sort(),
             overlapSlots:  overlap,
-            freeSlotCount: overlap.length,
+            topSlots,
+            freeSlotCount: topSlots.length,
           };
         })
         .filter((v): v is FriendVibe => v !== null)

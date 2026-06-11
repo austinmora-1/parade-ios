@@ -95,6 +95,10 @@ function AppLayoutInner() {
         options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
       />
       <Stack.Screen
+        name="go-somewhere"
+        options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+      />
+      <Stack.Screen
         name="propose-change"
         options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
       />

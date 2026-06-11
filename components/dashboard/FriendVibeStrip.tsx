@@ -1,8 +1,8 @@
 /**
  * FriendVibeStrip — "Who's around this week"
  * Horizontal scroll of wider friend pills. Each pill shows avatar + name +
- * free-days-this-week status. Matches PWA FriendVibeStrip layout.
- * Read-only for Phase 1; tap → friend profile.
+ * the count of top prioritized mutual slots (≤5, preferred social times
+ * first). Matches PWA FriendVibeStrip; tap → suggest-hang slot picker.
  */
 import { ScrollView, View, Text, Pressable } from 'react-native';
 import { router } from 'expo-router';
@@ -27,7 +27,7 @@ export function FriendVibeStrip() {
   return (
     <View className="gap-3">
       {/* Section eyebrow — matches PWA "text-[11px] font-semibold uppercase tracking-wider" */}
-      <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5">
+      <Text className="font-sans text-xs font-semibold uppercase tracking-widest text-muted-foreground px-0.5">
         Who's around this week
       </Text>
 
@@ -75,7 +75,7 @@ export function FriendVibeStrip() {
             return (
               <Pressable
                 key={friend.id}
-                onPress={() => router.push(`/(app)/friend/${friend.friendUserId}`)}
+                onPress={() => router.push(`/(app)/suggest-hang?friendId=${friend.friendUserId}`)}
                 className="bg-card border border-border/30 rounded-[28px] px-3.5 py-3 flex-row items-center gap-3 shadow-sm active:opacity-80"
                 style={{ width: 220 }}
               >
@@ -89,9 +89,9 @@ export function FriendVibeStrip() {
                 <View className="flex-1 gap-0.5">
                   {vibeData.city ? (
                     <View className="flex-row items-center gap-1">
-                      <MapPin size={9} color="#929298" strokeWidth={2} />
+                      <MapPin size={10} color="#929298" strokeWidth={2} />
                       <Text
-                        className="font-sans text-[10px] text-muted-foreground uppercase tracking-wider"
+                        className="font-sans text-[11px] text-muted-foreground uppercase tracking-wider"
                         numberOfLines={1}
                       >
                         {vibeData.city}
@@ -102,14 +102,14 @@ export function FriendVibeStrip() {
                     className="text-evergreen"
                     style={{
                       fontFamily: 'Fraunces_700Bold',
-                      fontSize: 17,
-                      lineHeight: 20,
+                      fontSize: 18,
+                      lineHeight: 22,
                     }}
                     numberOfLines={1}
                   >
                     {firstName}
                   </Text>
-                  <Text className="font-sans text-[11px] font-semibold text-primary">
+                  <Text className="font-sans text-xs font-semibold text-primary">
                     {slotCount} slot{slotCount === 1 ? '' : 's'} w/ you
                   </Text>
                 </View>

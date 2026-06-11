@@ -17,362 +17,27 @@ import {
   Pressable,
   Alert,
   Linking,
-  Switch,
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useState, useEffect, useCallback } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import * as Calendar from 'expo-calendar';
 import * as Haptics from 'expo-haptics';
-import {
-  LogOut,
-  Bell,
-  Sparkles,
-  Calendar as CalendarIcon,
-  Check,
-  RefreshCw,
-  Apple,
-} from 'lucide-react-native';
-import Svg, { Path } from 'react-native-svg';
-import { TimeWheelPicker } from '@/components/primitives/TimeWheelPicker';
+import { LogOut } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { syncCalendarBusyTimes, getLastSyncTime } from '@/lib/calendarSync';
 import { useGoogleCalendar } from '@/hooks/useGoogleCalendar';
 import { useNylasCalendar } from '@/hooks/useNylasCalendar';
-import { formatDistanceToNow } from 'date-fns';
 import { ScreenHeader } from '@/components/primitives/ScreenHeader';
-import { TINT } from '@/lib/colors';
-
-// ─── Profile settings query ──────────────────────────────────────────────────
-
-function useProfileSettings(userId: string | undefined) {
-  return useQuery({
-    enabled: !!userId,
-    queryKey: ['profile-settings', userId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select(
-          'plan_reminders, friend_requests_notifications, plan_invitations_notifications, ' +
-          'show_availability, show_location, show_vibe_status, allow_all_hang_requests, ' +
-          'interests, preferred_social_days, preferred_social_times, default_work_days, default_work_start_hour, default_work_end_hour',
-        )
-        .eq('user_id', userId!)
-        .single();
-      if (error) throw error;
-      return data as any;
-    },
-  });
-}
-
-// ─── Social preferences constants ────────────────────────────────────────────
-
-const INTEREST_OPTIONS = [
-  'Foodie', 'Outdoors', 'Movies', 'Concerts', 'Sports', 'Reading',
-  'Travel', 'Art', 'Gaming', 'Music', 'Cooking', 'Yoga', 'Coffee',
-  'Cocktails', 'Nightlife', 'Photography', 'Hiking', 'Fitness',
-];
-
-const DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-// Full lowercase day names match what the planner store / availability
-// defaults expect (see createDefaultAvailability in mapAvailability.ts).
-// Using 3-letter abbrevs here silently broke the work-day mask and made
-// every slot default to "free" → which collided with calendar sync data
-// and caused the Home dashboard to show no overlap.
-const DAY_KEYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
-
-const TIME_SLOT_OPTIONS = [
-  { id: 'early-morning',   label: 'Early morning' },
-  { id: 'late-morning',    label: 'Late morning' },
-  { id: 'early-afternoon', label: 'Early afternoon' },
-  { id: 'late-afternoon',  label: 'Late afternoon' },
-  { id: 'evening',         label: 'Evening' },
-  { id: 'late-night',      label: 'Late night' },
-];
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-function SectionCard({
-  children,
-  destructive = false,
-}: {
-  children: React.ReactNode;
-  destructive?: boolean;
-}) {
-  return (
-    <View
-      className={`mx-5 bg-card rounded-xl overflow-hidden shadow-sm ${
-        destructive ? 'border border-destructive/20' : 'border border-border/30'
-      }`}
-    >
-      {children}
-    </View>
-  );
-}
-
-function SectionHeader({
-  icon,
-  label,
-}: {
-  icon: React.ReactNode;
-  label: string;
-}) {
-  return (
-    <View className="flex-row items-center gap-2 px-4 py-3 border-b border-border/30">
-      {icon}
-      <Text className="font-display text-sm text-foreground">{label}</Text>
-    </View>
-  );
-}
-
-function ToggleRow({
-  title,
-  subtitle,
-  value,
-  onValueChange,
-  disabled,
-  isLast,
-}: {
-  title: string;
-  subtitle?: string;
-  value: boolean;
-  onValueChange: (v: boolean) => void;
-  disabled?: boolean;
-  isLast?: boolean;
-}) {
-  return (
-    <View
-      className={`px-4 py-3 flex-row items-center justify-between gap-3 ${
-        isLast ? '' : 'border-b border-border/20'
-      }`}
-    >
-      <View className="flex-1">
-        <Text className="font-sans text-sm font-medium text-foreground">{title}</Text>
-        {subtitle && (
-          <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">
-            {subtitle}
-          </Text>
-        )}
-      </View>
-      <Switch
-        value={value}
-        onValueChange={onValueChange}
-        disabled={disabled}
-        trackColor={{ false: '#DED4C3', true: '#23744D' }}
-        thumbColor="#FFFFFF"
-        ios_backgroundColor="#DED4C3"
-      />
-    </View>
-  );
-}
-
-// ─── Hour stepper (Work Schedule) — tap to open scroll wheel ────────────────
-
-function formatHourLabel(h: number): string {
-  const wholeHour = Math.floor(h);
-  const minutes   = Math.round((h - wholeHour) * 60);
-  const period    = wholeHour < 12 || wholeHour === 24 ? 'AM' : 'PM';
-  const hour12    = wholeHour % 12 === 0 ? 12 : wholeHour % 12;
-  const mmPadded  = minutes.toString().padStart(2, '0');
-  return `${hour12}:${mmPadded} ${period}`;
-}
-
-function HourStepper({
-  label,
-  value,
-  onChange,
-  min = 0,
-  max = 23.5,
-}: {
-  label:    string;
-  value:    number;
-  onChange: (v: number) => void;
-  min?:     number;
-  max?:     number;
-}) {
-  const [pickerOpen, setPickerOpen] = useState(false);
-  return (
-    <View className="flex-1 flex-row items-center justify-between">
-      <Text className="font-sans text-[11px] uppercase tracking-wider text-muted-foreground">
-        {label}
-      </Text>
-      <Pressable
-        onPress={() => {
-          Haptics.selectionAsync();
-          setPickerOpen(true);
-        }}
-        className="bg-primary/10 rounded-xl px-3 py-1.5 active:opacity-70"
-        hitSlop={6}
-      >
-        <Text className="font-display text-sm text-primary font-semibold">
-          {formatHourLabel(value)}
-        </Text>
-      </Pressable>
-      <TimeWheelPicker
-        visible={pickerOpen}
-        value={value}
-        min={min}
-        max={max}
-        title={`${label} time`}
-        onCancel={() => setPickerOpen(false)}
-        onConfirm={(v) => {
-          setPickerOpen(false);
-          onChange(v);
-        }}
-      />
-    </View>
-  );
-}
-
-// ─── Calendar row primitives ─────────────────────────────────────────────────
-
-type ConnState = 'loading' | 'connected' | 'disconnected';
-
-function CalendarProviderRow({
-  providerLabel,
-  providerHint,
-  icon,
-  state,
-  isBusy,
-  onConnect,
-  onDisconnect,
-  topBorder,
-}: {
-  providerLabel: string;
-  providerHint:  string;
-  icon:          React.ReactNode;
-  state:         ConnState;
-  isBusy?:       boolean;
-  onConnect:     () => void | Promise<void>;
-  onDisconnect:  () => void;
-  topBorder?:    boolean;
-}) {
-  return (
-    <View
-      className={`px-4 py-3 flex-row items-center justify-between gap-3 ${
-        topBorder ? 'border-t border-border/20' : ''
-      }`}
-    >
-      <View className="flex-row items-center gap-2.5 flex-1">
-        <View className="w-9 h-9 rounded-xl items-center justify-center bg-card border border-border/40">
-          {icon}
-        </View>
-        <View className="flex-1">
-          <Text className="font-sans text-sm font-medium text-foreground">
-            {providerLabel}
-          </Text>
-          <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">
-            {providerHint}
-          </Text>
-        </View>
-      </View>
-
-      {state === 'loading' || isBusy ? (
-        <View className="px-3 py-1.5">
-          <ActivityIndicator size="small" color="#23744D" />
-        </View>
-      ) : state === 'connected' ? (
-        <View className="flex-row items-center gap-1.5">
-          <View
-            className="flex-row items-center gap-1 px-2 py-0.5 rounded-full"
-            style={{ backgroundColor: TINT.primarySubtle }}
-          >
-            <Check size={11} color="#23744D" strokeWidth={2.5} />
-            <Text className="font-sans text-[11px] font-semibold text-primary">
-              On
-            </Text>
-          </View>
-          <Pressable
-            onPress={onDisconnect}
-            className="border border-border/40 rounded-xl px-2.5 py-1 active:opacity-70"
-            hitSlop={4}
-          >
-            <Text className="font-sans text-[11px] font-semibold text-foreground/70">
-              Disconnect
-            </Text>
-          </Pressable>
-        </View>
-      ) : (
-        <Pressable
-          onPress={onConnect}
-          className="bg-primary rounded-xl px-3 py-1.5 active:opacity-80"
-          hitSlop={4}
-        >
-          <Text className="font-sans text-xs font-semibold text-white">
-            Connect
-          </Text>
-        </Pressable>
-      )}
-    </View>
-  );
-}
-
-function CalendarSyncRow({
-  label,
-  lastSyncedAt,
-  lastResult,
-  isSyncing,
-  onSync,
-}: {
-  label:        string;
-  lastSyncedAt: string | null;
-  lastResult:   { eventsProcessed?: number; datesUpdated?: number } | null;
-  isSyncing:    boolean;
-  onSync:       () => void | Promise<void>;
-}) {
-  const subtitle = lastSyncedAt
-    ? `Last synced ${formatDistanceToNow(new Date(lastSyncedAt), { addSuffix: true })}` +
-      (lastResult?.eventsProcessed
-        ? ` · ${lastResult.eventsProcessed} events → ${lastResult.datesUpdated ?? 0} days`
-        : '')
-    : 'Pull busy times from the next 14 days.';
-  return (
-    <Pressable
-      onPress={onSync}
-      disabled={isSyncing}
-      className="px-4 py-3 flex-row items-center justify-between gap-3 border-t border-border/20 active:bg-muted/30"
-    >
-      <View className="flex-1">
-        <Text className="font-sans text-sm font-medium text-foreground">
-          {label}
-        </Text>
-        <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">
-          {subtitle}
-        </Text>
-      </View>
-      {isSyncing ? (
-        <ActivityIndicator size="small" color="#23744D" />
-      ) : (
-        <View className="flex-row items-center gap-1.5 bg-primary/10 rounded-xl px-3 py-1.5">
-          <RefreshCw size={12} color="#23744D" strokeWidth={2.2} />
-          <Text className="font-sans text-xs font-semibold text-primary">
-            Sync
-          </Text>
-        </View>
-      )}
-    </Pressable>
-  );
-}
-
-function GoogleGlyph() {
-  // Multi-color "G" using react-native-svg paths
-  return (
-    <Svg width={18} height={18} viewBox="0 0 24 24">
-      <Path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-      <Path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-      <Path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-      <Path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-    </Svg>
-  );
-}
-
-function AppleGlyph() {
-  return <Apple size={16} color="#0B0B0B" strokeWidth={2} />;
-}
+import { useProfileSettings } from '@/components/settings/useProfileSettings';
+import { SectionCard, SectionHeader } from '@/components/settings/SettingsPrimitives';
+import { NotificationsSection } from '@/components/settings/NotificationsSection';
+import { PrivacySection } from '@/components/settings/PrivacySection';
+import { SocialPreferencesSection } from '@/components/settings/SocialPreferencesSection';
+import { CalendarSection } from '@/components/settings/CalendarSection';
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
@@ -674,419 +339,68 @@ export default function SettingsPage() {
         ) : (
           <>
             {/* ── Notifications ───────────────────────────────────────── */}
-            <SectionCard>
-              <SectionHeader
-                icon={<Bell size={14} color="#23744D" strokeWidth={2} />}
-                label="Notifications"
-              />
-              <ToggleRow
-                title="Plan Reminders"
-                subtitle="Get notified before your plans"
-                value={reminders}
-                onValueChange={onTogglePlanReminders}
-                
-              />
-              <ToggleRow
-                title="Friend Requests"
-                subtitle="When someone connects with you"
-                value={friendReq}
-                onValueChange={onToggleFriendReq}
-                
-              />
-              <ToggleRow
-                title="Plan Invitations"
-                subtitle="When you're invited to a plan"
-                value={planInvites}
-                onValueChange={onTogglePlanInvites}
-                
-                isLast
-              />
-            </SectionCard>
+            <NotificationsSection
+              reminders={reminders}
+              friendReq={friendReq}
+              planInvites={planInvites}
+              onTogglePlanReminders={onTogglePlanReminders}
+              onToggleFriendReq={onToggleFriendReq}
+              onTogglePlanInvites={onTogglePlanInvites}
+            />
 
             {/* ── Privacy ─────────────────────────────────────────────── */}
-            <SectionCard>
-              <SectionHeader
-                icon={<Sparkles size={14} color="#23744D" strokeWidth={2} />}
-                label="Sharing & Privacy"
-              />
-              <ToggleRow
-                title="Show Availability"
-                subtitle="Friends can see your free slots"
-                value={showAvail}
-                onValueChange={onToggleShowAvail}
-                
-              />
-              <ToggleRow
-                title="Show Location"
-                subtitle="Friends can see your home base + current city"
-                value={showLocation}
-                onValueChange={onToggleShowLocation}
-                
-              />
-              <ToggleRow
-                title="Show Vibe"
-                subtitle="Friends can see your current vibe + weekly intentions"
-                value={showVibe}
-                onValueChange={onToggleShowVibe}
-                
-              />
-              <ToggleRow
-                title="Allow Pings From All Friends"
-                subtitle="Off → only your close friends can ping you for hangouts"
-                value={allowHang}
-                onValueChange={onToggleAllowHang}
-                
-                isLast
-              />
-            </SectionCard>
+            <PrivacySection
+              showAvail={showAvail}
+              showLocation={showLocation}
+              showVibe={showVibe}
+              allowHang={allowHang}
+              onToggleShowAvail={onToggleShowAvail}
+              onToggleShowLocation={onToggleShowLocation}
+              onToggleShowVibe={onToggleShowVibe}
+              onToggleAllowHang={onToggleAllowHang}
+            />
 
             {/* ── Social preferences ──────────────────────────────────── */}
-            <SectionCard>
-              <SectionHeader
-                icon={<Sparkles size={14} color="#DFA53A" strokeWidth={2} />}
-                label="Social Preferences"
-              />
-
-              {/* Interests */}
-              <View className="px-4 py-3 border-b border-border/20">
-                <Text className="font-sans text-sm font-medium text-foreground">
-                  Interests
-                </Text>
-                <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">
-                  Used to suggest plans you'd actually enjoy.
-                </Text>
-                <View className="flex-row flex-wrap gap-1.5 mt-2">
-                  {INTEREST_OPTIONS.map((opt) => {
-                    const selected = interests.includes(opt);
-                    return (
-                      <Pressable
-                        key={opt}
-                        onPress={() =>
-                          toggleArrayValue('interests', interests, setInterests, opt)
-                        }
-                        className={`rounded-full px-2.5 py-1 border ${
-                          selected ? 'bg-primary border-primary' : 'bg-card border-border/40'
-                        } active:opacity-70`}
-                      >
-                        <Text
-                          className={`font-sans text-xs font-medium ${
-                            selected ? 'text-white' : 'text-foreground'
-                          }`}
-                        >
-                          {opt}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-
-              {/* Work Schedule */}
-              <View className="px-4 py-3 border-b border-border/20">
-                <Text className="font-sans text-sm font-medium text-foreground">
-                  Work schedule
-                </Text>
-                <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">
-                  We'll block these times as busy by default.
-                </Text>
-
-                {/* Work days row */}
-                <View className="flex-row gap-1.5 mt-2.5">
-                  {DAY_KEYS.map((key, i) => {
-                    const selected = workDays.includes(key);
-                    return (
-                      <Pressable
-                        key={key}
-                        onPress={() =>
-                          toggleArrayValue(
-                            'default_work_days',
-                            workDays,
-                            setWorkDays,
-                            key,
-                          )
-                        }
-                        className={`flex-1 h-9 rounded-xl border items-center justify-center active:opacity-70 ${
-                          selected ? 'bg-primary border-primary' : 'bg-card border-border/40'
-                        }`}
-                      >
-                        <Text
-                          className={`font-sans text-xs font-semibold ${
-                            selected ? 'text-white' : 'text-foreground'
-                          }`}
-                        >
-                          {DAY_LABELS[i]}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-
-                {/* Hours row */}
-                <View className="flex-row items-center justify-between mt-3 gap-3">
-                  <HourStepper
-                    label="Start"
-                    value={workStart}
-                    onChange={(v) => {
-                      setWorkStart(v);
-                      markDirty('default_work_start_hour', v);
-                    }}
-                    max={workEnd - 1}
-                  />
-                  <View className="w-px h-8 bg-border/30" />
-                  <HourStepper
-                    label="End"
-                    value={workEnd}
-                    onChange={(v) => {
-                      setWorkEnd(v);
-                      markDirty('default_work_end_hour', v);
-                    }}
-                    min={workStart + 1}
-                  />
-                </View>
-              </View>
-
-              {/* Preferred days */}
-              <View className="px-4 py-3 border-b border-border/20">
-                <Text className="font-sans text-sm font-medium text-foreground">
-                  Preferred days
-                </Text>
-                <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">
-                  When you typically want to make plans.
-                </Text>
-                <View className="flex-row gap-1.5 mt-2">
-                  {DAY_KEYS.map((key, i) => {
-                    const selected = prefDays.includes(key);
-                    return (
-                      <Pressable
-                        key={key}
-                        onPress={() =>
-                          toggleArrayValue(
-                            'preferred_social_days',
-                            prefDays,
-                            setPrefDays,
-                            key,
-                          )
-                        }
-                        className={`flex-1 h-9 rounded-xl border items-center justify-center active:opacity-70 ${
-                          selected ? 'bg-primary border-primary' : 'bg-card border-border/40'
-                        }`}
-                      >
-                        <Text
-                          className={`font-sans text-xs font-semibold ${
-                            selected ? 'text-white' : 'text-foreground'
-                          }`}
-                        >
-                          {DAY_LABELS[i]}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-
-              {/* Preferred times */}
-              <View className="px-4 py-3">
-                <Text className="font-sans text-sm font-medium text-foreground">
-                  Preferred times
-                </Text>
-                <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">
-                  When you're typically up for hanging out.
-                </Text>
-                <View className="flex-row flex-wrap gap-1.5 mt-2">
-                  {TIME_SLOT_OPTIONS.map((opt) => {
-                    const selected = prefTimes.includes(opt.id);
-                    return (
-                      <Pressable
-                        key={opt.id}
-                        onPress={() =>
-                          toggleArrayValue(
-                            'preferred_social_times',
-                            prefTimes,
-                            setPrefTimes,
-                            opt.id,
-                          )
-                        }
-                        className={`rounded-full px-2.5 py-1 border ${
-                          selected ? 'bg-primary border-primary' : 'bg-card border-border/40'
-                        } active:opacity-70`}
-                      >
-                        <Text
-                          className={`font-sans text-xs font-medium ${
-                            selected ? 'text-white' : 'text-foreground'
-                          }`}
-                        >
-                          {opt.label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-            </SectionCard>
+            <SocialPreferencesSection
+              interests={interests}
+              prefDays={prefDays}
+              prefTimes={prefTimes}
+              workDays={workDays}
+              workStart={workStart}
+              workEnd={workEnd}
+              onToggleInterest={(opt) =>
+                toggleArrayValue('interests', interests, setInterests, opt)
+              }
+              onTogglePrefDay={(key) =>
+                toggleArrayValue('preferred_social_days', prefDays, setPrefDays, key)
+              }
+              onTogglePrefTime={(id) =>
+                toggleArrayValue('preferred_social_times', prefTimes, setPrefTimes, id)
+              }
+              onToggleWorkDay={(key) =>
+                toggleArrayValue('default_work_days', workDays, setWorkDays, key)
+              }
+              onWorkStartChange={(v) => {
+                setWorkStart(v);
+                markDirty('default_work_start_hour', v);
+              }}
+              onWorkEndChange={(v) => {
+                setWorkEnd(v);
+                markDirty('default_work_end_hour', v);
+              }}
+            />
 
             {/* ── Calendar ────────────────────────────────────────────── */}
-            <SectionCard>
-              <SectionHeader
-                icon={<CalendarIcon size={14} color="#23744D" strokeWidth={2} />}
-                label="Calendar"
-              />
-
-              {/* ── Google Calendar row ───────────────────────────────── */}
-              <CalendarProviderRow
-                providerLabel="Google Calendar"
-                providerHint={
-                  google.isConnected
-                    ? 'Connected — events sync automatically'
-                    : 'Sync your Google events'
-                }
-                icon={<GoogleGlyph />}
-                state={
-                  google.isLoading
-                    ? 'loading'
-                    : google.isConnected
-                      ? 'connected'
-                      : 'disconnected'
-                }
-                isBusy={google.isConnecting}
-                onConnect={google.connect}
-                onDisconnect={() => {
-                  Alert.alert(
-                    'Disconnect Google Calendar?',
-                    'Your synced busy times will stop updating automatically.',
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      {
-                        text: 'Disconnect',
-                        style: 'destructive',
-                        onPress: async () => { await google.disconnect(); },
-                      },
-                    ],
-                  );
-                }}
-              />
-              {google.isConnected && (
-                <CalendarSyncRow
-                  label="Sync Google now"
-                  lastSyncedAt={google.lastSyncedAt}
-                  lastResult={google.lastSyncResult}
-                  isSyncing={google.isSyncing}
-                  onSync={async () => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    const result = await google.syncCalendar();
-                    if (result.synced) {
-                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                      await loadProfileAndAvailability();
-                    } else {
-                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-                      Alert.alert('Sync failed', result.message ?? 'Please try again.');
-                    }
-                  }}
-                />
-              )}
-
-              {/* ── Apple Calendar (iCloud via Nylas) row ─────────────── */}
-              <CalendarProviderRow
-                providerLabel="Apple Calendar"
-                providerHint={
-                  nylas.isConnected
-                    ? 'Connected via iCloud'
-                    : 'One-click sync via iCloud'
-                }
-                icon={<AppleGlyph />}
-                state={
-                  nylas.isLoading
-                    ? 'loading'
-                    : nylas.isConnected
-                      ? 'connected'
-                      : 'disconnected'
-                }
-                isBusy={nylas.isConnecting}
-                onConnect={() => nylas.connect('icloud')}
-                onDisconnect={() => {
-                  Alert.alert(
-                    'Disconnect Apple Calendar?',
-                    'Your synced busy times will stop updating automatically.',
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      {
-                        text: 'Disconnect',
-                        style: 'destructive',
-                        onPress: async () => { await nylas.disconnect(); },
-                      },
-                    ],
-                  );
-                }}
-                topBorder
-              />
-              {nylas.isConnected && (
-                <CalendarSyncRow
-                  label="Sync Apple now"
-                  lastSyncedAt={nylas.lastSyncedAt}
-                  lastResult={nylas.lastSyncResult}
-                  isSyncing={nylas.isSyncing}
-                  onSync={async () => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    const result = await nylas.syncCalendar();
-                    if (result.synced) {
-                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                      await loadProfileAndAvailability();
-                    } else {
-                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-                      Alert.alert('Sync failed', result.message ?? 'Please try again.');
-                    }
-                  }}
-                />
-              )}
-
-              {/* ── Device Calendar (EventKit) — optional offline fallback ── */}
-              <View className="px-4 py-3 border-t border-border/20 gap-1">
-                <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                  Device calendar (optional)
-                </Text>
-                <View className="flex-row items-center justify-between gap-3 mt-1">
-                  <View className="flex-1">
-                    <Text className="font-sans text-sm font-medium text-foreground">
-                      iPhone Calendar app
-                    </Text>
-                    <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">
-                      {calendarState === 'granted'
-                        ? lastSyncAt
-                          ? `Last device sync ${formatDistanceToNow(lastSyncAt, { addSuffix: true })}`
-                          : 'Permission granted'
-                        : 'Pull busy times directly from the iOS Calendar app.'}
-                    </Text>
-                  </View>
-                  {calendarState === 'granted' ? (
-                    <Pressable
-                      onPress={handleSyncCalendar}
-                      disabled={syncing}
-                      className="flex-row items-center gap-1.5 bg-primary/10 rounded-xl px-3 py-1.5 active:opacity-70"
-                    >
-                      {syncing ? (
-                        <ActivityIndicator size="small" color="#23744D" />
-                      ) : (
-                        <>
-                          <RefreshCw size={12} color="#23744D" strokeWidth={2.2} />
-                          <Text className="font-sans text-xs font-semibold text-primary">
-                            Sync
-                          </Text>
-                        </>
-                      )}
-                    </Pressable>
-                  ) : (
-                    <Pressable
-                      onPress={handleConnectCalendar}
-                      className="bg-muted rounded-xl px-3 py-1.5 active:opacity-80"
-                      hitSlop={4}
-                    >
-                      <Text className="font-sans text-xs font-semibold text-foreground/70">
-                        {calendarState === 'denied' ? 'Open Settings' : 'Allow'}
-                      </Text>
-                    </Pressable>
-                  )}
-                </View>
-              </View>
-            </SectionCard>
+            <CalendarSection
+              google={google}
+              nylas={nylas}
+              calendarState={calendarState}
+              syncing={syncing}
+              lastSyncAt={lastSyncAt}
+              onConnectDeviceCalendar={handleConnectCalendar}
+              onSyncDeviceCalendar={handleSyncCalendar}
+              loadProfileAndAvailability={loadProfileAndAvailability}
+            />
 
             {/* ── Account ─────────────────────────────────────────────── */}
             <SectionCard destructive>

@@ -55,7 +55,7 @@ export function SmartPrimaryCTA() {
         <CalendarCheck size={18} color="#23744D" strokeWidth={2} />
       </View>
       <View className="flex-1 gap-0.5">
-        <Text className="font-sans text-[10px] font-semibold uppercase tracking-wider text-primary">
+        <Text className="font-sans text-[11px] font-semibold uppercase tracking-wider text-primary">
           Happening today
         </Text>
         <Text
@@ -65,7 +65,7 @@ export function SmartPrimaryCTA() {
           {todayPlan.title || 'Untitled plan'}
         </Text>
         {slotLabel && (
-          <Text className="font-sans text-xs text-muted-foreground">
+          <Text className="font-sans text-[13px] text-muted-foreground">
             {slotLabel}
           </Text>
         )}

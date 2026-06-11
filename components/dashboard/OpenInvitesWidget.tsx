@@ -62,12 +62,12 @@ function OpenInviteCard({
           {/* Title + "From X" */}
           <View className="flex-row items-start justify-between gap-2">
             <Text
-              className="font-display text-sm text-foreground flex-1"
+              className="font-display text-base text-foreground flex-1"
               numberOfLines={1}
             >
               {plan.title || 'Untitled plan'}
             </Text>
-            <Text className="font-sans text-[11px] text-muted-foreground">
+            <Text className="font-sans text-xs text-muted-foreground">
               {planDayLabel(planDate)}
             </Text>
           </View>
@@ -77,7 +77,7 @@ function OpenInviteCard({
             {slotLabel ? (
               <View className="flex-row items-center gap-1">
                 <Clock size={11} color="#929298" strokeWidth={1.75} />
-                <Text className="font-sans text-xs text-muted-foreground">
+                <Text className="font-sans text-[13px] text-muted-foreground">
                   {slotLabel}
                 </Text>
               </View>
@@ -86,7 +86,7 @@ function OpenInviteCard({
               <View className="flex-row items-center gap-1 flex-shrink">
                 <MapPin size={11} color="#929298" strokeWidth={1.75} />
                 <Text
-                  className="font-sans text-xs text-muted-foreground"
+                  className="font-sans text-[13px] text-muted-foreground"
                   numberOfLines={1}
                 >
                   {locationStr}
@@ -97,7 +97,7 @@ function OpenInviteCard({
 
           {/* Proposer attribution */}
           {proposerName && (
-            <Text className="font-sans text-[11px] text-muted-foreground/80">
+            <Text className="font-sans text-xs text-muted-foreground/80">
               From {proposerName}
             </Text>
           )}
@@ -239,11 +239,11 @@ export function OpenInvitesWidget() {
     <View className="gap-3">
       <View className="flex-row items-center gap-1.5 px-0.5">
         <Sparkles size={12} color="#D46549" strokeWidth={2} />
-        <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+        <Text className="font-sans text-xs font-semibold uppercase tracking-widest text-muted-foreground">
           Awaiting your RSVP
         </Text>
         <View className="ml-auto bg-secondary/15 rounded-full px-2 py-0.5">
-          <Text className="font-sans text-xs text-secondary font-semibold">
+          <Text className="font-sans text-[13px] text-secondary font-semibold">
             {openInvites.length}
           </Text>
         </View>

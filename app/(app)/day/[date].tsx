@@ -1,8 +1,13 @@
 /**
- * Day detail — read-only Phase 1.
- * Shows your availability for the day + any plans on that date.
- * Matches PWA visual treatment: Fraunces day heading, colored availability
- * pills, left-border-accent plan cards.
+ * Day detail — interactive day planner (PWA DayDetail parity).
+ *
+ * Sections:
+ *  1. Header with prev/next day navigation
+ *  2. Summary card: DateDial availability ring + 6-segment slot coverage bar
+ *  3. Location: Home/Away toggle + trip location editing (away days)
+ *  4. Time slots: per-slot free/busy toggle, plans inline under their slot,
+ *     and a "Quick plan" fast-path on free empty slots
+ *  5. Create-plan CTA
  */
 import {
   ScrollView,
@@ -11,50 +16,67 @@ import {
   Pressable,
   ActivityIndicator,
   RefreshControl,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Clock, MapPin, Check, Plus } from 'lucide-react-native';
+import {
+  MapPin,
+  Check,
+  Plus,
+  Zap,
+  Home,
+  Plane,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { format, parseISO, isToday } from 'date-fns';
+import { format, parseISO, isToday, addDays } from 'date-fns';
 import { useState, useCallback, useEffect } from 'react';
 import * as Haptics from 'expo-haptics';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlannerStore } from '@/stores/plannerStore';
-import type { TimeSlot } from '@/types/planner';
+import type { TimeSlot, LocationStatus } from '@/types/planner';
 import { activityAccent } from '@/lib/activityColors';
 import { ScreenHeader } from '@/components/primitives/ScreenHeader';
-import { TINT } from '@/lib/colors';
+import { LocationAutocomplete } from '@/components/primitives/LocationAutocomplete';
+import {
+  DateDial,
+  getDayStatus,
+  dayStatusColor,
+  DAY_STATUS_LABEL,
+  TOTAL_SLOTS,
+} from '@/components/plans/DateDial';
+import { TINT, PARADE_GREEN, EMBER, ELEPHANT, tint } from '@/lib/colors';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const SLOT_LABELS: Record<string, string> = {
-  early_morning:    'Early morning',
-  late_morning:     'Late morning',
-  early_afternoon:  'Afternoon',
-  late_afternoon:   'Late afternoon',
-  evening:          'Evening',
-  late_night:       'Late night',
-};
-
-const SLOT_TIME: Record<string, string> = {
-  early_morning:    '7–9am',
-  late_morning:     '9am–12pm',
-  early_afternoon:  '12–3pm',
-  late_afternoon:   '3–6pm',
-  evening:          '6–10pm',
-  late_night:       '10pm–2am',
-};
-
-/** DB column underscore_case → TimeSlot kebab-case */
-function colToTimeSlot(col: string): TimeSlot {
-  return col.replace(/_/g, '-') as TimeSlot;
+interface SlotDef {
+  col: string;      // DB availability column (underscore_case)
+  slot: TimeSlot;   // kebab-case TimeSlot (plans.time_slot, store API)
+  label: string;
+  time: string;
 }
+
+const SLOTS: SlotDef[] = [
+  { col: 'early_morning',   slot: 'early-morning',   label: 'Early morning',  time: '7–9am' },
+  { col: 'late_morning',    slot: 'late-morning',    label: 'Late morning',   time: '9am–12pm' },
+  { col: 'early_afternoon', slot: 'early-afternoon', label: 'Afternoon',      time: '12–3pm' },
+  { col: 'late_afternoon',  slot: 'late-afternoon',  label: 'Late afternoon', time: '3–6pm' },
+  { col: 'evening',         slot: 'evening',         label: 'Evening',        time: '6–10pm' },
+  { col: 'late_night',      slot: 'late-night',      label: 'Late night',     time: '10pm–2am' },
+];
 
 /** Treat truthy values (true OR legacy 'free' string) as free */
 function isFree(v: unknown): boolean {
   return v === true || v === 'free';
+}
+
+/** Normalize a plan's time_slot (DB may hold kebab or legacy underscore) */
+function normalizeSlot(raw: string | null | undefined): string {
+  return (raw ?? '').replace(/_/g, '-');
 }
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
@@ -82,14 +104,46 @@ function useDayData(userId: string | undefined, date: string) {
   });
 }
 
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+/** Compact plan row rendered inline under its time slot */
+function SlotPlanRow({ plan }: { plan: any }) {
+  return (
+    <Pressable
+      onPress={() => router.push(`/(app)/plan/${plan.id}`)}
+      className="bg-card rounded-xl border border-border/30 overflow-hidden flex-row shadow-sm active:opacity-80"
+    >
+      <View style={{ width: 4, backgroundColor: activityAccent(plan.activity) }} />
+      <View className="flex-1 px-3 py-2.5 flex-row items-center gap-2">
+        <View className="flex-1 gap-0.5">
+          <Text className="font-sans text-sm font-semibold text-foreground" numberOfLines={1}>
+            {plan.title || 'Untitled plan'}
+          </Text>
+          {plan.location ? (
+            <View className="flex-row items-center gap-1">
+              <MapPin size={10} color={ELEPHANT} strokeWidth={1.75} />
+              <Text className="font-sans text-[11px] text-muted-foreground" numberOfLines={1}>
+                {plan.location}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+        <ChevronRight size={14} color={ELEPHANT} strokeWidth={2} />
+      </View>
+    </Pressable>
+  );
+}
+
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function DayDetailScreen() {
   const { date } = useLocalSearchParams<{ date: string }>();
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const setAvailability = usePlannerStore((s) => s.setAvailability);
-  const setUserId       = usePlannerStore((s) => s.setUserId);
+  const setAvailability    = usePlannerStore((s) => s.setAvailability);
+  const setLocationStatus  = usePlannerStore((s) => s.setLocationStatus);
+  const homeAddress        = usePlannerStore((s) => s.homeAddress);
+  const setUserId          = usePlannerStore((s) => s.setUserId);
 
   const { data, isLoading, refetch } = useDayData(user?.id, date);
   const [refreshing, setRefreshing] = useState(false);
@@ -104,21 +158,45 @@ export default function DayDetailScreen() {
 
   const parsedDate = date ? parseISO(date) : new Date();
   const today = isToday(parsedDate);
-  const slots = Object.entries(SLOT_LABELS);
 
-  // Optimistic overrides keyed by underscore_case column name
+  // Plans grouped by normalized kebab-case slot
+  const plansBySlot = new Map<string, any[]>();
+  for (const p of plans) {
+    const key = normalizeSlot(p.time_slot);
+    plansBySlot.set(key, [...(plansBySlot.get(key) ?? []), p]);
+  }
+  const orphanPlans = plans.filter(
+    (p) => !SLOTS.some((s) => s.slot === normalizeSlot(p.time_slot)),
+  );
+
+  // ── Availability slot toggling (optimistic, keyed by underscore column) ────
   const [optimistic, setOptimistic] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState<Set<string>>(new Set());
 
-  // Reset optimistic state when day changes
+  // ── Location state ──────────────────────────────────────────────────────────
+  const [locOverride, setLocOverride] = useState<LocationStatus | null>(null);
+  const [tripLoc, setTripLoc] = useState('');
+  const [savingLoc, setSavingLoc] = useState(false);
+
+  // Reset optimistic + location state when day changes
   useEffect(() => {
     setOptimistic({});
+    setLocOverride(null);
   }, [date]);
+
+  // Seed trip location from server data
+  useEffect(() => {
+    setTripLoc(avail?.trip_location ?? '');
+  }, [avail?.trip_location, date]);
 
   // Ensure planner store has the userId set
   useEffect(() => {
     if (user?.id) setUserId(user.id);
   }, [user?.id]);
+
+  const locStatus: LocationStatus =
+    locOverride ?? (avail?.location_status === 'away' ? 'away' : 'home');
+  const tripLocDirty = tripLoc.trim() !== (avail?.trip_location ?? '').trim();
 
   /** True if this slot is marked free (optimistic > server) */
   const slotIsFree = (slotCol: string): boolean => {
@@ -126,33 +204,34 @@ export default function DayDetailScreen() {
     return isFree(avail?.[slotCol]);
   };
 
+  const freeCount = SLOTS.filter((s) => slotIsFree(s.col)).length;
+  const { status: dayStatus, fill } = getDayStatus(freeCount, true);
+
   const toggleSlot = useCallback(
-    async (slotCol: string) => {
-      const current  = slotIsFree(slotCol);
+    async (slotDef: SlotDef) => {
+      const current  = slotIsFree(slotDef.col);
       const newValue = !current;
 
       // Optimistic + haptic
       Haptics.selectionAsync();
-      setOptimistic((prev) => ({ ...prev, [slotCol]: newValue }));
-      setSaving((prev) => new Set(prev).add(slotCol));
+      setOptimistic((prev) => ({ ...prev, [slotDef.col]: newValue }));
+      setSaving((prev) => new Set(prev).add(slotDef.col));
 
       try {
-        await setAvailability(parsedDate, colToTimeSlot(slotCol), newValue);
-        // Sync this screen's query with the new server state
+        await setAvailability(parsedDate, slotDef.slot, newValue);
         await queryClient.invalidateQueries({ queryKey: ['day', user?.id, date] });
       } catch (err) {
         console.error('toggleSlot failed', err);
-        // Roll back optimistic update
         setOptimistic((prev) => {
           const next = { ...prev };
-          delete next[slotCol];
+          delete next[slotDef.col];
           return next;
         });
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       } finally {
         setSaving((prev) => {
           const next = new Set(prev);
-          next.delete(slotCol);
+          next.delete(slotDef.col);
           return next;
         });
       }
@@ -162,20 +241,17 @@ export default function DayDetailScreen() {
 
   /** Mark all six slots free (or all busy if all currently free) */
   const toggleAllSlots = useCallback(async () => {
-    const allFree = slots.every(([col]) => slotIsFree(col));
+    const allFree = SLOTS.every((s) => slotIsFree(s.col));
     const newValue = !allFree;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-    // Optimistic all
     const updates: Record<string, boolean> = {};
-    slots.forEach(([col]) => { updates[col] = newValue; });
+    SLOTS.forEach((s) => { updates[s.col] = newValue; });
     setOptimistic((prev) => ({ ...prev, ...updates }));
 
     try {
       await Promise.all(
-        slots.map(([col]) =>
-          setAvailability(parsedDate, colToTimeSlot(col), newValue),
-        ),
+        SLOTS.map((s) => setAvailability(parsedDate, s.slot, newValue)),
       );
       await queryClient.invalidateQueries({ queryKey: ['day', user?.id, date] });
     } catch (err) {
@@ -183,154 +259,319 @@ export default function DayDetailScreen() {
       setOptimistic({});
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
-  }, [slots, setAvailability, parsedDate, queryClient, user?.id, date, avail, optimistic]);
+  }, [setAvailability, parsedDate, queryClient, user?.id, date, avail, optimistic]);
+
+  /** Home ↔ Away toggle */
+  const changeLocStatus = useCallback(
+    async (status: LocationStatus) => {
+      if (status === locStatus) return;
+      Haptics.selectionAsync();
+      setLocOverride(status);
+      try {
+        await setLocationStatus(status, parsedDate);
+        await queryClient.invalidateQueries({ queryKey: ['day', user?.id, date] });
+      } catch (err) {
+        console.error('changeLocStatus failed', err);
+        setLocOverride(null);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
+    },
+    [locStatus, setLocationStatus, parsedDate, queryClient, user?.id, date],
+  );
+
+  /** Persist the away-day trip location */
+  const saveTripLocation = useCallback(async () => {
+    if (!user?.id) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSavingLoc(true);
+    try {
+      const { error } = await supabase
+        .from('availability')
+        .upsert(
+          {
+            user_id: user.id,
+            date,
+            location_status: 'away',
+            trip_location: tripLoc.trim() || null,
+          } as any,
+          { onConflict: 'user_id,date' },
+        );
+      if (error) throw error;
+      await queryClient.invalidateQueries({ queryKey: ['day', user?.id, date] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err) {
+      console.error('saveTripLocation failed', err);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setSavingLoc(false);
+    }
+  }, [user?.id, date, tripLoc, queryClient]);
+
+  const goToDay = (offset: number) => {
+    Haptics.selectionAsync();
+    router.setParams({ date: format(addDays(parsedDate, offset), 'yyyy-MM-dd') });
+  };
 
   return (
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
       <ScreenHeader
         title={today ? 'Today' : format(parsedDate, 'EEEE')}
         subtitle={format(parsedDate, 'MMMM d, yyyy')}
+        rightAction={
+          <View className="flex-row items-center gap-1">
+            <Pressable
+              onPress={() => goToDay(-1)}
+              hitSlop={6}
+              className="w-8 h-8 rounded-full items-center justify-center active:opacity-60"
+            >
+              <ChevronLeft size={18} color={ELEPHANT} strokeWidth={2} />
+            </Pressable>
+            <Pressable
+              onPress={() => goToDay(1)}
+              hitSlop={6}
+              className="w-8 h-8 rounded-full items-center justify-center active:opacity-60"
+            >
+              <ChevronRight size={18} color={ELEPHANT} strokeWidth={2} />
+            </Pressable>
+          </View>
+        }
       />
 
       {isLoading ? (
-        <ActivityIndicator className="mt-16" color="#23744D" />
+        <ActivityIndicator className="mt-16" color={PARADE_GREEN} />
       ) : (
+        <KeyboardAvoidingView
+          className="flex-1"
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
         <ScrollView
           contentContainerClassName="px-5 pb-10 gap-5 pt-2"
+          keyboardShouldPersistTaps="handled"
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#23744D" />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={PARADE_GREEN} />
           }
         >
-          {/* ── Availability ─────────────────────────────────────────── */}
+          {/* ── Day summary ──────────────────────────────────────────── */}
+          <View className="bg-card rounded-2xl border border-border/30 shadow-sm px-4 py-3.5 flex-row items-center gap-3.5">
+            <DateDial
+              status={dayStatus}
+              fill={fill}
+              dayName={format(parsedDate, 'EEE')}
+              dayNum={format(parsedDate, 'd')}
+              isToday={today}
+              size={64}
+            />
+            <View className="flex-1 gap-1.5">
+              <View className="flex-row items-baseline gap-2">
+                <Text
+                  className="font-display text-base"
+                  style={{ color: dayStatusColor(dayStatus) }}
+                >
+                  {DAY_STATUS_LABEL[dayStatus]}
+                </Text>
+                <Text className="font-sans text-xs text-muted-foreground">
+                  {freeCount} of {TOTAL_SLOTS} windows free
+                </Text>
+              </View>
+
+              {/* Slot coverage bar — green free, ember planned, gray busy */}
+              <View className="flex-row gap-1">
+                {SLOTS.map((s) => {
+                  const hasPlan = (plansBySlot.get(s.slot) ?? []).length > 0;
+                  const free = slotIsFree(s.col);
+                  const color = hasPlan
+                    ? tint(EMBER, 0.7)
+                    : free
+                      ? tint(PARADE_GREEN, 0.7)
+                      : tint(ELEPHANT, 0.2);
+                  return (
+                    <View
+                      key={s.col}
+                      className="flex-1 rounded-full"
+                      style={{ height: 6, backgroundColor: color }}
+                    />
+                  );
+                })}
+              </View>
+              <Text className="font-sans text-[10px] text-muted-foreground/70">
+                {plans.length > 0
+                  ? `${plans.length} plan${plans.length > 1 ? 's' : ''} on this day`
+                  : 'No plans yet'}
+              </Text>
+            </View>
+          </View>
+
+          {/* ── Location ─────────────────────────────────────────────── */}
+          <View className="gap-2">
+            <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground px-1">
+              Location
+            </Text>
+            <View className="bg-card rounded-2xl border border-border/30 shadow-sm px-4 py-3.5 gap-3">
+              {/* Home / Away segmented toggle */}
+              <View className="flex-row gap-2">
+                {([
+                  { key: 'home' as const, label: 'Home', Icon: Home, accent: PARADE_GREEN },
+                  { key: 'away' as const, label: 'Away', Icon: Plane, accent: EMBER },
+                ]).map(({ key, label, Icon, accent }) => {
+                  const active = locStatus === key;
+                  return (
+                    <Pressable
+                      key={key}
+                      onPress={() => changeLocStatus(key)}
+                      className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl py-2.5 active:opacity-70"
+                      style={{
+                        backgroundColor: active ? tint(accent, 0.12) : 'transparent',
+                        borderWidth: 1.5,
+                        borderColor: active ? accent : TINT.grayBorder,
+                      }}
+                    >
+                      <Icon size={14} color={active ? accent : ELEPHANT} strokeWidth={2} />
+                      <Text
+                        className="font-sans text-sm font-semibold"
+                        style={{ color: active ? accent : ELEPHANT }}
+                      >
+                        {label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {locStatus === 'home' ? (
+                <View className="flex-row items-center gap-1.5">
+                  <MapPin size={12} color={ELEPHANT} strokeWidth={1.75} />
+                  <Text className="font-sans text-xs text-muted-foreground" numberOfLines={1}>
+                    {homeAddress || 'Your usual spot — set a home city in your profile'}
+                  </Text>
+                </View>
+              ) : (
+                <View className="gap-2">
+                  <LocationAutocomplete
+                    value={tripLoc}
+                    onChange={setTripLoc}
+                    placeholder="Where are you headed?"
+                    types="(cities)"
+                  />
+                  {tripLocDirty && (
+                    <Pressable
+                      onPress={saveTripLocation}
+                      disabled={savingLoc}
+                      className="bg-primary rounded-xl items-center py-2.5 active:opacity-80"
+                      style={{ opacity: savingLoc ? 0.6 : 1 }}
+                    >
+                      <Text className="font-sans text-sm font-semibold text-white">
+                        {savingLoc ? 'Saving…' : 'Save location'}
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
+              )}
+            </View>
+          </View>
+
+          {/* ── Time slots: availability + plans per window ──────────── */}
           <View className="gap-2">
             <View className="flex-row items-center justify-between px-1">
               <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                Availability
+                Your day
               </Text>
               <Pressable onPress={toggleAllSlots} hitSlop={6} className="active:opacity-60">
                 <Text className="font-sans text-xs font-semibold text-primary">
-                  {slots.every(([col]) => slotIsFree(col)) ? 'Clear all' : 'Mark all free'}
+                  {SLOTS.every((s) => slotIsFree(s.col)) ? 'Clear all' : 'Mark all free'}
                 </Text>
               </Pressable>
             </View>
 
             <View className="bg-card rounded-2xl border border-border/30 shadow-sm overflow-hidden">
-              {slots.map(([slotCol, label], i) => {
-                const free = slotIsFree(slotCol);
-                const isSaving = saving.has(slotCol);
+              {SLOTS.map((slotDef, i) => {
+                const free = slotIsFree(slotDef.col);
+                const isSaving = saving.has(slotDef.col);
+                const slotPlans = plansBySlot.get(slotDef.slot) ?? [];
                 return (
-                  <View key={slotCol}>
-                    <Pressable
-                      onPress={() => toggleSlot(slotCol)}
-                      disabled={isSaving}
-                      className="flex-row items-center px-4 py-3.5 gap-3 active:bg-muted/30"
-                    >
-                      {/* Checkbox-style indicator */}
-                      <View
+                  <View key={slotDef.col}>
+                    <View className="flex-row items-center px-4 py-3 gap-3">
+                      {/* Free/busy toggle */}
+                      <Pressable
+                        onPress={() => toggleSlot(slotDef)}
+                        disabled={isSaving}
+                        hitSlop={8}
                         style={{
                           width: 22,
                           height: 22,
                           borderRadius: 6,
                           borderWidth: 1.5,
-                          borderColor: free ? '#23744D' : TINT.grayStrong,
-                          backgroundColor: free ? '#23744D' : 'transparent',
+                          borderColor: free ? PARADE_GREEN : TINT.grayStrong,
+                          backgroundColor: free ? PARADE_GREEN : 'transparent',
                           alignItems: 'center',
                           justifyContent: 'center',
                           opacity: isSaving ? 0.5 : 1,
                         }}
                       >
                         {free && <Check size={14} color="#FFFFFF" strokeWidth={2.5} />}
-                      </View>
+                      </Pressable>
 
-                      <View className="flex-1">
+                      <Pressable
+                        onPress={() => toggleSlot(slotDef)}
+                        disabled={isSaving}
+                        className="flex-1"
+                      >
                         <Text className="font-sans text-sm text-foreground font-medium">
-                          {label}
+                          {slotDef.label}
                         </Text>
                         <Text className="font-sans text-[11px] text-muted-foreground mt-0.5">
-                          {SLOT_TIME[slotCol]}
+                          {slotDef.time}
                         </Text>
-                      </View>
+                      </Pressable>
 
-                      {/* Status pill */}
-                      {free ? (
-                        <View
-                          style={{
-                            backgroundColor: TINT.primarySubtle,
-                            borderRadius: 999,
-                            paddingHorizontal: 10,
-                            paddingVertical: 3,
-                          }}
+                      {/* Right side: quick plan on free empty slots, status otherwise */}
+                      {free && slotPlans.length === 0 ? (
+                        <Pressable
+                          onPress={() =>
+                            router.push(`/(app)/quick-plan?date=${date}&slot=${slotDef.slot}`)
+                          }
+                          hitSlop={6}
+                          className="flex-row items-center gap-1 rounded-full px-2.5 py-1.5 active:opacity-70"
+                          style={{ backgroundColor: TINT.primarySubtle }}
                         >
+                          <Zap size={11} color={PARADE_GREEN} strokeWidth={2.25} />
                           <Text
-                            style={{
-                              fontFamily: 'Inter_600SemiBold',
-                              fontSize: 11,
-                              color: '#23744D',
-                            }}
+                            className="font-sans text-[11px] font-semibold"
+                            style={{ color: PARADE_GREEN }}
                           >
-                            Free
+                            Quick plan
                           </Text>
-                        </View>
-                      ) : (
+                        </Pressable>
+                      ) : !free && slotPlans.length === 0 ? (
                         <Text className="font-sans text-xs text-muted-foreground/40">
-                          Tap to mark free
+                          Busy
                         </Text>
-                      )}
-                    </Pressable>
-                    {i < slots.length - 1 && (
-                      <View className="h-px bg-border/30 mx-4" />
+                      ) : null}
+                    </View>
+
+                    {/* Plans inside this window */}
+                    {slotPlans.length > 0 && (
+                      <View className="pl-12 pr-4 pb-3 gap-2">
+                        {slotPlans.map((p) => (
+                          <SlotPlanRow key={p.id} plan={p} />
+                        ))}
+                      </View>
                     )}
+
+                    {i < SLOTS.length - 1 && <View className="h-px bg-border/30 mx-4" />}
                   </View>
                 );
               })}
             </View>
           </View>
 
-          {/* ── Plans on this day ─────────────────────────────────────── */}
-          {plans.length > 0 && (
+          {/* ── Plans without a recognized time slot ─────────────────── */}
+          {orphanPlans.length > 0 && (
             <View className="gap-2">
               <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground px-1">
-                Plans
+                Sometime that day
               </Text>
-
-              {plans.map((plan) => (
-                <Pressable
-                  key={plan.id}
-                  onPress={() => router.push(`/(app)/plan/${plan.id}`)}
-                  className="bg-card rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm active:opacity-80"
-                >
-                  <View style={{ width: 4, backgroundColor: activityAccent(plan.activity) }} />
-                  <View className="flex-1 px-4 py-3 gap-1">
-                    <Text
-                      className="font-display text-sm text-foreground"
-                      numberOfLines={1}
-                    >
-                      {plan.title || 'Untitled plan'}
-                    </Text>
-
-                    <View className="flex-row items-center gap-3">
-                      {plan.time_slot && (
-                        <View className="flex-row items-center gap-1">
-                          <Clock size={11} color="#929298" strokeWidth={1.75} />
-                          <Text className="font-sans text-xs text-muted-foreground">
-                            {SLOT_LABELS[plan.time_slot] ?? plan.time_slot}
-                          </Text>
-                        </View>
-                      )}
-                      {plan.location && (
-                        <View className="flex-row items-center gap-1 flex-1">
-                          <MapPin size={11} color="#929298" strokeWidth={1.75} />
-                          <Text
-                            className="font-sans text-xs text-muted-foreground"
-                            numberOfLines={1}
-                          >
-                            {plan.location}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-                </Pressable>
+              {orphanPlans.map((p) => (
+                <SlotPlanRow key={p.id} plan={p} />
               ))}
             </View>
           )}
@@ -346,6 +587,7 @@ export default function DayDetailScreen() {
             </Text>
           </Pressable>
         </ScrollView>
+        </KeyboardAvoidingView>
       )}
     </SafeAreaView>
   );

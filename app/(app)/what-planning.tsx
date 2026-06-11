@@ -109,8 +109,8 @@ export default function WhatPlanningScreen() {
           icon={<Plane size={20} color="#23744D" strokeWidth={2} />}
           iconBg={TINT.primarySubtle}
           title="Go somewhere"
-          subtitle="Mark a trip on your calendar so friends know you're traveling."
-          onPress={() => go('/(app)/new-trip')}
+          subtitle="Plan a trip or visit — find weekends that work for everyone."
+          onPress={() => go('/(app)/go-somewhere')}
         />
 
         <View className="h-px bg-border/30 my-1 mx-2" />

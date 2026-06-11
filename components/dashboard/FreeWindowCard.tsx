@@ -5,7 +5,8 @@
  *   - Time range headline in Fraunces (e.g. "12–6pm") — spans all free slots
  *   - Friend overlap avatars + count
  *
- * Matches PWA FreeWindowCard layout. Read-only Phase 1; tap → day detail.
+ * Matches PWA FreeWindowCard layout. Tap → quick-plan fast path pre-filled
+ * with the window's day + time slot.
  */
 import { ScrollView, View, Text, Pressable } from 'react-native';
 import { router } from 'expo-router';
@@ -74,13 +75,14 @@ export function FreeWindowCard() {
 
       if (freeSlots.length === 0) continue;
 
-      const overlappingIds = (friendData ?? [])
-        .filter((f) => f.overlapSlots.some(
-          (o) => o.date === dateStr,
-        ))
-        .map((f) => f.userId);
-
       for (const slot of freeSlots) {
+        // Slot-level overlap so the avatars reflect this exact window
+        const overlappingIds = (friendData ?? [])
+          .filter((f) => f.overlapSlots.some(
+            (o) => o.date === dateStr && o.slot === slot,
+          ))
+          .map((f) => f.userId);
+
         results.push({
           date:    d,
           dateStr,
@@ -107,7 +109,7 @@ export function FreeWindowCard() {
       {/* Section eyebrow — matches PWA */}
       <View className="flex-row items-center gap-1.5 px-0.5">
         <Sparkles size={12} color="#23744D" strokeWidth={2} />
-        <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+        <Text className="font-sans text-xs font-semibold uppercase tracking-widest text-muted-foreground">
           Recommended
         </Text>
       </View>
@@ -140,8 +142,8 @@ export function FreeWindowCard() {
         </ScrollView>
       ) : windows.length === 0 ? (
         <View className="bg-card rounded-2xl border border-dashed border-border/40 px-4 py-5 items-center gap-1">
-          <Text className="font-sans text-sm text-muted-foreground">No open time this week</Text>
-          <Text className="font-sans text-xs text-muted-foreground/60">
+          <Text className="font-sans text-[15px] text-muted-foreground">No open time this week</Text>
+          <Text className="font-sans text-[13px] text-muted-foreground/60">
             Mark some days free in your availability
           </Text>
         </View>
@@ -159,18 +161,18 @@ export function FreeWindowCard() {
             return (
               <Pressable
                 key={`${w.dateStr}-${w.slot}`}
-                onPress={() => router.push(`/(app)/day/${w.dateStr}`)}
+                onPress={() => router.push(`/(app)/quick-plan?date=${w.dateStr}&slot=${w.slot}`)}
                 className="bg-card border border-border/30 rounded-2xl p-4 gap-1.5 shadow-sm"
                 style={{ width: 176 }}
               >
                 {/* Day eyebrow */}
-                <Text className="font-sans text-xs uppercase tracking-wide text-muted-foreground">
+                <Text className="font-sans text-[13px] uppercase tracking-wide text-muted-foreground">
                   {w.label}
                 </Text>
 
                 {/* Time range — Fraunces headline (matches PWA font-display text-lg) */}
                 <Text
-                  className="font-display text-lg leading-tight text-evergreen"
+                  className="font-display text-xl leading-tight text-evergreen"
                   numberOfLines={1}
                 >
                   {w.timeRange}
@@ -191,14 +193,14 @@ export function FreeWindowCard() {
                           />
                         ))}
                       </View>
-                      <Text className="font-sans text-xs text-muted-foreground">
+                      <Text className="font-sans text-[13px] text-muted-foreground">
                         {overlappingFriends.length} free
                       </Text>
                     </>
                   ) : (
                     <>
                       <Users size={11} color="#929298" strokeWidth={1.75} />
-                      <Text className="font-sans text-xs text-muted-foreground/60">
+                      <Text className="font-sans text-[13px] text-muted-foreground/60">
                         No overlap yet
                       </Text>
                     </>

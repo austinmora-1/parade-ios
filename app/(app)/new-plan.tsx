@@ -21,7 +21,6 @@ import {
   View,
   Text,
   Pressable,
-  TextInput,
   KeyboardAvoidingView,
   Platform,
   Alert,
@@ -31,88 +30,24 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { format, addDays, parseISO, isToday, isTomorrow, isSameDay } from 'date-fns';
+import { format, addDays, parseISO } from 'date-fns';
 import * as Haptics from 'expo-haptics';
-import { X, Check } from 'lucide-react-native';
+import { X } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { supabase } from '@/integrations/supabase/client';
-import { Avatar } from '@/components/primitives/Avatar';
 import { LocationAutocomplete } from '@/components/primitives/LocationAutocomplete';
 import { usePods } from '@/hooks/usePods';
-import { Eye, Users as UsersIcon, Lock } from 'lucide-react-native';
+import { FieldLabel, OpenInviteBanner, TitleField, NotesField } from '@/components/new-plan/FormBits';
+import { ActivityPicker } from '@/components/new-plan/ActivityPicker';
+import { DateGrid } from '@/components/new-plan/DateGrid';
+import { TimeSlotPicker } from '@/components/new-plan/TimeSlotPicker';
+import { ExtraOptionsSection } from '@/components/new-plan/ExtraOptionsSection';
+import { VisibilityPicker } from '@/components/new-plan/VisibilityPicker';
+import { FrequencyPicker } from '@/components/new-plan/FrequencyPicker';
+import { FriendSelector } from '@/components/new-plan/FriendSelector';
 import type { TimeSlot } from '@/types/planner';
 import { TC } from '@/lib/theme';
-import { TINT } from '@/lib/colors';
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const ACTIVITIES = [
-  { id: 'drinks',      label: 'Drinks',     emoji: '🍹' },
-  { id: 'dinner',      label: 'Dinner',     emoji: '🍝' },
-  { id: 'brunch',      label: 'Brunch',     emoji: '🥞' },
-  { id: 'coffee',      label: 'Coffee',     emoji: '☕' },
-  { id: 'happy-hour',  label: 'Happy hour', emoji: '🍻' },
-  { id: 'hike',        label: 'Hike',       emoji: '🥾' },
-  { id: 'run',         label: 'Run',        emoji: '🏃' },
-  { id: 'gym',         label: 'Gym',        emoji: '🏋️' },
-  { id: 'movie',       label: 'Movie',      emoji: '🎬' },
-  { id: 'concert',     label: 'Concert',    emoji: '🎵' },
-  { id: 'sports',      label: 'Sports',     emoji: '⚽' },
-  { id: 'park',        label: 'Park',       emoji: '🌳' },
-  { id: 'beach',       label: 'Beach',      emoji: '🏖️' },
-  { id: 'meetup',      label: 'Meetup',     emoji: '👋' },
-  { id: 'travel',      label: 'Travel',     emoji: '✈️' },
-  { id: 'other',       label: 'Other',      emoji: '✨' },
-];
-
-const SLOTS: { id: TimeSlot; label: string; range: string }[] = [
-  { id: 'early-morning',   label: 'Early morning',   range: '7–9am' },
-  { id: 'late-morning',    label: 'Late morning',    range: '9am–12pm' },
-  { id: 'early-afternoon', label: 'Early afternoon', range: '12–3pm' },
-  { id: 'late-afternoon',  label: 'Late afternoon',  range: '3–6pm' },
-  { id: 'evening',         label: 'Evening',         range: '6–10pm' },
-  { id: 'late-night',      label: 'Late night',      range: '10pm–2am' },
-];
-
-function dateLabel(d: Date): string {
-  if (isToday(d))    return 'Today';
-  if (isTomorrow(d)) return 'Tomorrow';
-  return format(d, 'EEE');
-}
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-function FieldLabel({ children }: { children: string }) {
-  return (
-    <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
-      {children}
-    </Text>
-  );
-}
-
-function Chip({
-  selected,
-  onPress,
-  children,
-}: {
-  selected: boolean;
-  onPress: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      className={`rounded-xl px-3 py-2.5 border active:opacity-70 ${
-        selected
-          ? 'bg-primary border-primary'
-          : 'bg-card border-border/40'
-      }`}
-    >
-      <View className="flex-row items-center gap-1.5">{children}</View>
-    </Pressable>
-  );
-}
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
@@ -227,6 +162,19 @@ export default function NewPlanScreen() {
       return next;
     });
   }, []);
+
+  const addExtraOption = useCallback(() => {
+    Haptics.selectionAsync();
+    // Add a new option defaulting to next day + same slot
+    const lastDate =
+      extraOptions.length > 0
+        ? extraOptions[extraOptions.length - 1].date
+        : date;
+    setExtraOptions([
+      ...extraOptions,
+      { date: addDays(lastDate, 1), slot: timeSlot },
+    ]);
+  }, [extraOptions, date, timeSlot]);
 
   // ── Submit ─────────────────────────────────────────────────────────────────
   const handleSubmit = useCallback(async () => {
@@ -423,137 +371,23 @@ export default function NewPlanScreen() {
           keyboardDismissMode="on-drag"
         >
           {/* Open invite banner */}
-          {isOpenInvite && (
-            <View className="bg-marigold/10 rounded-2xl px-4 py-3 flex-row items-start gap-2.5">
-              <View className="w-1.5 h-1.5 rounded-full bg-marigold mt-1.5" />
-              <Text className="font-sans text-xs text-foreground flex-1 leading-relaxed">
-                <Text className="font-semibold">Open call.</Text> No invitee
-                list — friends in your feed can claim this plan. Great for
-                "I'm getting drinks Friday, who's around?"
-              </Text>
-            </View>
-          )}
+          {isOpenInvite && <OpenInviteBanner />}
 
           {/* ── Title ─────────────────────────────────────────────────── */}
-          <View>
-            <FieldLabel>What's the plan?</FieldLabel>
-            <TextInput
-              value={title}
-              onChangeText={(t) => { setTitle(t); setError(null); }}
-              placeholder="e.g. Drinks at Sway Bar"
-              placeholderTextColor="#929298"
-              className="bg-card rounded-xl border border-border/40 px-4 py-3 font-display text-base text-foreground shadow-sm"
-              maxLength={100}
-              autoFocus
-            />
-            {error && (
-              <Text className="font-sans text-xs text-destructive mt-1.5 px-0.5">
-                {error}
-              </Text>
-            )}
-          </View>
+          <TitleField
+            value={title}
+            onChangeText={(t) => { setTitle(t); setError(null); }}
+            error={error}
+          />
 
           {/* ── Activity ───────────────────────────────────────────────── */}
-          <View>
-            <FieldLabel>Activity</FieldLabel>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerClassName="gap-2 px-0.5 pb-1"
-            >
-              {ACTIVITIES.map((a) => {
-                const selected = activity === a.id;
-                return (
-                  <Chip
-                    key={a.id}
-                    selected={selected}
-                    onPress={() => { Haptics.selectionAsync(); setActivity(a.id); }}
-                  >
-                    <Text style={{ fontSize: 14 }}>{a.emoji}</Text>
-                    <Text
-                      className={`font-sans text-xs font-medium ${
-                        selected ? 'text-white' : 'text-foreground'
-                      }`}
-                    >
-                      {a.label}
-                    </Text>
-                  </Chip>
-                );
-              })}
-            </ScrollView>
-          </View>
+          <ActivityPicker activity={activity} onSelect={setActivity} />
 
           {/* ── Date ──────────────────────────────────────────────────── */}
-          <View>
-            <FieldLabel>When</FieldLabel>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerClassName="gap-2 px-0.5 pb-1"
-            >
-              {dateOptions.map((d) => {
-                const selected = isSameDay(d, date);
-                return (
-                  <Chip
-                    key={d.toISOString()}
-                    selected={selected}
-                    onPress={() => { Haptics.selectionAsync(); setDate(d); }}
-                  >
-                    <View className="items-center">
-                      <Text
-                        className={`font-sans text-[10px] font-semibold uppercase tracking-wider ${
-                          selected ? 'text-white/80' : 'text-muted-foreground'
-                        }`}
-                      >
-                        {dateLabel(d)}
-                      </Text>
-                      <Text
-                        className={`font-display text-base ${
-                          selected ? 'text-white' : 'text-foreground'
-                        }`}
-                      >
-                        {format(d, 'MMM d')}
-                      </Text>
-                    </View>
-                  </Chip>
-                );
-              })}
-            </ScrollView>
-          </View>
+          <DateGrid dateOptions={dateOptions} date={date} onSelect={setDate} />
 
           {/* ── Time slot ─────────────────────────────────────────────── */}
-          <View>
-            <FieldLabel>Time</FieldLabel>
-            <View className="flex-row flex-wrap gap-2">
-              {SLOTS.map((s) => {
-                const selected = timeSlot === s.id;
-                return (
-                  <Chip
-                    key={s.id}
-                    selected={selected}
-                    onPress={() => { Haptics.selectionAsync(); setTimeSlot(s.id); }}
-                  >
-                    <View>
-                      <Text
-                        className={`font-sans text-xs font-semibold ${
-                          selected ? 'text-white' : 'text-foreground'
-                        }`}
-                      >
-                        {s.label}
-                      </Text>
-                      <Text
-                        className={`font-sans text-[10px] ${
-                          selected ? 'text-white/70' : 'text-muted-foreground'
-                        }`}
-                      >
-                        {s.range}
-                      </Text>
-                    </View>
-                  </Chip>
-                );
-              })}
-            </View>
-          </View>
+          <TimeSlotPicker timeSlot={timeSlot} onSelect={setTimeSlot} />
 
           {/* ── Location ─────────────────────────────────────────────── */}
           <View>
@@ -567,241 +401,38 @@ export default function NewPlanScreen() {
           </View>
 
           {/* ── Notes ────────────────────────────────────────────────── */}
-          <View>
-            <FieldLabel>Notes (optional)</FieldLabel>
-            <TextInput
-              value={notes}
-              onChangeText={setNotes}
-              placeholder="Any extra details…"
-              placeholderTextColor="#929298"
-              className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
-              maxLength={500}
-              multiline
-              numberOfLines={3}
-              style={{ minHeight: 80, textAlignVertical: 'top' }}
-            />
-          </View>
+          <NotesField value={notes} onChangeText={setNotes} />
 
           {/* ── Multi-option proposal (create mode, with invitees) ─── */}
           {!isEditMode && !isOpenInvite && (
-            <View>
-              <View className="flex-row items-center justify-between mb-2 px-0.5">
-                <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                  Other time options
-                </Text>
-                <Pressable
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    // Add a new option defaulting to next day + same slot
-                    const lastDate =
-                      extraOptions.length > 0
-                        ? extraOptions[extraOptions.length - 1].date
-                        : date;
-                    setExtraOptions([
-                      ...extraOptions,
-                      { date: addDays(lastDate, 1), slot: timeSlot },
-                    ]);
-                  }}
-                  hitSlop={6}
-                  className="active:opacity-60"
-                >
-                  <Text className="font-sans text-xs font-semibold text-primary">
-                    + Add option
-                  </Text>
-                </Pressable>
-              </View>
-
-              {extraOptions.length === 0 ? (
-                <Text className="font-sans text-[11px] text-muted-foreground px-0.5">
-                  Add alternatives so participants can vote on the time.
-                </Text>
-              ) : (
-                <View className="bg-card rounded-2xl border border-border/30 shadow-sm overflow-hidden">
-                  {extraOptions.map((opt, i) => (
-                    <View key={i}>
-                      <View className="px-4 py-3 flex-row items-center gap-2">
-                        <Text className="flex-1 font-sans text-sm text-foreground">
-                          {format(opt.date, 'EEE, MMM d')} ·{' '}
-                          {SLOTS.find((s) => s.id === opt.slot)?.label ?? opt.slot}
-                        </Text>
-                        <Pressable
-                          onPress={() => {
-                            Haptics.selectionAsync();
-                            setExtraOptions(extraOptions.filter((_, idx) => idx !== i));
-                          }}
-                          hitSlop={6}
-                          className="active:opacity-60"
-                        >
-                          <X size={14} color="#929298" strokeWidth={2} />
-                        </Pressable>
-                      </View>
-                      {i < extraOptions.length - 1 && (
-                        <View className="h-px bg-border/30 mx-4" />
-                      )}
-                    </View>
-                  ))}
-                </View>
-              )}
-              {extraOptions.length > 0 && (
-                <Text className="font-sans text-[11px] text-muted-foreground mt-1.5 px-0.5">
-                  Plan ships as a proposal — invitees vote, then you finalize.
-                </Text>
-              )}
-            </View>
+            <ExtraOptionsSection
+              extraOptions={extraOptions}
+              onAdd={addExtraOption}
+              onRemove={(i) => setExtraOptions(extraOptions.filter((_, idx) => idx !== i))}
+            />
           )}
 
           {/* ── Visibility ───────────────────────────────────────────── */}
           {!isOpenInvite && (
-            <View>
-              <FieldLabel>Who can see this plan</FieldLabel>
-              <View className="flex-row flex-wrap gap-2">
-                <Chip
-                  selected={visibility === 'private'}
-                  onPress={() => { Haptics.selectionAsync(); setVisibility('private'); }}
-                >
-                  <Lock size={12} color={visibility === 'private' ? '#FFFFFF' : TC.icon} strokeWidth={2.2} />
-                  <Text className={`font-sans text-xs font-semibold ${
-                    visibility === 'private' ? 'text-white' : 'text-foreground'
-                  }`}>
-                    Only invitees
-                  </Text>
-                </Chip>
-                <Chip
-                  selected={visibility === 'friends'}
-                  onPress={() => { Haptics.selectionAsync(); setVisibility('friends'); }}
-                >
-                  <UsersIcon size={12} color={visibility === 'friends' ? '#FFFFFF' : TC.icon} strokeWidth={2.2} />
-                  <Text className={`font-sans text-xs font-semibold ${
-                    visibility === 'friends' ? 'text-white' : 'text-foreground'
-                  }`}>
-                    All friends
-                  </Text>
-                </Chip>
-                {(pods ?? []).map((pod) => {
-                  const v = `pod:${pod.id}`;
-                  const selected = visibility === v;
-                  return (
-                    <Chip
-                      key={pod.id}
-                      selected={selected}
-                      onPress={() => { Haptics.selectionAsync(); setVisibility(v); }}
-                    >
-                      <Text style={{ fontSize: 13 }}>{pod.emoji ?? '💜'}</Text>
-                      <Text className={`font-sans text-xs font-semibold ${
-                        selected ? 'text-white' : 'text-foreground'
-                      }`}>
-                        {pod.name}
-                      </Text>
-                    </Chip>
-                  );
-                })}
-              </View>
-              <Text className="font-sans text-[11px] text-muted-foreground mt-1.5 px-0.5">
-                {visibility === 'private'
-                  ? 'Only invited friends will see this plan.'
-                  : visibility === 'friends'
-                    ? 'Visible in all friends\' feeds.'
-                    : 'Visible to this pod\'s members.'}
-              </Text>
-            </View>
+            <VisibilityPicker
+              visibility={visibility}
+              onChange={setVisibility}
+              pods={pods ?? []}
+            />
           )}
 
           {/* ── Repeats (recurring) — create mode only ─────────────────── */}
           {!isEditMode && (
-            <View>
-              <FieldLabel>Repeats</FieldLabel>
-              <View className="flex-row flex-wrap gap-2">
-                {(['once', 'weekly', 'biweekly', 'monthly'] as const).map((f) => {
-                  const selected = frequency === f;
-                  const label =
-                    f === 'once' ? 'Once'
-                    : f === 'weekly' ? 'Weekly'
-                    : f === 'biweekly' ? 'Every 2 weeks'
-                    : 'Monthly';
-                  return (
-                    <Chip
-                      key={f}
-                      selected={selected}
-                      onPress={() => { Haptics.selectionAsync(); setFrequency(f); }}
-                    >
-                      <Text className={`font-sans text-xs font-semibold ${
-                        selected ? 'text-white' : 'text-foreground'
-                      }`}>
-                        {label}
-                      </Text>
-                    </Chip>
-                  );
-                })}
-              </View>
-              {frequency !== 'once' && (
-                <Text className="font-sans text-[11px] text-muted-foreground mt-1.5 px-0.5">
-                  Repeats {frequency === 'biweekly' ? 'every other ' : ''}
-                  {format(date, 'EEEE')}
-                  {frequency === 'monthly' ? ' each month' : ''}.
-                </Text>
-              )}
-            </View>
+            <FrequencyPicker frequency={frequency} onChange={setFrequency} date={date} />
           )}
 
           {/* ── Invite friends ────────────────────────────────────────── */}
           {!isOpenInvite && connectedFriends.length > 0 && (
-            <View>
-              <View className="flex-row items-center justify-between mb-2 px-0.5">
-                <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                  Invite friends
-                </Text>
-                {invitedIds.size > 0 && (
-                  <Text className="font-sans text-[11px] font-semibold text-primary">
-                    {invitedIds.size} selected
-                  </Text>
-                )}
-              </View>
-              <View className="bg-card rounded-2xl border border-border/30 shadow-sm overflow-hidden">
-                {connectedFriends.map((f, i) => {
-                  const checked = invitedIds.has(f.friendUserId!);
-                  return (
-                    <View key={f.id}>
-                      <Pressable
-                        onPress={() => toggleInvite(f.friendUserId!)}
-                        className="flex-row items-center px-4 py-3 gap-3 active:bg-muted/30"
-                      >
-                        <Avatar
-                          url={f.avatar}
-                          displayName={f.name}
-                          size="sm"
-                        />
-                        <Text
-                          className="flex-1 font-sans text-sm font-medium text-foreground"
-                          numberOfLines={1}
-                        >
-                          {f.name}
-                        </Text>
-                        <View
-                          style={{
-                            width: 22, height: 22, borderRadius: 6,
-                            borderWidth: 1.5,
-                            borderColor: checked ? '#23744D' : TINT.grayStrong,
-                            backgroundColor: checked ? '#23744D' : 'transparent',
-                            alignItems: 'center', justifyContent: 'center',
-                          }}
-                        >
-                          {checked && <Check size={14} color="#FFFFFF" strokeWidth={2.5} />}
-                        </View>
-                      </Pressable>
-                      {i < connectedFriends.length - 1 && (
-                        <View className="h-px bg-border/30 mx-4" />
-                      )}
-                    </View>
-                  );
-                })}
-              </View>
-              {invitedIds.size > 0 && (
-                <Text className="font-sans text-[11px] text-muted-foreground mt-1.5 px-0.5">
-                  Plan will be sent as a proposal — they'll see it in their feed
-                  and can RSVP.
-                </Text>
-              )}
-            </View>
+            <FriendSelector
+              connectedFriends={connectedFriends}
+              invitedIds={invitedIds}
+              onToggle={toggleInvite}
+            />
           )}
         </ScrollView>
         )}

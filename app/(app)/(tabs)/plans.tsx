@@ -14,7 +14,9 @@ import {
   Text,
   Pressable,
   RefreshControl,
+  StyleSheet,
 } from 'react-native';
+import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useCallback, useState, useEffect } from 'react';
@@ -45,7 +47,12 @@ import { TIME_SLOT_LABELS } from '@/types/planner';
 import type { Plan, DayAvailability, TimeSlot } from '@/types/planner';
 import { activityAccent } from '@/lib/activityColors';
 import { TC } from '@/lib/theme';
-import { TINT } from '@/lib/colors';
+import { TINT, PARADE_GREEN, MARIGOLD } from '@/lib/colors';
+import { DateDial, getDayStatus } from '@/components/plans/DateDial';
+import { Avatar } from '@/components/primitives/Avatar';
+import { formatDisplayName } from '@/lib/utils';
+import { citiesMatch, normalizeCity } from '@/lib/locationMatch';
+import { formatCityForDisplay } from '@/lib/formatCity';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -69,6 +76,14 @@ function getWeekLabel(start: Date, end: Date): string {
 function planDayLabel(date: Date): string {
   if (isToday(date)) return 'Today';
   return format(date, 'EEE, MMM d');
+}
+
+/** "Ben" / "Ben & Jules" / "Ben, Jules & Erin" from first names */
+function nameList(names: string[]): string {
+  const firsts = names.map((n) => n.split(' ')[0]).filter(Boolean);
+  if (firsts.length === 0) return '';
+  if (firsts.length === 1) return firsts[0];
+  return `${firsts.slice(0, -1).join(', ')} & ${firsts[firsts.length - 1]}`;
 }
 
 interface AvailInfo { count: number; hasData: boolean }
@@ -110,8 +125,9 @@ function AvailPill({ count, hasData }: AvailInfo) {
   );
 }
 
-/** Weekend hero — white card with Fraunces day numbers + plan pills,
- *  with an inline trip banner when a trip overlaps Sat/Sun. */
+/** Weekend hero — gradient card (PWA parity: primary → card → sunshine)
+ *  with Fraunces headline, Sat/Sun day grid, and an inline trip banner
+ *  when a trip overlaps the weekend. */
 function WeekendHeroCard({
   days,
   plans,
@@ -121,10 +137,85 @@ function WeekendHeroCard({
   plans: Plan[];
   trip?: any | null;
 }) {
+  const weekendPlanCount = plans.filter((p) =>
+    days.some((day) =>
+      isSameDay(p.date instanceof Date ? p.date : new Date(p.date), day),
+    ),
+  ).length;
+
+  const headline = trip
+    ? trip.name || (trip.location ? `Headed to ${trip.location}` : 'Trip in progress')
+    : weekendPlanCount > 0
+      ? 'Weekend lineup'
+      : 'Open weekend';
+
+  // People line — split everyone on the trip by home city vs destination:
+  // locals (home = destination) are being visited, the rest are traveling.
+  //   travelers + locals → "You & Erin are visiting Ben & Jules"
+  //   travelers only     → "You & Erin are going to Austin"
+  const people: TripPerson[] = trip?.people ?? [];
+  const destCity = normalizeCity(trip?.location || '');
+  // Only people with a known home city can be classified — others are
+  // left out of the sentence (they still appear in the avatar stack).
+  const known = people.filter((p) => !!normalizeCity(p.home || ''));
+  const locals = destCity
+    ? known.filter((p) => citiesMatch(normalizeCity(p.home!), destCity))
+    : [];
+  const travelers = destCity ? known.filter((p) => !locals.includes(p)) : [];
+  const tripPeople = people.filter((p) => !p.isSelf); // avatar stack
+
+  /** First names, with yourself shown first as "You" */
+  const peopleNames = (list: TripPerson[]): string[] =>
+    [...list]
+      .sort((a, b) => Number(b.isSelf) - Number(a.isSelf))
+      .map((p) => (p.isSelf ? 'You' : p.name));
+
+  let peopleLine = '';
+  if (travelers.length > 0 && locals.length > 0) {
+    const verb = travelers.length > 1 || travelers[0].isSelf ? 'are' : 'is';
+    peopleLine = `${nameList(peopleNames(travelers))} ${verb} visiting ${nameList(peopleNames(locals))}`;
+  } else if (travelers.length > 0 && destCity && tripPeople.length > 0) {
+    const verb = travelers.length > 1 || travelers[0].isSelf ? 'are' : 'is';
+    peopleLine = `${nameList(peopleNames(travelers))} ${verb} going to ${formatCityForDisplay(trip.location)}`;
+  } else if (tripPeople.length > 0) {
+    peopleLine = `With ${nameList(peopleNames(tripPeople))}`;
+  }
+
+  // Measured so the gradient SVG gets explicit dimensions — percentage
+  // sizing on an absolute-fill Svg leaves part of the card unpainted.
+  const [heroSize, setHeroSize] = useState<{ w: number; h: number } | null>(null);
+
   return (
     <View
-      className="bg-card rounded-2xl border border-primary/20 p-4 gap-3 mx-5 shadow-sm"
+      className="bg-card rounded-2xl p-4 gap-3 mx-5 shadow-sm overflow-hidden"
+      style={{
+        borderWidth: 1,
+        borderColor: trip ? TINT.primaryStrong : TINT.primaryBorder,
+      }}
+      onLayout={(e) => {
+        const { width, height } = e.nativeEvent.layout;
+        setHeroSize({ w: width, h: height });
+      }}
     >
+      {/* Gradient wash — from-primary/15 via-card to-sunshine/18 (PWA) */}
+      {heroSize && (
+        <Svg
+          width={heroSize.w}
+          height={heroSize.h}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        >
+          <Defs>
+            <LinearGradient id="weekendHeroGrad" x1="0" y1="0" x2="1" y2="1">
+              <Stop offset="0" stopColor={PARADE_GREEN} stopOpacity={trip ? 0.18 : 0.12} />
+              <Stop offset="0.5" stopColor="#FFFFFF" stopOpacity={0} />
+              <Stop offset="1" stopColor={MARIGOLD} stopOpacity={trip ? 0.22 : 0.16} />
+            </LinearGradient>
+          </Defs>
+          <Rect x={0} y={0} width={heroSize.w} height={heroSize.h} fill="url(#weekendHeroGrad)" />
+        </Svg>
+      )}
+
       {/* Header */}
       <View className="flex-row items-center gap-2">
         <View className="w-1.5 h-1.5 rounded-full bg-primary" />
@@ -134,6 +225,47 @@ function WeekendHeroCard({
         <Text className="font-sans text-[11px] text-muted-foreground ml-1">
           {format(days[0], 'MMM d')} – {format(days[1], 'd')}
         </Text>
+      </View>
+
+      {/* Headline — Fraunces black (PWA font-display text-2xl font-black) */}
+      <View className="gap-1 -mt-1">
+        <Text
+          className="font-display leading-tight"
+          style={{ fontSize: 24, color: PARADE_GREEN }}
+          numberOfLines={2}
+        >
+          {headline}
+        </Text>
+        {!trip && weekendPlanCount === 0 && (
+          <Text className="font-sans text-xs text-muted-foreground">
+            Two clear days to fill — make plans or pencil in some rest.
+          </Text>
+        )}
+
+        {/* Trip people — avatar stack + "You & Erin are visiting Ben & Jules" */}
+        {trip && peopleLine ? (
+          <View className="flex-row items-center gap-2 mt-0.5">
+            {tripPeople.length > 0 && (
+              <View className="flex-row" style={{ gap: -6 }}>
+                {tripPeople.slice(0, 4).map((p, i) => (
+                  <Avatar
+                    key={i}
+                    url={p.avatar}
+                    displayName={p.name}
+                    size="xs"
+                    className="border border-white"
+                  />
+                ))}
+              </View>
+            )}
+            <Text
+              className="font-sans text-xs font-medium text-muted-foreground flex-1"
+              numberOfLines={1}
+            >
+              {peopleLine}
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       {/* Trip overlay — appears above the day grid when a trip spans the weekend */}
@@ -164,7 +296,7 @@ function WeekendHeroCard({
             <Pressable
               key={dateStr}
               onPress={() => router.push(`/(app)/day/${dateStr}`)}
-              className="flex-1 bg-chalk rounded-xl p-2.5 gap-1.5 active:opacity-80"
+              className="flex-1 bg-card rounded-xl border border-border/30 p-2.5 gap-1.5 active:opacity-80"
             >
               {/* Day name */}
               <Text className="font-sans text-xs font-semibold text-muted-foreground uppercase tracking-wide">
@@ -243,19 +375,14 @@ function WeekdayRow({
       className="bg-card rounded-2xl px-3 py-3 flex-row items-center gap-3 shadow-sm active:opacity-80"
       style={today ? { borderWidth: 2, borderColor: '#23744D' } : { borderWidth: 1, borderColor: 'rgba(0,0,0,0.08)' }}
     >
-      {/* DateDial — matches PWA font-display day name + number */}
-      <View className="w-11 items-center gap-0">
-        <Text
-          style={{ fontFamily: 'Fraunces_900Black', fontSize: 9, letterSpacing: 0.8, textTransform: 'uppercase', color: today ? '#23744D' : '#929298' }}
-        >
-          {format(day, 'EEE')}
-        </Text>
-        <Text
-          style={{ fontFamily: 'Fraunces_900Black', fontSize: 22, lineHeight: 26, color: today ? '#23744D' : TC.icon }}
-        >
-          {format(day, 'd')}
-        </Text>
-      </View>
+      {/* DateDial — availability ring around the day name/number (PWA parity) */}
+      <DateDial
+        {...getDayStatus(availInfo.count, availInfo.hasData)}
+        dayName={format(day, 'EEE')}
+        dayNum={format(day, 'd')}
+        isToday={today}
+        size={54}
+      />
 
       {/* Center: availability pill + plan list */}
       <View className="flex-1 gap-1">
@@ -322,7 +449,17 @@ function WeekdayRow({
   );
 }
 
-/** Upcoming trips query — anything ending today or later */
+export interface TripPerson {
+  name: string;
+  avatar: string | null;
+  home: string | null;
+  isSelf: boolean;
+}
+
+/** Upcoming trips query — anything ending today or later.
+ *  Each trip carries `people` — everyone on the trip (you, trip_participants,
+ *  priority_friend_ids) with their home city, so the weekend hero can work
+ *  out who is traveling and who is being visited. */
 function useUpcomingTrips(userId: string | undefined) {
   return useQuery({
     enabled: !!userId,
@@ -331,15 +468,68 @@ function useUpcomingTrips(userId: string | undefined) {
       const todayStr = format(new Date(), 'yyyy-MM-dd');
       const { data, error } = await supabase
         .from('trips')
-        .select('id, name, location, start_date, end_date')
+        .select('id, name, location, start_date, end_date, priority_friend_ids')
         .eq('user_id', userId!)
         .gte('end_date', todayStr)
         .order('start_date', { ascending: true });
       if (error) throw error;
 
+      const trips = (data ?? []) as any[];
+
+      // Companions traveling with you on each trip
+      const { data: participants } = trips.length
+        ? await supabase
+            .from('trip_participants')
+            .select('trip_id, friend_user_id')
+            .in('trip_id', trips.map((t) => t.id))
+        : { data: [] as any[] };
+
+      // One profile fetch for everyone involved (including yourself, so the
+      // traveler/local split can use your home city too)
+      const personIds = [
+        ...new Set([
+          userId!,
+          ...((participants ?? []) as any[]).map((p) => p.friend_user_id),
+          ...trips.flatMap((t) => t.priority_friend_ids ?? []),
+        ]),
+      ] as string[];
+
+      const profileMap = new Map<string, TripPerson>();
+      if (personIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('user_id, display_name, first_name, last_name, avatar_url, home_address')
+          .in('user_id', personIds);
+        for (const p of (profiles ?? []) as any[]) {
+          profileMap.set(p.user_id, {
+            name: formatDisplayName({
+              firstName: p.first_name,
+              lastName: p.last_name,
+              displayName: p.display_name,
+            }),
+            avatar: p.avatar_url,
+            home: p.home_address ?? null,
+            isSelf: p.user_id === userId,
+          });
+        }
+      }
+
+      for (const t of trips) {
+        const ids = [
+          userId!,
+          ...((participants ?? []) as any[])
+            .filter((p) => p.trip_id === t.id)
+            .map((p) => p.friend_user_id),
+          ...(t.priority_friend_ids ?? []),
+        ];
+        t.people = [...new Set(ids)]
+          .map((id) => profileMap.get(id))
+          .filter(Boolean);
+      }
+
       // Sort: in-progress first, then upcoming by soonest start
       const now = Date.now();
-      const sorted = ((data ?? []) as any[]).sort((a, b) => {
+      const sorted = trips.sort((a, b) => {
         const aStart = new Date(a.start_date).getTime();
         const aEnd   = new Date(a.end_date).getTime();
         const bStart = new Date(b.start_date).getTime();
