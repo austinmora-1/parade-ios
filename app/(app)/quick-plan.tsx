@@ -30,6 +30,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { useFriendDashboardData } from '@/hooks/useFriendDashboardData';
 import { Avatar } from '@/components/primitives/Avatar';
+import { DatePickerModal } from '@/components/primitives/DatePickerModal';
 import { formatDisplayName } from '@/lib/utils';
 import { TIME_SLOT_LABELS, ACTIVITY_CONFIG, type ActivityType, type TimeSlot } from '@/types/planner';
 import { TC } from '@/lib/theme';
@@ -64,16 +65,13 @@ export default function QuickPlanScreen() {
   const [pickedDate, setPickedDate] = useState<string>(
     dateParam ?? format(new Date(), 'yyyy-MM-dd'),
   );
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const [pickedSlot, setPickedSlot] = useState<TimeSlot>(
     (slotParam ?? 'evening') as TimeSlot,
   );
   const slot = pickedSlot;
   const date = useMemo(() => parseISO(`${pickedDate}T12:00:00`), [pickedDate]);
   const slotMeta = TIME_SLOT_LABELS[slot];
-  const dateOptions = useMemo(
-    () => Array.from({ length: 14 }, (_, i) => format(addDays(new Date(), i), 'yyyy-MM-dd')),
-    [],
-  );
 
   // Friend pool: log mode lists ALL connected friends (they already said
   // yes outside Parade); suggest mode lists friends mutually free in the
@@ -228,28 +226,31 @@ export default function QuickPlanScreen() {
                 <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
                   When
                 </Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2 px-0.5 pb-1">
-                  {dateOptions.map((d) => {
-                    const dObj = parseISO(`${d}T12:00:00`);
-                    const selected = pickedDate === d;
-                    return (
-                      <Pressable
-                        key={d}
-                        onPress={() => { Haptics.selectionAsync(); setPickedDate(d); }}
-                        className={`rounded-xl px-3 py-2.5 border active:opacity-70 ${selected ? 'bg-primary border-primary' : 'bg-card border-border/40'}`}
-                      >
-                        <View className="items-center">
-                          <Text className={`font-sans text-[10px] font-semibold uppercase tracking-wider ${selected ? 'text-white/80' : 'text-muted-foreground'}`}>
-                            {dayLabel(dObj)}
-                          </Text>
-                          <Text className={`font-display text-base ${selected ? 'text-white' : 'text-foreground'}`}>
-                            {format(dObj, 'MMM d')}
-                          </Text>
-                        </View>
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
+                {/* Defaults to today; tap to pick any day from a calendar */}
+                <Pressable
+                  onPress={() => { Haptics.selectionAsync(); setCalendarOpen(true); }}
+                  className="bg-card rounded-xl border border-border/40 px-4 py-3 flex-row items-center gap-3 shadow-sm active:opacity-70"
+                >
+                  <Calendar size={16} color={PARADE_GREEN} strokeWidth={2} />
+                  <View className="flex-1">
+                    <Text className="font-sans text-sm font-semibold text-foreground">
+                      {dayLabel(date)}
+                    </Text>
+                    <Text className="font-sans text-xs text-muted-foreground mt-0.5">
+                      {format(date, 'EEEE, MMM d')}
+                    </Text>
+                  </View>
+                  <Text className="font-sans text-xs font-semibold text-primary">Change</Text>
+                </Pressable>
+                <DatePickerModal
+                  visible={calendarOpen}
+                  onClose={() => setCalendarOpen(false)}
+                  selected={date}
+                  onSelect={(day) => {
+                    setPickedDate(format(day, 'yyyy-MM-dd'));
+                    setCalendarOpen(false);
+                  }}
+                />
               </View>
               <View>
                 <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">

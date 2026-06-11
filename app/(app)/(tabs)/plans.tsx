@@ -52,7 +52,7 @@ import type { Plan, DayAvailability, TimeSlot } from '@/types/planner';
 import { activityAccent } from '@/lib/activityColors';
 import { TC } from '@/lib/theme';
 import { TINT, PARADE_GREEN, MARIGOLD } from '@/lib/colors';
-import { DateDial, getDayStatus } from '@/components/plans/DateDial';
+import { DateDial, getDayStatus, TOTAL_SLOTS, type DayDialStatus } from '@/components/plans/DateDial';
 import { WeekPickerModal } from '@/components/plans/WeekPickerModal';
 import { Avatar } from '@/components/primitives/Avatar';
 import { formatDisplayName } from '@/lib/utils';
@@ -200,27 +200,32 @@ function nameList(names: string[]): string {
   return `${firsts.slice(0, -1).join(', ')} & ${firsts[firsts.length - 1]}`;
 }
 
-interface AvailInfo { count: number; hasData: boolean }
+interface AvailInfo { count: number; hasData: boolean; isDefault: boolean }
 
 function getAvailInfo(date: Date, availability: DayAvailability[]): AvailInfo {
   const dateStr = format(date, 'yyyy-MM-dd');
   const dayAvail = availability.find((a) => format(a.date, 'yyyy-MM-dd') === dateStr);
-  if (!dayAvail) return { count: 0, hasData: false };
+  if (!dayAvail) return { count: 0, hasData: false, isDefault: false };
   const count = Object.values(dayAvail.slots).filter(Boolean).length;
-  return { count, hasData: true };
+  return { count, hasData: true, isDefault: !!dayAvail.isDefault };
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-/** Availability summary pill — matches PWA summaryPillClass logic */
-function AvailPill({ count, hasData }: AvailInfo) {
+/** Availability summary pill — matches PWA summaryPillClass logic.
+ *  Days synthesized from profile defaults render a neutral "Work hours"
+ *  pill instead of the amber/ember scheduling buckets, so schedule-derived
+ *  busyness doesn't read like real plans. */
+function AvailPill({ count, hasData, isDefault }: AvailInfo) {
   if (!hasData) return null;
 
   let label: string;
   let bg: string;
   let textColor: string;
 
-  if (count === 0) {
+  if (isDefault && count < 6) {
+    label = 'Work hours'; bg = TINT.grayFaint; textColor = '#6E6E74';
+  } else if (count === 0) {
     label = 'Booked'; bg = TINT.secondarySubtle; textColor = '#D46549';
   } else if (count <= 2) {
     label = 'Some time'; bg = TINT.amberSubtle; textColor = '#92400E';
@@ -489,9 +494,16 @@ function WeekdayRow({
       className="bg-card rounded-2xl px-3 py-3 flex-row items-center gap-3 shadow-sm active:opacity-80"
       style={today ? { borderWidth: 2, borderColor: '#23744D' } : { borderWidth: 1, borderColor: 'rgba(0,0,0,0.08)' }}
     >
-      {/* DateDial — availability ring around the day name/number (PWA parity) */}
+      {/* DateDial — availability ring around the day name/number (PWA parity).
+          Default-schedule days keep a green arc sized to the real free
+          fraction — the amber/ember statuses are reserved for explicit data. */}
       <DateDial
-        {...getDayStatus(availInfo.count, availInfo.hasData)}
+        {...(availInfo.isDefault
+          ? {
+              status: (availInfo.count > 0 ? 'open' : 'unavailable') as DayDialStatus,
+              fill: availInfo.count / TOTAL_SLOTS,
+            }
+          : getDayStatus(availInfo.count, availInfo.hasData))}
         dayName={format(day, 'EEE')}
         dayNum={format(day, 'd')}
         isToday={today}

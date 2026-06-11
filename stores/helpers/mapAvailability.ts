@@ -45,7 +45,7 @@ export const createDefaultAvailability = (date: Date, settings?: DefaultAvailabi
     }
   }
 
-  return { date, slots, locationStatus: 'home' };
+  return { date, slots, locationStatus: 'home', isDefault: true };
 };
 
 /** Convert a raw availability DB row to a DayAvailability model */

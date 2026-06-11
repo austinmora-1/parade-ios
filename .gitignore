@@ -29,10 +29,11 @@ yarn-error.*
 # sentry-wizard binary (106MB; downloaded per setup script)
 sentry-wizard
 
-# Supabase CLI local state (keep migrations + config; ignore everything else)
+# Supabase CLI local state (keep migrations + config + schema snapshot; ignore everything else)
 /supabase/*
 !/supabase/migrations/
 !/supabase/config.toml
+!/supabase/schema.sql
 
 # macOS
 .DS_Store

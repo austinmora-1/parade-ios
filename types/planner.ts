@@ -371,6 +371,10 @@ export interface DayAvailability {
   slots: {
     [key in TimeSlot]: boolean;
   };
+  /** True when this day was synthesized from profile defaults (work days /
+   *  hours) rather than loaded from a real availability row — lets the UI
+   *  render schedule-derived busyness differently from user-set busyness. */
+  isDefault?: boolean;
   locationStatus: LocationStatus;
   customLocation?: Location;
   tripLocation?: string;

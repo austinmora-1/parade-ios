@@ -55,12 +55,14 @@ export const useAvailabilityStore = create<AvailabilityState & AvailabilityActio
 
     const existing = availabilityMap[dateStr];
     if (existing) {
-      const updatedEntry = { ...existing, slots: { ...existing.slots, [slot]: available } };
+      // A real row exists now — the day is no longer schedule-derived
+      const updatedEntry = { ...existing, slots: { ...existing.slots, [slot]: available }, isDefault: false };
       const updated = availability.map(a => format(a.date, 'yyyy-MM-dd') === dateStr ? updatedEntry : a);
       set({ availability: updated, availabilityMap: { ...availabilityMap, [dateStr]: updatedEntry } });
     } else {
       const newAvailability = createDefaultAvailability(date, defaultSettings);
       newAvailability.slots[slot] = available;
+      newAvailability.isDefault = false;
       set({
         availability: [...availability, newAvailability],
         availabilityMap: { ...availabilityMap, [dateStr]: newAvailability },

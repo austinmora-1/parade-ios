@@ -48,6 +48,7 @@ import {
   dayStatusColor,
   DAY_STATUS_LABEL,
   TOTAL_SLOTS,
+  type DayDialStatus,
 } from '@/components/plans/DateDial';
 import { TINT, PARADE_GREEN, EMBER, ELEPHANT, tint } from '@/lib/colors';
 
@@ -216,7 +217,18 @@ export default function DayDetailScreen() {
   };
 
   const freeCount = SLOTS.filter((s) => slotIsFree(s.col)).length;
-  const { status: dayStatus, fill } = getDayStatus(freeCount, true);
+  // No DB row → the day is schedule-derived (profile defaults); render it
+  // neutrally instead of with the amber/ember explicit-data buckets.
+  const isDefaultDay = !avail;
+  const { status: dayStatus, fill } = isDefaultDay
+    ? {
+        status: (freeCount > 0 ? 'open' : 'unavailable') as DayDialStatus,
+        fill: freeCount / TOTAL_SLOTS,
+      }
+    : getDayStatus(freeCount, true);
+  const isWorkHoursLabel = isDefaultDay && freeCount < TOTAL_SLOTS;
+  const statusLabel = isWorkHoursLabel ? 'Work hours' : DAY_STATUS_LABEL[dayStatus];
+  const statusColor = isWorkHoursLabel ? '#6E6E74' : dayStatusColor(dayStatus);
 
   const toggleSlot = useCallback(
     async (slotDef: SlotDef) => {
@@ -376,9 +388,9 @@ export default function DayDetailScreen() {
               <View className="flex-row items-baseline gap-2">
                 <Text
                   className="font-display text-base"
-                  style={{ color: dayStatusColor(dayStatus) }}
+                  style={{ color: statusColor }}
                 >
-                  {DAY_STATUS_LABEL[dayStatus]}
+                  {statusLabel}
                 </Text>
                 <Text className="font-sans text-xs text-muted-foreground">
                   {freeCount} of {TOTAL_SLOTS} windows free
@@ -408,6 +420,7 @@ export default function DayDetailScreen() {
                 {plans.length > 0
                   ? `${plans.length} plan${plans.length > 1 ? 's' : ''} on this day`
                   : 'No plans yet'}
+                {isDefaultDay ? ' · based on your default schedule' : ''}
               </Text>
             </View>
           </View>
