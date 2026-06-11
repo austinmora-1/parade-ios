@@ -186,7 +186,6 @@ export function WhenStep({
                         const slots = slotsByDate.get(dateStr) ?? [];
                         const level = slots.length >= 3 ? LEVEL.high : slots.length >= 1 ? LEVEL.some : LEVEL.none;
                         const preferred = !past && slots.length > 0 && isPreferredDay(dateStr);
-                        const hasPicks = selectedSlots.some((s) => s.date === dateStr);
 
                         return (
                           <Pressable
@@ -217,14 +216,6 @@ export function WhenStep({
                                 {format(day, 'd')}
                               </Text>
                             </View>
-                            {/* picked marker / preferred dot */}
-                            <View style={{ height: 5, marginTop: 1 }}>
-                              {hasPicks ? (
-                                <View className="w-1.5 h-1.5 rounded-full bg-primary" />
-                              ) : preferred ? (
-                                <View className="w-1 h-1 rounded-full" style={{ backgroundColor: '#DFA53A' }} />
-                              ) : null}
-                            </View>
                           </Pressable>
                         );
                       })}
@@ -243,10 +234,6 @@ export function WhenStep({
                         <Text className="font-sans text-[10px] text-muted-foreground">{String(label)}</Text>
                       </View>
                     ))}
-                    <View className="flex-row items-center gap-1">
-                      <View className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: '#DFA53A' }} />
-                      <Text className="font-sans text-[10px] text-muted-foreground">Your social days</Text>
-                    </View>
                   </View>
                 </View>
               )}
