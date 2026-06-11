@@ -19,7 +19,7 @@ import { TINT } from '@/lib/colors';
 const LIGHT = {
   active:   '#23744D',  // parade green
   inactive: '#929298',  // elephant gray
-  surface:  '#FAF3E6',  // sidebar chalk
+  surface:  '#F9F7F1',  // sidebar eggshell
   border:   '#DED4C3',
 };
 const DARK = {

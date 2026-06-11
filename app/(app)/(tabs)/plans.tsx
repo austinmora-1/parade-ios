@@ -316,7 +316,7 @@ function WeekdayRow({
         className="w-9 h-9 rounded-full items-center justify-center"
         style={{ backgroundColor: '#2F4F3F' }}
       >
-        <Plus size={16} color="#F8F0E0" strokeWidth={2.2} />
+        <Plus size={16} color="#FBF9F4" strokeWidth={2.2} />
       </Pressable>
     </Pressable>
   );

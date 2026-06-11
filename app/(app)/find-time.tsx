@@ -611,7 +611,7 @@ export default function FindTimeScreen() {
                                   position: 'absolute', bottom: 0, right: 0,
                                   width: 22, height: 22, borderRadius: 11,
                                   backgroundColor: '#23744D',
-                                  borderWidth: 2, borderColor: '#F7F2EA',
+                                  borderWidth: 2, borderColor: '#FBF9F4',
                                   alignItems: 'center', justifyContent: 'center',
                                 }}
                               >

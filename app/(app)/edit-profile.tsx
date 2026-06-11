@@ -402,7 +402,7 @@ export default function EditProfileScreen() {
                         borderRadius: 999,
                         backgroundColor: '#23744D',
                         borderWidth: 3,
-                        borderColor: '#F8F0E0',
+                        borderColor: '#FBF9F4',
                         alignItems: 'center',
                         justifyContent: 'center',
                       }}

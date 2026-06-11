@@ -8,15 +8,15 @@
     --parade-green:   152 54% 30%;   /* #23744D  — primary action (matches PWA) */
     --mint:           150 33% 55%;   /* #67B28E  — primary glow / faded mint */
     --evergreen:      150 22% 24%;   /* #2F4F3F  — dark forest text */
-    --chalk:           40 67% 93%;   /* #F8F0E0  — custard background */
-    --sidebar-chalk:   40 60% 95%;   /* #FAF3E6  — tab bar / sidebar surface */
+    --chalk:           45 45% 97%;   /* #FBF9F4  — eggshell background */
+    --sidebar-chalk:   45 40% 96%;   /* #F9F7F1  — tab bar / sidebar surface */
     --marigold:        42 71% 55%;   /* #DFA53A  — accent / badge highlight */
     --butter:          43 84% 72%;   /* #F5C96A  — warm accent */
     --ember:           11 60% 56%;   /* #D46549  — coral secondary */
     --sage:           102 17% 64%;   /* #9CB094  — soft green muted */
 
     /* ── Semantic tokens ──────────────────────────────────────────────── */
-    --background:          40 67% 93%;   /* custard #F8F0E0 */
+    --background:          45 45% 97%;   /* eggshell #FBF9F4 */
     --foreground:         150 22% 15%;   /* dark forest */
     --card:                 0  0% 100%;  /* white */
     --card-foreground:    150 22% 15%;
@@ -46,7 +46,7 @@
     --radius:  1rem;
 
     /* ── Sidebar / tab bar ────────────────────────────────────────────── */
-    --sidebar-background:  40 60% 95%;   /* #FAF3E6 */
+    --sidebar-background:  45 40% 96%;   /* #F9F7F1 */
     --sidebar-border:      40 27% 82%;   /* #DED4C3 */
     --sidebar-primary:    152 54% 30%;   /* parade green */
     --sidebar-accent:      40 60% 92%;   /* #F4ECDA */
