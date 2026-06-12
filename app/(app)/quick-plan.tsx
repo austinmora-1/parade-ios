@@ -257,7 +257,7 @@ export default function QuickPlanScreen() {
           {isLogMode && (
             <View className="gap-4">
               <View>
-                <Text className="font-sans text-xs font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
+                <Text className="font-sans text-[13px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
                   When
                 </Text>
                 {/* Defaults to today; tap to pick any day from a calendar */}
@@ -270,11 +270,11 @@ export default function QuickPlanScreen() {
                     <Text className="font-sans text-[15px] font-semibold text-foreground">
                       {dayLabel(date)}
                     </Text>
-                    <Text className="font-sans text-xs text-muted-foreground mt-0.5">
+                    <Text className="font-sans text-sm text-muted-foreground mt-0.5">
                       {format(date, 'EEEE, MMM d')}
                     </Text>
                   </View>
-                  <Text className="font-sans text-xs font-semibold text-primary">Change</Text>
+                  <Text className="font-sans text-sm font-semibold text-primary">Change</Text>
                 </Pressable>
                 <DatePickerModal
                   visible={calendarOpen}
@@ -287,7 +287,7 @@ export default function QuickPlanScreen() {
                 />
               </View>
               <View>
-                <Text className="font-sans text-xs font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
+                <Text className="font-sans text-[13px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
                   Time
                 </Text>
                 <View className="flex-row flex-wrap gap-2">
@@ -299,8 +299,8 @@ export default function QuickPlanScreen() {
                         onPress={() => { Haptics.selectionAsync(); setPickedSlot(id); }}
                         className={`rounded-xl px-3 py-2 border active:opacity-70 ${selected ? 'bg-primary border-primary' : 'bg-card border-border/40'}`}
                       >
-                        <Text className={`font-sans text-xs font-semibold ${selected ? 'text-white' : 'text-foreground'}`}>{meta.label}</Text>
-                        <Text className={`font-sans text-[10px] ${selected ? 'text-white/70' : 'text-muted-foreground'}`}>{meta.time}</Text>
+                        <Text className={`font-sans text-sm font-semibold ${selected ? 'text-white' : 'text-foreground'}`}>{meta.label}</Text>
+                        <Text className={`font-sans text-xs ${selected ? 'text-white/70' : 'text-muted-foreground'}`}>{meta.time}</Text>
                       </Pressable>
                     );
                   })}
@@ -345,7 +345,7 @@ export default function QuickPlanScreen() {
           {freeFriends.length > 0 && (
             <View>
               <View className="flex-row items-center justify-between px-0.5 mb-2">
-                <Text className="font-sans text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                <Text className="font-sans text-[13px] font-semibold uppercase tracking-widest text-muted-foreground">
                   {isLogMode ? "Who's in (already confirmed)" : 'Invite friends'}
                 </Text>
                 <Text className="font-sans text-[13px] text-muted-foreground">
@@ -382,7 +382,7 @@ export default function QuickPlanScreen() {
                       }`}
                     >
                       <Avatar url={f.avatar} displayName={f.name} size="xs" />
-                      <Text className="font-sans text-sm font-medium text-foreground">
+                      <Text className="font-sans text-[15px] font-medium text-foreground">
                         {f.name.split(' ')[0]}
                       </Text>
                     </Pressable>
@@ -394,7 +394,7 @@ export default function QuickPlanScreen() {
 
           {/* Title */}
           <View>
-            <Text className="font-sans text-xs font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
+            <Text className="font-sans text-[13px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
               Title
             </Text>
             <TextInput
@@ -409,7 +409,7 @@ export default function QuickPlanScreen() {
 
           {/* Activity (optional) */}
           <View>
-            <Text className="font-sans text-xs font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
+            <Text className="font-sans text-[13px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
               Add activity (optional)
             </Text>
             <View className="flex-row flex-wrap gap-2">
@@ -429,7 +429,7 @@ export default function QuickPlanScreen() {
                       isSel ? 'bg-primary/10 border-primary/50' : 'bg-card border-border/40'
                     }`}
                   >
-                    <Text className="font-sans text-sm font-medium text-foreground">
+                    <Text className="font-sans text-[15px] font-medium text-foreground">
                       {cfg.icon} {cfg.label}
                     </Text>
                   </Pressable>
@@ -451,7 +451,7 @@ export default function QuickPlanScreen() {
 
           {/* Note (optional) */}
           <View>
-            <Text className="font-sans text-xs font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
+            <Text className="font-sans text-[13px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
               Note (optional)
             </Text>
             <TextInput

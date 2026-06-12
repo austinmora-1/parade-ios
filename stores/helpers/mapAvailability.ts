@@ -48,8 +48,11 @@ export const createDefaultAvailability = (date: Date, settings?: DefaultAvailabi
   return { date, slots, locationStatus: 'home', isDefault: true };
 };
 
-/** Convert a raw availability DB row to a DayAvailability model */
-export const mapAvailabilityRow = (row: any, date: Date): DayAvailability => {
+/** Convert a raw availability DB row to a DayAvailability model.
+ *  A null slot column means the user never touched that slot, so it falls
+ *  back to the schedule-derived default (work hours busy) rather than free —
+ *  rows created by location/trip writes must not wipe the work schedule. */
+export const mapAvailabilityRow = (row: any, date: Date, settings?: DefaultAvailabilitySettings | null): DayAvailability => {
   const slotLocs: Record<string, string | null> = {};
   let hasSlotLocs = false;
   for (const [slot, col] of Object.entries(SLOT_COLUMN_MAP)) {
@@ -59,15 +62,16 @@ export const mapAvailabilityRow = (row: any, date: Date): DayAvailability => {
       if (val) hasSlotLocs = true;
     }
   }
+  const defaults = createDefaultAvailability(date, settings).slots;
   return {
     date,
     slots: {
-      'early-morning':   row.early_morning   ?? true,
-      'late-morning':    row.late_morning    ?? true,
-      'early-afternoon': row.early_afternoon ?? true,
-      'late-afternoon':  row.late_afternoon  ?? true,
-      'evening':         row.evening         ?? true,
-      'late-night':      row.late_night      ?? true,
+      'early-morning':   row.early_morning   ?? defaults['early-morning'],
+      'late-morning':    row.late_morning    ?? defaults['late-morning'],
+      'early-afternoon': row.early_afternoon ?? defaults['early-afternoon'],
+      'late-afternoon':  row.late_afternoon  ?? defaults['late-afternoon'],
+      'evening':         row.evening         ?? defaults['evening'],
+      'late-night':      row.late_night      ?? defaults['late-night'],
     },
     locationStatus: (row.location_status as LocationStatus) || 'home',
     tripLocation:   row.trip_location || undefined,

@@ -91,6 +91,64 @@ export async function setDatesAvailability(
   return { daysAffected: dates.length };
 }
 
+/**
+ * Mark a trip's days as a LOCATION CHANGE only — sets location_status +
+ * trip_location without touching any slot columns, so the trip never blocks
+ * availability. Pass `location: null, away: false` to clear (trip deleted).
+ */
+export async function setTripLocationRange(
+  userId: string,
+  startDate: string | Date,
+  endDate: string | Date,
+  location: string | null,
+  away: boolean,
+): Promise<{ daysAffected: number }> {
+  const start = toLocalDate(startDate);
+  const last  = toLocalDate(endDate);
+  const dates: string[] = [];
+  for (let d = start; d.getTime() <= last.getTime(); d = addDays(d, 1)) {
+    dates.push(format(d, 'yyyy-MM-dd'));
+  }
+  if (dates.length === 0) return { daysAffected: 0 };
+
+  const rows = dates.map((date) => ({
+    user_id: userId,
+    date,
+    location_status: away ? 'away' : 'home',
+    trip_location: away ? location : null,
+  }));
+
+  const { error } = await supabase
+    .from('availability')
+    .upsert(rows as any, { onConflict: 'user_id,date' });
+  if (error) throw error;
+
+  // Mirror location (not slots) into the local store
+  const state = useAvailabilityStore.getState();
+  const newMap = { ...state.availabilityMap };
+  for (const dateStr of dates) {
+    const existing = newMap[dateStr] ?? createDefaultAvailability(parseISO(dateStr), state.defaultSettings);
+    newMap[dateStr] = {
+      ...existing,
+      locationStatus: away ? 'away' : 'home',
+      tripLocation: away ? (location ?? undefined) : undefined,
+    };
+  }
+  const dateSet = new Set(dates);
+  const replaced = state.availability.map((a) => {
+    const key = format(a.date, 'yyyy-MM-dd');
+    return dateSet.has(key) ? newMap[key] : a;
+  });
+  const replacedKeys = new Set(replaced.map((a) => format(a.date, 'yyyy-MM-dd')));
+  const appended = dates.filter((d) => !replacedKeys.has(d)).map((d) => newMap[d]);
+  useAvailabilityStore.setState({
+    availability: [...replaced, ...appended],
+    availabilityMap: newMap,
+  });
+
+  return { daysAffected: dates.length };
+}
+
 /** Bulk block/release for a trip's full date range (inclusive). */
 export async function setTripAvailabilityBulk(
   userId: string,

@@ -85,7 +85,7 @@ export function transformDashboardData(rpcData: unknown, userId: string) {
   const availabilityWithDefaults: DayAvailability[] = allDates.map((dateStr, i) => {
     const existing = availDataMap.get(dateStr);
     const date = addDays(start, i);
-    if (existing) return mapAvailabilityRow(existing, date);
+    if (existing) return mapAvailabilityRow(existing, date, defaultSettings);
     return createDefaultAvailability(date, defaultSettings);
   });
 

@@ -207,7 +207,7 @@ export const useAvailabilityStore = create<AvailabilityState & AvailabilityActio
       if (!newMap[dateStr]) {
         const existing = fetchedMap.get(dateStr);
         const dayAvail: DayAvailability = existing
-          ? mapAvailabilityRow(existing, new Date(d))
+          ? mapAvailabilityRow(existing, new Date(d), defaultSettings)
           : createDefaultAvailability(new Date(d), defaultSettings);
         newMap[dateStr] = dayAvail;
         newAvail.push(dayAvail);
@@ -265,7 +265,7 @@ export const useAvailabilityStore = create<AvailabilityState & AvailabilityActio
     const availabilityWithDefaults: DayAvailability[] = allDates.map((dateStr, i) => {
       const existing = availDataMap.get(dateStr);
       const date = addDays(start, i - 183);
-      if (existing) return mapAvailabilityRow(existing, date);
+      if (existing) return mapAvailabilityRow(existing, date, defaultSettings);
       return createDefaultAvailability(date, defaultSettings);
     });
 

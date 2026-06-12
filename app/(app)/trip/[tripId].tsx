@@ -26,7 +26,7 @@ import { format, differenceInDays, isAfter } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlannerStore } from '@/stores/plannerStore';
-import { setTripAvailabilityBulk } from '@/lib/tripBusy';
+import { setTripLocationRange } from '@/lib/tripBusy';
 import { resetCalendarSyncCache, syncCalendarBusyTimes } from '@/lib/calendarSync';
 import * as ExpoCalendar from 'expo-calendar';
 import { TripActivitiesSection } from '@/components/trip/TripActivitiesSection';
@@ -106,20 +106,20 @@ export default function TripDetailScreen() {
             setDeleting(true);
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
             try {
-              // 1. Release the blocked days FIRST — if this fails, the trip
+              // 1. Clear the location change FIRST — if this fails, the trip
               //    row survives and the user can simply retry the delete.
-              //    (Deleting first stranded the blocked days forever when the
-              //    release failed, with no trip left to retry against.)
+              //    (Trips are a location change only; slots are untouched.)
               if (user?.id && trip?.start_date && trip?.end_date) {
-                await setTripAvailabilityBulk(
+                await setTripLocationRange(
                   user.id,
                   trip.start_date,
                   trip.end_date,
-                  true, // mark free
+                  null,
+                  false, // back home
                 );
               }
 
-              // 2. Delete the trip row; on failure re-block so availability
+              // 2. Delete the trip row; on failure restore the location so it
               //    stays consistent with the surviving trip.
               const { error: delErr } = await supabase
                 .from('trips')
@@ -128,7 +128,7 @@ export default function TripDetailScreen() {
               if (delErr) {
                 if (user?.id && trip?.start_date && trip?.end_date) {
                   try {
-                    await setTripAvailabilityBulk(user.id, trip.start_date, trip.end_date, false);
+                    await setTripLocationRange(user.id, trip.start_date, trip.end_date, trip.location ?? null, true);
                   } catch { /* best-effort restore */ }
                 }
                 throw delErr;

@@ -29,7 +29,7 @@ import { X, Plane } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlannerStore } from '@/stores/plannerStore';
-import { setTripAvailabilityBulk } from '@/lib/tripBusy';
+import { setTripLocationRange } from '@/lib/tripBusy';
 import { LocationAutocomplete } from '@/components/primitives/LocationAutocomplete';
 import { TC } from '@/lib/theme';
 
@@ -126,9 +126,9 @@ export default function NewTripScreen() {
       } as any);
       if (insertErr) throw insertErr;
 
-      // Block all 6 slots on every day of the trip so friends see "away" —
-      // single bulk upsert that throws on failure
-      await setTripAvailabilityBulk(user.id, startDate, endDate, false);
+      // Mark the trip days as a location change ("away" + destination) —
+      // availability slots stay untouched so the trip never blocks plans
+      await setTripLocationRange(user.id, startDate, endDate, location.trim() || null, true);
 
       // Refresh anything that lists trips
       await queryClient.invalidateQueries({ queryKey: ['trips'] });
