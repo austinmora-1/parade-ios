@@ -24,7 +24,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { format, parseISO, isToday, isTomorrow, addDays } from 'date-fns';
 import * as Haptics from 'expo-haptics';
-import { X, Calendar, Clock, Users, Send, Search } from 'lucide-react-native';
+import { X, Calendar, Clock, Send, Search, Check } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlannerStore } from '@/stores/plannerStore';
@@ -119,19 +119,22 @@ export default function QuickPlanScreen() {
   const [selectedFriendIds, setSelectedFriendIds] = useState<Set<string>>(new Set());
   const [friendQuery, setFriendQuery] = useState('');
 
-  // Top 5 most-planned-with by default; search opens the full pool.
+  // Log mode: top 5 most-planned-with by default, search opens the full
+  // pool. Suggest mode: every friend free in the slot is shown.
   // Selected friends always stay visible so they can be untoggled.
   const displayedFriends = useMemo(() => {
     const q = friendQuery.trim().toLowerCase();
     const base = q
       ? freeFriends.filter((f) => f.name.toLowerCase().includes(q))
-      : freeFriends.slice(0, 5);
+      : isLogMode
+        ? freeFriends.slice(0, 5)
+        : freeFriends;
     const shown = new Set(base.map((f) => f.userId));
     const pinned = freeFriends.filter(
       (f) => selectedFriendIds.has(f.userId) && !shown.has(f.userId),
     );
     return [...pinned, ...base];
-  }, [freeFriends, friendQuery, selectedFriendIds]);
+  }, [freeFriends, friendQuery, selectedFriendIds, isLogMode]);
   const [title, setTitle] = useState('');
   const [titleEdited, setTitleEdited] = useState(false);
   const [activity, setActivity] = useState<ActivityType | null>(null);
@@ -309,35 +312,31 @@ export default function QuickPlanScreen() {
             </View>
           )}
 
-          {/* Pre-filled window summary (suggest mode) */}
+          {/* Pre-filled window summary (suggest mode) — editable title is the headline */}
           {!isLogMode && (
           <View className="bg-card rounded-2xl border border-border/30 p-4 gap-2.5 shadow-sm">
-            <View className="flex-row items-center gap-2">
-              <Calendar size={15} color={PARADE_GREEN} strokeWidth={2} />
-              <Text className="font-sans text-[15px] font-semibold text-foreground">
-                {dayLabel(date)}
-              </Text>
-              <Text className="font-sans text-[15px] text-muted-foreground">
-                · {format(date, 'MMM d')}
-              </Text>
-            </View>
-            <View className="flex-row items-center gap-2">
-              <Clock size={15} color={PARADE_GREEN} strokeWidth={2} />
-              <Text className="font-sans text-[15px] font-semibold text-foreground">
-                {slotMeta?.time}
-              </Text>
-              <Text className="font-sans text-[15px] text-muted-foreground">
-                · {slotMeta?.label}
-              </Text>
-            </View>
-            {freeFriends.length > 0 && (
-              <View className="flex-row items-center gap-2">
-                <Users size={15} color={PARADE_GREEN} strokeWidth={2} />
-                <Text className="font-sans text-[13px] text-muted-foreground">
-                  {freeFriends.length} {freeFriends.length === 1 ? 'friend' : 'friends'} free this slot
+            <TextInput
+              value={title}
+              onChangeText={(t) => { setTitle(t); setTitleEdited(true); }}
+              placeholder="What are we doing?"
+              placeholderTextColor="#929298"
+              className="font-display text-[22px] text-foreground p-0"
+              maxLength={80}
+            />
+            <View className="flex-row items-center gap-2 flex-wrap">
+              <View className="flex-row items-center gap-1.5">
+                <Calendar size={14} color={PARADE_GREEN} strokeWidth={2} />
+                <Text className="font-sans text-[14px] text-muted-foreground">
+                  {dayLabel(date)} · {format(date, 'MMM d')}
                 </Text>
               </View>
-            )}
+              <View className="flex-row items-center gap-1.5">
+                <Clock size={14} color={PARADE_GREEN} strokeWidth={2} />
+                <Text className="font-sans text-[14px] text-muted-foreground">
+                  {slotMeta?.time} · {slotMeta?.label}
+                </Text>
+              </View>
+            </View>
           </View>
           )}
 
@@ -349,10 +348,12 @@ export default function QuickPlanScreen() {
                   {isLogMode ? "Who's in (already confirmed)" : 'Invite friends'}
                 </Text>
                 <Text className="font-sans text-[13px] text-muted-foreground">
-                  {selectedFriends.length} selected
+                  {isLogMode
+                    ? `${selectedFriends.length} selected`
+                    : `${freeFriends.length} free this slot`}
                 </Text>
               </View>
-              {freeFriends.length > 5 && (
+              {freeFriends.length > 10 && (
                 <View className="flex-row items-center gap-2 bg-card rounded-xl border border-border/40 px-3 mb-2.5 shadow-sm">
                   <Search size={14} color={ELEPHANT} strokeWidth={2} />
                   <TextInput
@@ -370,29 +371,52 @@ export default function QuickPlanScreen() {
                   )}
                 </View>
               )}
-              <View className="flex-row flex-wrap gap-2">
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 14, paddingHorizontal: 2, paddingVertical: 4 }}
+              >
                 {displayedFriends.map((f) => {
                   const isSel = selectedFriendIds.has(f.userId);
                   return (
                     <Pressable
                       key={f.userId}
                       onPress={() => toggleFriend(f.userId)}
-                      className={`flex-row items-center gap-1.5 rounded-full border pl-1 pr-3 py-1 active:opacity-70 ${
-                        isSel ? 'bg-primary/10 border-primary/50' : 'bg-card border-border/40'
-                      }`}
+                      className="items-center active:opacity-70"
+                      style={{ width: 68 }}
                     >
-                      <Avatar url={f.avatar} displayName={f.name} size="xs" />
-                      <Text className="font-sans text-[15px] font-medium text-foreground">
+                      <View
+                        className="rounded-full"
+                        style={{
+                          padding: 2,
+                          borderWidth: 2,
+                          borderColor: isSel ? PARADE_GREEN : 'transparent',
+                        }}
+                      >
+                        <Avatar url={f.avatar} displayName={f.name} size="lg" />
+                        {isSel && (
+                          <View className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-primary items-center justify-center border-2 border-card">
+                            <Check size={11} color="#FFFFFF" strokeWidth={3} />
+                          </View>
+                        )}
+                      </View>
+                      <Text
+                        numberOfLines={1}
+                        className={`font-sans text-[13px] mt-1.5 ${
+                          isSel ? 'font-semibold text-foreground' : 'text-muted-foreground'
+                        }`}
+                      >
                         {f.name.split(' ')[0]}
                       </Text>
                     </Pressable>
                   );
                 })}
-              </View>
+              </ScrollView>
             </View>
           )}
 
-          {/* Title */}
+          {/* Title (log mode — suggest mode edits it in the summary card) */}
+          {isLogMode && (
           <View>
             <Text className="font-sans text-[13px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
               Title
@@ -406,6 +430,7 @@ export default function QuickPlanScreen() {
               maxLength={80}
             />
           </View>
+          )}
 
           {/* Activity (optional) */}
           <View>
@@ -435,18 +460,27 @@ export default function QuickPlanScreen() {
                   </Pressable>
                 );
               })}
+              {/* Custom activity rides inline as a type-in chip */}
+              <View
+                className={`flex-row items-center rounded-full border px-3 py-1.5 ${
+                  customActivity.trim() ? 'bg-primary/10 border-primary/50' : 'bg-card border-border/40'
+                }`}
+              >
+                <Text className="font-sans text-[15px]">✏️ </Text>
+                <TextInput
+                  value={customActivity}
+                  onChangeText={(t) => {
+                    setCustomActivity(t);
+                    if (t.trim()) setActivity(null);
+                  }}
+                  placeholder="Custom"
+                  placeholderTextColor="#929298"
+                  className="font-sans text-[15px] font-medium text-foreground p-0"
+                  style={{ minWidth: 60, maxWidth: 150, paddingVertical: 0 }}
+                  maxLength={100}
+                />
+              </View>
             </View>
-            <TextInput
-              value={customActivity}
-              onChangeText={(t) => {
-                setCustomActivity(t);
-                if (t.trim()) setActivity(null);
-              }}
-              placeholder="Or type a custom activity…"
-              placeholderTextColor="#929298"
-              className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-[15px] text-foreground shadow-sm mt-2"
-              maxLength={100}
-            />
           </View>
 
           {/* Note (optional) */}

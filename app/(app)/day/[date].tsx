@@ -32,6 +32,7 @@ import {
   ChevronRight,
   CalendarDays,
   Clock,
+  Briefcase,
 } from 'lucide-react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO, isToday, addDays } from 'date-fns';
@@ -44,6 +45,8 @@ import type { TimeSlot, LocationStatus, DayAvailability } from '@/types/planner'
 import { activityAccent } from '@/lib/activityColors';
 import { getPlanSlotCoverage } from '@/lib/planSlotCoverage';
 import { getCalendarBusyTitlesForDate } from '@/lib/calendarSync';
+import { createDefaultAvailability } from '@/stores/helpers/mapAvailability';
+import { formatCityForDisplay } from '@/lib/formatCity';
 import { ScreenHeader } from '@/components/primitives/ScreenHeader';
 import { LocationAutocomplete } from '@/components/primitives/LocationAutocomplete';
 import { DateDial, computeDayWheel } from '@/components/plans/DateDial';
@@ -85,7 +88,7 @@ function useDayData(userId: string | undefined, date: string) {
     enabled: !!userId,
     queryKey: ['day', userId, date],
     queryFn: async () => {
-      const [{ data: avail }, { data: plans }, { data: trips }] = await Promise.all([
+      const [{ data: avail }, { data: ownPlans }, { data: partRows }, { data: trips }] = await Promise.all([
         supabase
           .from('availability')
           .select('*')
@@ -98,13 +101,33 @@ function useDayData(userId: string | undefined, date: string) {
           .eq('user_id', userId!)
           .eq('date', date),
         supabase
+          .from('plan_participants')
+          .select('plan_id')
+          .eq('friend_id', userId!),
+        supabase
           .from('trips')
           .select('id, name, location')
           .eq('user_id', userId!)
           .lte('start_date', date)
           .gte('end_date', date),
       ]);
-      return { avail, plans: plans ?? [], trip: (trips ?? [])[0] ?? null };
+
+      // Plans the user joined (invited/imported) on this day, beyond their own
+      let plans = ownPlans ?? [];
+      const ownIds = new Set(plans.map((p: any) => p.id));
+      const joinedIds = (partRows ?? [])
+        .map((r: any) => r.plan_id)
+        .filter((id: string) => !ownIds.has(id));
+      if (joinedIds.length > 0) {
+        const { data: joined } = await supabase
+          .from('plans')
+          .select('id, title, time_slot, start_time, end_time, location, activity')
+          .in('id', joinedIds)
+          .eq('date', date);
+        plans = [...plans, ...(joined ?? [])];
+      }
+
+      return { avail, plans, trip: (trips ?? [])[0] ?? null };
     },
   });
 }
@@ -257,20 +280,30 @@ export default function DayDetailScreen() {
     locOverride ?? (avail?.location_status === 'away' ? 'away' : 'home');
   const tripLocDirty = tripLoc.trim() !== (avail?.trip_location ?? '').trim();
 
-  /** True if this slot is marked free (optimistic > server > store defaults).
-   *  Mirrors how the Plans list resolves availability (mapAvailabilityRow /
-   *  createDefaultAvailability): a null column in an existing row means free,
-   *  and a day with no row at all falls back to the synthesized defaults in
-   *  the planner store so both screens always agree. */
+  /** Schedule-derived defaults for this day (work hours busy, etc.) */
+  const scheduleDefaultSlots = createDefaultAvailability(parsedDate, defaultSettings).slots;
+
+  /** True if this slot is marked free (optimistic > explicit server value >
+   *  store > schedule defaults). A null column in an existing row means the
+   *  user never touched that slot, so it follows the default schedule —
+   *  work-hour slots stay blocked unless manually toggled free. Mirrors
+   *  mapAvailabilityRow / createDefaultAvailability so the Plans list and
+   *  this screen always agree. */
   const slotIsFree = (slotCol: string): boolean => {
     if (slotCol in optimistic) return optimistic[slotCol];
-    if (avail) {
-      const v = avail[slotCol];
-      return v === null || v === undefined ? true : isFree(v);
-    }
+    const v = avail?.[slotCol];
+    if (v !== null && v !== undefined) return isFree(v);
     const storeDay = date ? availabilityMap[date] : undefined;
     if (storeDay) return !!storeDay.slots[normalizeSlot(slotCol) as TimeSlot];
-    return true;
+    return !!scheduleDefaultSlots[normalizeSlot(slotCol) as TimeSlot];
+  };
+
+  /** Busy purely because of the default work schedule (no explicit toggle) */
+  const isScheduleBusy = (slotCol: string): boolean => {
+    if (slotCol in optimistic) return false;
+    const v = avail?.[slotCol];
+    if (v !== null && v !== undefined) return false;
+    return !scheduleDefaultSlots[normalizeSlot(slotCol) as TimeSlot];
   };
 
   // No DB row → the day is schedule-derived (profile defaults)
@@ -290,7 +323,6 @@ export default function DayDetailScreen() {
     dayAvail: wheelAvail,
     settings: defaultSettings,
     dayPlans: plans.map((p) => ({ timeSlot: normalizeSlot(p.time_slot) })),
-    onTrip: !!dayTrip,
   });
 
   const toggleSlot = useCallback(
@@ -485,26 +517,6 @@ export default function DayDetailScreen() {
                   : 'No plans yet'}
                 {isDefaultDay ? ' · based on your default schedule' : ''}
               </Text>
-
-              {/* Trip covering this day — explains an all-busy day */}
-              {dayTrip && (
-                <Pressable
-                  onPress={() => router.push(`/(app)/trip/${dayTrip.id}`)}
-                  className="flex-row items-center gap-1.5 active:opacity-70"
-                >
-                  <Plane size={11} color={EMBER} strokeWidth={2} />
-                  <Text
-                    className="font-sans text-xs font-medium flex-1"
-                    style={{ color: EMBER }}
-                    numberOfLines={1}
-                  >
-                    {dayTrip.name ||
-                      (dayTrip.location ? `Trip to ${dayTrip.location}` : 'On a trip')}{' '}
-                    — blocks this day
-                  </Text>
-                  <ChevronRight size={12} color={EMBER} strokeWidth={2} />
-                </Pressable>
-              )}
             </View>
           </View>
 
@@ -514,45 +526,22 @@ export default function DayDetailScreen() {
               Location
             </Text>
             <View className="bg-card rounded-2xl border border-border/30 shadow-sm px-4 py-3.5 gap-3">
-              {/* Home / Away segmented toggle */}
-              <View className="flex-row gap-2">
-                {([
-                  { key: 'home' as const, label: 'Home', Icon: Home, accent: PARADE_GREEN },
-                  { key: 'away' as const, label: 'Away', Icon: Plane, accent: EMBER },
-                ]).map(({ key, label, Icon, accent }) => {
-                  const active = locStatus === key;
-                  return (
-                    <Pressable
-                      key={key}
-                      onPress={() => changeLocStatus(key)}
-                      className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl py-2.5 active:opacity-70"
-                      style={{
-                        backgroundColor: active ? tint(accent, 0.12) : 'transparent',
-                        borderWidth: 1.5,
-                        borderColor: active ? accent : TINT.grayBorder,
-                      }}
-                    >
-                      <Icon size={14} color={active ? accent : ELEPHANT} strokeWidth={2} />
-                      <Text
-                        className="font-sans text-sm font-semibold"
-                        style={{ color: active ? accent : ELEPHANT }}
-                      >
-                        {label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              {locStatus === 'home' ? (
-                <View className="flex-row items-center gap-1.5">
-                  <MapPin size={12} color={ELEPHANT} strokeWidth={1.75} />
-                  <Text className="font-sans text-xs text-muted-foreground" numberOfLines={1}>
-                    {homeAddress || 'Your usual spot — set a home city in your profile'}
+              {/* City, front and center (Fraunces) */}
+              {dayTrip ? (
+                <Pressable
+                  onPress={() => router.push(`/(app)/trip/${dayTrip.id}`)}
+                  className="flex-row items-center gap-2 active:opacity-70"
+                >
+                  <Text className="font-display text-2xl text-foreground flex-1" numberOfLines={1}>
+                    {formatCityForDisplay(dayTrip.location) || dayTrip.name || 'On a trip'}
                   </Text>
-                </View>
-              ) : (
-                <View className="gap-2">
+                  <ChevronRight size={16} color={ELEPHANT} strokeWidth={2} />
+                </Pressable>
+              ) : locStatus === 'away' ? (
+                <View className="gap-2.5">
+                  <Text className="font-display text-2xl text-foreground" numberOfLines={1}>
+                    {formatCityForDisplay(tripLoc) || 'Away'}
+                  </Text>
                   <LocationAutocomplete
                     value={tripLoc}
                     onChange={setTripLoc}
@@ -572,7 +561,36 @@ export default function DayDetailScreen() {
                     </Pressable>
                   )}
                 </View>
+              ) : (
+                <Text className="font-display text-2xl text-foreground" numberOfLines={1}>
+                  {formatCityForDisplay(homeAddress) || 'Set a home city'}
+                </Text>
               )}
+
+              {/* Single status indicator — tap to switch (trips own the status) */}
+              {(() => {
+                const isAway = !!dayTrip || locStatus === 'away';
+                const accent = isAway ? EMBER : PARADE_GREEN;
+                const Icon = isAway ? Plane : Home;
+                return (
+                  <Pressable
+                    onPress={dayTrip ? undefined : () => changeLocStatus(isAway ? 'home' : 'away')}
+                    disabled={!!dayTrip}
+                    className="flex-row items-center gap-1.5 self-start rounded-full px-2.5 py-1 active:opacity-70"
+                    style={{ backgroundColor: tint(accent, 0.1) }}
+                  >
+                    <Icon size={11} color={accent} strokeWidth={2} />
+                    <Text className="font-sans text-[11px] font-semibold" style={{ color: accent }}>
+                      {dayTrip ? 'Away · Trip' : isAway ? 'Away' : 'Home'}
+                    </Text>
+                    {!dayTrip && (
+                      <Text className="font-sans text-[10px] text-muted-foreground/60">
+                        · tap to switch
+                      </Text>
+                    )}
+                  </Pressable>
+                );
+              })()}
             </View>
           </View>
 
@@ -649,16 +667,13 @@ export default function DayDetailScreen() {
                           </Text>
                         </Pressable>
                       ) : !free && slotPlans.length === 0 ? (
-                        // Explain the block: plan spillover > calendar > trip > manual
+                        // Explain the block: plan spillover > calendar > work schedule > manual
                         planBlockers.has(slotDef.slot) ? (
                           <BusySourceChip icon={Clock} label={planBlockers.get(slotDef.slot)!} />
                         ) : calBlockers[slotDef.slot] ? (
                           <BusySourceChip icon={CalendarDays} label={calBlockers[slotDef.slot]!} />
-                        ) : dayTrip ? (
-                          <BusySourceChip
-                            icon={Plane}
-                            label={dayTrip.location ? `Trip · ${dayTrip.location}` : 'Trip'}
-                          />
+                        ) : isScheduleBusy(slotDef.col) ? (
+                          <BusySourceChip icon={Briefcase} label="Work hours" />
                         ) : (
                           <Text className="font-sans text-xs text-muted-foreground/40">
                             Busy

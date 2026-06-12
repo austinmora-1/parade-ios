@@ -11,7 +11,7 @@
  *   Step 5  Confirm  — name + destination + summary → share
  *
  * Submit:
- *   solo  → trips row + availability marked away (setTripAvailability)
+ *   solo  → trips row + location change marked away (setTripLocationRange)
  *   group → trip_proposals + trip_proposal_dates + trip_proposal_participants
  *           (creator 'voted', friends 'pending' — what the PWA reads) AND
  *           trip_proposal_invites rows (what the iOS incoming widget reads),
@@ -45,7 +45,7 @@ import { usePlannerStore } from '@/stores/plannerStore';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar } from '@/components/primitives/Avatar';
 import { LocationAutocomplete } from '@/components/primitives/LocationAutocomplete';
-import { setTripAvailability } from '@/lib/tripBusy';
+import { setTripLocationRange } from '@/lib/tripBusy';
 import { formatCityForDisplay } from '@/lib/formatCity';
 import { TC } from '@/lib/theme';
 import { TINT } from '@/lib/colors';
@@ -101,7 +101,6 @@ export default function GoSomewhereScreen() {
   const friends = usePlannerStore((s) => s.friends);
   const plans = usePlannerStore((s) => s.plans);
   const homeAddress = usePlannerStore((s) => s.homeAddress);
-  const setAvailability = usePlannerStore((s) => s.setAvailability);
   const forceRefresh = usePlannerStore((s) => s.forceRefresh);
 
   const connectedFriends = useMemo(
@@ -352,7 +351,7 @@ export default function GoSomewhereScreen() {
           .select('id')
           .single();
         if (error) throw error;
-        await setTripAvailability(setAvailability, first.friday, last.sunday, false);
+        await setTripLocationRange(user.id, first.friday, last.sunday, destination.trim() || null, true);
         await forceRefresh();
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         router.replace(trip?.id ? `/(app)/trip/${trip.id}` : '/(app)/(tabs)');
@@ -437,7 +436,7 @@ export default function GoSomewhereScreen() {
       setSending(false);
     }
   }, [user?.id, tripType, hostMode, hostFriendId, selectedArr, selectedWeekends,
-      tripName, destination, setAvailability, forceRefresh]);
+      tripName, destination, forceRefresh]);
 
   // ── Navigation ────────────────────────────────────────────────────────────
   const stepTitle =

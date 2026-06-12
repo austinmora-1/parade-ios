@@ -92,9 +92,9 @@ export interface DayWheel {
  *  - A social day is judged on its SOCIAL slots (all six, minus work-hour
  *    slots on work days): all free = full green; some busy = partial
  *    yellow arc sized by slots taken; all busy = gray dotted "Booked".
- *  - Trip days → traveling but available: the trip's blanket availability
- *    block is ignored; only the work schedule, social preferences, and
- *    actual plans mark slots busy.
+ *  - Trip days → traveling but available: trips are a location change only
+ *    and never block slots; only the work schedule, social preferences,
+ *    explicit toggles, and actual plans mark slots busy.
  */
 export interface DayWheelInput {
   date: Date;
@@ -102,7 +102,8 @@ export interface DayWheelInput {
   settings?: DefaultAvailabilitySettings | null;
   /** Plans on this date, with kebab-case timeSlot */
   dayPlans: Array<{ timeSlot?: string | null }>;
-  onTrip: boolean;
+  /** @deprecated Trips no longer block availability; ignored. */
+  onTrip?: boolean;
 }
 
 export interface DaySlotAvailability {
@@ -123,7 +124,6 @@ export function getDaySlotAvailability({
   dayAvail,
   settings,
   dayPlans,
-  onTrip,
 }: DayWheelInput): DaySlotAvailability {
   const dayName = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][date.getDay()];
   const isWorkDay = settings?.workDays?.includes(dayName) ?? false;
@@ -157,7 +157,6 @@ export function getDaySlotAvailability({
   );
   const slotFree = (s: TimeSlot): boolean => {
     if (planBusy.has(s)) return false;
-    if (onTrip) return true; // ignore the trip's blanket block
     return dayAvail ? !!dayAvail.slots[s] : true;
   };
 
