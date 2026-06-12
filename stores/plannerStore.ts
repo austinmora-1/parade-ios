@@ -71,6 +71,7 @@ export function transformDashboardData(rpcData: unknown, userId: string) {
     workEndHour: profile?.default_work_end_hour ?? 17,
     defaultStatus: (profile?.default_availability_status as 'free' | 'unavailable') || 'free',
     defaultVibes: profile?.default_vibes || [],
+    socialDays: profile?.preferred_social_days || [],
   };
 
   const availDataMap = new Map<string, typeof availData[0]>();

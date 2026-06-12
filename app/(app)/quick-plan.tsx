@@ -237,7 +237,7 @@ export default function QuickPlanScreen() {
         >
           <X size={20} color={TC.icon} strokeWidth={2} />
         </Pressable>
-        <Text className="font-display text-base text-foreground">
+        <Text className="font-display text-lg text-foreground">
           {isLogMode ? 'Quick plan' : hasFriends ? 'Suggest this plan' : 'Make this plan'}
         </Text>
         <View className="w-9 h-9" />
@@ -257,7 +257,7 @@ export default function QuickPlanScreen() {
           {isLogMode && (
             <View className="gap-4">
               <View>
-                <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
+                <Text className="font-sans text-xs font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
                   When
                 </Text>
                 {/* Defaults to today; tap to pick any day from a calendar */}
@@ -267,7 +267,7 @@ export default function QuickPlanScreen() {
                 >
                   <Calendar size={16} color={PARADE_GREEN} strokeWidth={2} />
                   <View className="flex-1">
-                    <Text className="font-sans text-sm font-semibold text-foreground">
+                    <Text className="font-sans text-[15px] font-semibold text-foreground">
                       {dayLabel(date)}
                     </Text>
                     <Text className="font-sans text-xs text-muted-foreground mt-0.5">
@@ -287,7 +287,7 @@ export default function QuickPlanScreen() {
                 />
               </View>
               <View>
-                <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
+                <Text className="font-sans text-xs font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
                   Time
                 </Text>
                 <View className="flex-row flex-wrap gap-2">
@@ -314,26 +314,26 @@ export default function QuickPlanScreen() {
           <View className="bg-card rounded-2xl border border-border/30 p-4 gap-2.5 shadow-sm">
             <View className="flex-row items-center gap-2">
               <Calendar size={15} color={PARADE_GREEN} strokeWidth={2} />
-              <Text className="font-sans text-sm font-semibold text-foreground">
+              <Text className="font-sans text-[15px] font-semibold text-foreground">
                 {dayLabel(date)}
               </Text>
-              <Text className="font-sans text-sm text-muted-foreground">
+              <Text className="font-sans text-[15px] text-muted-foreground">
                 · {format(date, 'MMM d')}
               </Text>
             </View>
             <View className="flex-row items-center gap-2">
               <Clock size={15} color={PARADE_GREEN} strokeWidth={2} />
-              <Text className="font-sans text-sm font-semibold text-foreground">
+              <Text className="font-sans text-[15px] font-semibold text-foreground">
                 {slotMeta?.time}
               </Text>
-              <Text className="font-sans text-sm text-muted-foreground">
+              <Text className="font-sans text-[15px] text-muted-foreground">
                 · {slotMeta?.label}
               </Text>
             </View>
             {freeFriends.length > 0 && (
               <View className="flex-row items-center gap-2">
                 <Users size={15} color={PARADE_GREEN} strokeWidth={2} />
-                <Text className="font-sans text-xs text-muted-foreground">
+                <Text className="font-sans text-[13px] text-muted-foreground">
                   {freeFriends.length} {freeFriends.length === 1 ? 'friend' : 'friends'} free this slot
                 </Text>
               </View>
@@ -345,10 +345,10 @@ export default function QuickPlanScreen() {
           {freeFriends.length > 0 && (
             <View>
               <View className="flex-row items-center justify-between px-0.5 mb-2">
-                <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                <Text className="font-sans text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                   {isLogMode ? "Who's in (already confirmed)" : 'Invite friends'}
                 </Text>
-                <Text className="font-sans text-[11px] text-muted-foreground">
+                <Text className="font-sans text-[13px] text-muted-foreground">
                   {selectedFriends.length} selected
                 </Text>
               </View>
@@ -360,7 +360,7 @@ export default function QuickPlanScreen() {
                     onChangeText={setFriendQuery}
                     placeholder="Search friends"
                     placeholderTextColor={ELEPHANT}
-                    className="flex-1 py-2 font-sans text-sm text-foreground"
+                    className="flex-1 py-2 font-sans text-[15px] text-foreground"
                     autoCorrect={false}
                   />
                   {friendQuery.length > 0 && (
@@ -382,7 +382,7 @@ export default function QuickPlanScreen() {
                       }`}
                     >
                       <Avatar url={f.avatar} displayName={f.name} size="xs" />
-                      <Text className="font-sans text-xs font-medium text-foreground">
+                      <Text className="font-sans text-sm font-medium text-foreground">
                         {f.name.split(' ')[0]}
                       </Text>
                     </Pressable>
@@ -394,7 +394,7 @@ export default function QuickPlanScreen() {
 
           {/* Title */}
           <View>
-            <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
+            <Text className="font-sans text-xs font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
               Title
             </Text>
             <TextInput
@@ -402,14 +402,14 @@ export default function QuickPlanScreen() {
               onChangeText={(t) => { setTitle(t); setTitleEdited(true); }}
               placeholder="What are we doing?"
               placeholderTextColor="#929298"
-              className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
+              className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-[15px] text-foreground shadow-sm"
               maxLength={80}
             />
           </View>
 
           {/* Activity (optional) */}
           <View>
-            <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
+            <Text className="font-sans text-xs font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
               Add activity (optional)
             </Text>
             <View className="flex-row flex-wrap gap-2">
@@ -429,7 +429,7 @@ export default function QuickPlanScreen() {
                       isSel ? 'bg-primary/10 border-primary/50' : 'bg-card border-border/40'
                     }`}
                   >
-                    <Text className="font-sans text-xs font-medium text-foreground">
+                    <Text className="font-sans text-sm font-medium text-foreground">
                       {cfg.icon} {cfg.label}
                     </Text>
                   </Pressable>
@@ -444,14 +444,14 @@ export default function QuickPlanScreen() {
               }}
               placeholder="Or type a custom activity…"
               placeholderTextColor="#929298"
-              className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm mt-2"
+              className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-[15px] text-foreground shadow-sm mt-2"
               maxLength={100}
             />
           </View>
 
           {/* Note (optional) */}
           <View>
-            <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
+            <Text className="font-sans text-xs font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
               Note (optional)
             </Text>
             <TextInput
@@ -459,7 +459,7 @@ export default function QuickPlanScreen() {
               onChangeText={setNote}
               placeholder="Add a quick message…"
               placeholderTextColor="#929298"
-              className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
+              className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-[15px] text-foreground shadow-sm"
               maxLength={200}
               multiline
               numberOfLines={2}
@@ -482,7 +482,7 @@ export default function QuickPlanScreen() {
             ) : (
               <Send size={15} color="#FFFFFF" strokeWidth={2} />
             )}
-            <Text className={`font-sans text-sm font-semibold ${saving ? 'text-muted-foreground' : 'text-white'}`}>
+            <Text className={`font-sans text-base font-semibold ${saving ? 'text-muted-foreground' : 'text-white'}`}>
               {saving ? 'Saving…' : isLogMode ? 'Make it happen!' : hasFriends ? 'Send suggestion' : 'Add plan'}
             </Text>
           </Pressable>

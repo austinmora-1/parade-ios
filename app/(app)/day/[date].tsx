@@ -40,20 +40,14 @@ import * as Haptics from 'expo-haptics';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlannerStore } from '@/stores/plannerStore';
-import type { TimeSlot, LocationStatus } from '@/types/planner';
+import type { TimeSlot, LocationStatus, DayAvailability } from '@/types/planner';
 import { activityAccent } from '@/lib/activityColors';
 import { getPlanSlotCoverage } from '@/lib/planSlotCoverage';
 import { getCalendarBusyTitlesForDate } from '@/lib/calendarSync';
 import { ScreenHeader } from '@/components/primitives/ScreenHeader';
 import { LocationAutocomplete } from '@/components/primitives/LocationAutocomplete';
-import {
-  DateDial,
-  getDayStatus,
-  dayStatusColor,
-  DAY_STATUS_LABEL,
-  TOTAL_SLOTS,
-  type DayDialStatus,
-} from '@/components/plans/DateDial';
+import { DateDial, computeDayWheel } from '@/components/plans/DateDial';
+import { useAvailabilityStore } from '@/stores/availabilityStore';
 import { TINT, PARADE_GREEN, EMBER, ELEPHANT, tint } from '@/lib/colors';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -180,6 +174,7 @@ export default function DayDetailScreen() {
   const homeAddress        = usePlannerStore((s) => s.homeAddress);
   const setUserId          = usePlannerStore((s) => s.setUserId);
   const availabilityMap    = usePlannerStore((s) => s.availabilityMap);
+  const defaultSettings    = useAvailabilityStore((s) => s.defaultSettings);
 
   const { data, isLoading, refetch } = useDayData(user?.id, date);
   const [refreshing, setRefreshing] = useState(false);
@@ -278,19 +273,25 @@ export default function DayDetailScreen() {
     return true;
   };
 
-  const freeCount = SLOTS.filter((s) => slotIsFree(s.col)).length;
-  // No DB row → the day is schedule-derived (profile defaults); render it
-  // neutrally instead of with the amber/ember explicit-data buckets.
+  // No DB row → the day is schedule-derived (profile defaults)
   const isDefaultDay = !avail;
-  const { status: dayStatus, fill } = isDefaultDay
-    ? {
-        status: (freeCount > 0 ? 'open' : 'unavailable') as DayDialStatus,
-        fill: freeCount / TOTAL_SLOTS,
-      }
-    : getDayStatus(freeCount, true);
-  const isWorkHoursLabel = isDefaultDay && freeCount < TOTAL_SLOTS;
-  const statusLabel = isWorkHoursLabel ? 'Work hours' : DAY_STATUS_LABEL[dayStatus];
-  const statusColor = isWorkHoursLabel ? '#6E6E74' : dayStatusColor(dayStatus);
+
+  // Standardized day wheel — same semantics as the Plans list
+  const wheelAvail: DayAvailability = {
+    date: parsedDate,
+    slots: Object.fromEntries(
+      SLOTS.map((s) => [s.slot, slotIsFree(s.col)]),
+    ) as DayAvailability['slots'],
+    locationStatus: 'home',
+    isDefault: isDefaultDay,
+  };
+  const wheel = computeDayWheel({
+    date: parsedDate,
+    dayAvail: wheelAvail,
+    settings: defaultSettings,
+    dayPlans: plans.map((p) => ({ timeSlot: normalizeSlot(p.time_slot) })),
+    onTrip: !!dayTrip,
+  });
 
   const toggleSlot = useCallback(
     async (slotDef: SlotDef) => {
@@ -439,8 +440,8 @@ export default function DayDetailScreen() {
           {/* ── Day summary ──────────────────────────────────────────── */}
           <View className="bg-card rounded-2xl border border-border/30 shadow-sm px-4 py-3.5 flex-row items-center gap-3.5">
             <DateDial
-              status={dayStatus}
-              fill={fill}
+              status={wheel.status}
+              fill={wheel.fill}
               dayName={format(parsedDate, 'EEE')}
               dayNum={format(parsedDate, 'd')}
               isToday={today}
@@ -450,12 +451,12 @@ export default function DayDetailScreen() {
               <View className="flex-row items-baseline gap-2">
                 <Text
                   className="font-display text-base"
-                  style={{ color: statusColor }}
+                  style={{ color: wheel.pill.text }}
                 >
-                  {statusLabel}
+                  {wheel.label}
                 </Text>
                 <Text className="font-sans text-xs text-muted-foreground">
-                  {freeCount} of {TOTAL_SLOTS} windows free
+                  {wheel.free} of {wheel.total} social window{wheel.total === 1 ? '' : 's'} free
                 </Text>
               </View>
 

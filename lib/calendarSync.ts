@@ -203,6 +203,31 @@ export function resetCalendarSyncCache() {
 }
 
 /**
+ * All "yyyy-MM-dd:slot" keys blocked by device calendar events in a date
+ * range — used by the availability baseline reset to decide which busy
+ * slots are still justified. Empty set when permission isn't granted.
+ */
+export async function getCalendarBusySlotKeys(
+  start: Date,
+  end: Date,
+): Promise<Set<string>> {
+  try {
+    const perm = await Calendar.getCalendarPermissionsAsync();
+    if (!perm.granted) return new Set();
+    const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+    if (calendars.length === 0) return new Set();
+    const events = await Calendar.getEventsAsync(calendars.map((c) => c.id), start, end);
+    const keys = new Set<string>();
+    for (const ev of events) {
+      eventToSlotKeys(ev).forEach((k) => keys.add(k));
+    }
+    return keys;
+  } catch {
+    return new Set();
+  }
+}
+
+/**
  * Which calendar event (if any) blocks each slot on a given day — used by
  * the day detail screen to explain busy slots that have no Parade plan.
  * Returns an empty map when calendar permission isn't granted.

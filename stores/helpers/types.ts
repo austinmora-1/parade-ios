@@ -71,6 +71,9 @@ export interface DashboardData {
     default_work_end_hour: number | null;
     default_availability_status: string | null;
     default_vibes: string[] | null;
+    /** May be absent if the get_dashboard_data RPC predates it — falls
+     *  back to [] (= all days socially available). */
+    preferred_social_days?: string[] | null;
     home_address: string | null;
     timezone: string | null;
   } | null;
@@ -83,4 +86,7 @@ export interface DefaultAvailabilitySettings {
   workEndHour: number;
   defaultStatus: 'free' | 'unavailable';
   defaultVibes: string[];
+  /** profiles.preferred_social_days (lowercase day names). Empty = no
+   *  preference set = every day counts as socially available. */
+  socialDays: string[];
 }

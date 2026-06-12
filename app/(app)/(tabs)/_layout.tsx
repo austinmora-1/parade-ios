@@ -24,9 +24,9 @@ const LIGHT = {
 };
 const DARK = {
   active:   '#3B9B68',  // brighter parade green
-  inactive: '#7F8983',
-  surface:  '#141916',  // deep forest surface
-  border:   '#2A322D',
+  inactive: '#8A8377',  // warm gray
+  surface:  '#1D1A16',  // warm espresso surface (matches --sidebar-chalk dark)
+  border:   '#3B352D',
 };
 const PARADE_GREEN = LIGHT.active;
 

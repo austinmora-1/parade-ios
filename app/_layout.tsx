@@ -6,8 +6,10 @@ import { useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 import {
   applyScheme,
-  scheduledScheme,
+  resolvedScheme,
   msUntilNextBoundary,
+  subscribeScheme,
+  currentScheme,
   type Scheme,
 } from '@/lib/theme';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -54,9 +56,9 @@ export default Sentry.wrap(function RootLayout() {
     }
   }, [fontsLoaded, fontError]);
 
-  // ── Scheduled dark mode: dark 9pm–7am local, light otherwise ──────────
+  // ── Dark mode: manual override if set, else dark 9pm–7am local ─────────
   const [scheme, setScheme] = useState<Scheme>(() => {
-    const s = scheduledScheme();
+    const s = resolvedScheme();
     applyScheme(s); // set before first paint
     return s;
   });
@@ -64,22 +66,25 @@ export default Sentry.wrap(function RootLayout() {
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     const sync = () => {
-      const s = scheduledScheme();
-      applyScheme(s);
-      setScheme(s);
-      // Re-arm for the next 9pm/7am boundary (+5s slack)
+      applyScheme(resolvedScheme());
+      // Re-arm for the next 9pm/7am boundary (+5s slack) — harmless while
+      // an override is active, and picks the schedule back up if cleared.
       clearTimeout(timer);
       timer = setTimeout(sync, msUntilNextBoundary() + 5000);
     };
     sync();
     // Recompute when the app returns to the foreground (clock may have
     // crossed a boundary, or the timezone changed while backgrounded).
-    const sub = AppState.addEventListener('change', (state) => {
+    const appState = AppState.addEventListener('change', (state) => {
       if (state === 'active') sync();
     });
+    // Re-render (StatusBar style) whenever the scheme flips, including
+    // manual toggles from the profile header.
+    const unsubscribe = subscribeScheme(() => setScheme(currentScheme()));
     return () => {
       clearTimeout(timer);
-      sub.remove();
+      appState.remove();
+      unsubscribe();
     };
   }, []);
 

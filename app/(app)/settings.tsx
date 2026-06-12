@@ -2,6 +2,8 @@
  * Settings page — Phase 2 Block 7 wired toggles.
  *
  * Sections:
+ *   - Appearance: Auto Night Mode → device-local MMKV via lib/theme
+ *     (applies immediately, not part of the batched Save)
  *   - Notifications: Plan Reminders / Friend Requests / Plan Invitations
  *     → live-binds to profiles.{plan_reminders, friend_requests_notifications,
  *       plan_invitations_notifications}
@@ -34,6 +36,7 @@ import { useNylasCalendar } from '@/hooks/useNylasCalendar';
 import { ScreenHeader } from '@/components/primitives/ScreenHeader';
 import { useProfileSettings } from '@/components/settings/useProfileSettings';
 import { SectionCard, SectionHeader } from '@/components/settings/SettingsPrimitives';
+import { AppearanceSection } from '@/components/settings/AppearanceSection';
 import { NotificationsSection } from '@/components/settings/NotificationsSection';
 import { PrivacySection } from '@/components/settings/PrivacySection';
 import { SocialPreferencesSection } from '@/components/settings/SocialPreferencesSection';
@@ -338,6 +341,9 @@ export default function SettingsPage() {
           <ActivityIndicator className="mt-12" color="#23744D" />
         ) : (
           <>
+            {/* ── Appearance ──────────────────────────────────────────── */}
+            <AppearanceSection />
+
             {/* ── Notifications ───────────────────────────────────────── */}
             <NotificationsSection
               reminders={reminders}

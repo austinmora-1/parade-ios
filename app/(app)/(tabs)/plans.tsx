@@ -52,7 +52,13 @@ import type { Plan, DayAvailability, TimeSlot } from '@/types/planner';
 import { activityAccent } from '@/lib/activityColors';
 import { TC } from '@/lib/theme';
 import { TINT, PARADE_GREEN, MARIGOLD } from '@/lib/colors';
-import { DateDial, getDayStatus, TOTAL_SLOTS, type DayDialStatus } from '@/components/plans/DateDial';
+import {
+  DateDial,
+  computeDayWheel,
+  getDaySlotAvailability,
+  type DayWheel,
+} from '@/components/plans/DateDial';
+import { useAvailabilityStore } from '@/stores/availabilityStore';
 import { WeekPickerModal } from '@/components/plans/WeekPickerModal';
 import { Avatar } from '@/components/primitives/Avatar';
 import { formatDisplayName } from '@/lib/utils';
@@ -95,18 +101,17 @@ const SLOT_END_HOUR: Record<string, number> = {
   'late-night':      26,
 };
 
-const SLOT_ORDER: TimeSlot[] = [
-  'early-morning', 'late-morning', 'early-afternoon',
-  'late-afternoon', 'evening', 'late-night',
-];
-
 interface FreeWindow { date: Date; slot: TimeSlot }
 
-/** First upcoming free window in the given days with no plan in it yet */
+/** First upcoming free window in the given days — resolved through the
+ *  same standardized social-slot logic as the day wheels, so the CTA can
+ *  never call a week "booked" while its wheels show open time. */
 function findNextFreeWindow(
   days: Date[],
   availability: DayAvailability[],
   plans: Plan[],
+  settings: ReturnType<typeof useAvailabilityStore.getState>['defaultSettings'],
+  trips: any[],
 ): FreeWindow | null {
   const now = new Date();
   const todayStr = format(now, 'yyyy-MM-dd');
@@ -114,19 +119,21 @@ function findNextFreeWindow(
   for (const day of days) {
     const dateStr = format(day, 'yyyy-MM-dd');
     if (dateStr < todayStr) continue;
-    const dayAvail = availability.find(
-      (a) => format(a.date, 'yyyy-MM-dd') === dateStr,
-    );
-    if (!dayAvail) continue;
 
     const dayPlans = plans.filter((p) =>
       isSameDay(p.date instanceof Date ? p.date : new Date(p.date), day),
     );
+    const { notAvailable, freeSlots } = getDaySlotAvailability({
+      date: day,
+      dayAvail: availability.find((a) => format(a.date, 'yyyy-MM-dd') === dateStr),
+      settings,
+      dayPlans: dayPlans.map((p) => ({ timeSlot: p.timeSlot as string })),
+      onTrip: trips.some((t) => tripOverlapsDays(t, [day])),
+    });
+    if (notAvailable) continue;
 
-    for (const slot of SLOT_ORDER) {
-      if (!dayAvail.slots[slot]) continue;
+    for (const slot of freeSlots) {
       if (dateStr === todayStr && now.getHours() >= SLOT_END_HOUR[slot]) continue;
-      if (dayPlans.some((p) => p.timeSlot === slot)) continue;
       return { date: day, slot };
     }
   }
@@ -201,45 +208,14 @@ function nameList(names: string[]): string {
   return `${firsts.slice(0, -1).join(', ')} & ${firsts[firsts.length - 1]}`;
 }
 
-interface AvailInfo { count: number; hasData: boolean; isDefault: boolean }
-
-function getAvailInfo(date: Date, availability: DayAvailability[]): AvailInfo {
-  const dateStr = format(date, 'yyyy-MM-dd');
-  const dayAvail = availability.find((a) => format(a.date, 'yyyy-MM-dd') === dateStr);
-  if (!dayAvail) return { count: 0, hasData: false, isDefault: false };
-  const count = Object.values(dayAvail.slots).filter(Boolean).length;
-  return { count, hasData: true, isDefault: !!dayAvail.isDefault };
-}
-
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-/** Availability summary pill — matches PWA summaryPillClass logic.
- *  Days synthesized from profile defaults render a neutral "Work hours"
- *  pill instead of the amber/ember scheduling buckets, so schedule-derived
- *  busyness doesn't read like real plans. */
-function AvailPill({ count, hasData, isDefault }: AvailInfo) {
-  if (!hasData) return null;
-
-  let label: string;
-  let bg: string;
-  let textColor: string;
-
-  if (isDefault && count < 6) {
-    label = 'Work hours'; bg = TINT.grayFaint; textColor = '#6E6E74';
-  } else if (count === 0) {
-    label = 'Booked'; bg = TINT.secondarySubtle; textColor = '#D46549';
-  } else if (count <= 2) {
-    label = 'Some time'; bg = TINT.amberSubtle; textColor = '#92400E';
-  } else if (count <= 4) {
-    label = 'Mostly open'; bg = TINT.primarySubtle; textColor = '#23744D';
-  } else {
-    label = 'Open'; bg = TINT.primaryBorder; textColor = '#1A5C3A';
-  }
-
+/** Availability summary pill — driven by the standardized day wheel */
+function WheelPill({ wheel }: { wheel: DayWheel }) {
   return (
-    <View style={{ backgroundColor: bg, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 }}>
-      <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 11, color: textColor }}>
-        {label}
+    <View style={{ backgroundColor: wheel.pill.bg, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 }}>
+      <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 11, color: wheel.pill.text }}>
+        {wheel.label}
       </Text>
     </View>
   );
@@ -478,12 +454,12 @@ function WeekendHeroCard({
 function WeekdayRow({
   day,
   dayPlans,
-  availInfo,
+  wheel,
   trip,
 }: {
   day: Date;
   dayPlans: Plan[];
-  availInfo: AvailInfo;
+  wheel: DayWheel;
   trip?: any | null;
 }) {
   const today = isToday(day);
@@ -495,16 +471,11 @@ function WeekdayRow({
       className="bg-card rounded-2xl px-3 py-3 flex-row items-center gap-3 shadow-sm active:opacity-80"
       style={today ? { borderWidth: 2, borderColor: '#23744D' } : { borderWidth: 1, borderColor: 'rgba(0,0,0,0.08)' }}
     >
-      {/* DateDial — availability ring around the day name/number (PWA parity).
-          Default-schedule days keep a green arc sized to the real free
-          fraction — the amber/ember statuses are reserved for explicit data. */}
+      {/* DateDial — standardized wheel: green full = all social slots open,
+          yellow arc = portion taken, dotted gray = not available / booked */}
       <DateDial
-        {...(availInfo.isDefault
-          ? {
-              status: (availInfo.count > 0 ? 'open' : 'unavailable') as DayDialStatus,
-              fill: availInfo.count / TOTAL_SLOTS,
-            }
-          : getDayStatus(availInfo.count, availInfo.hasData))}
+        status={wheel.status}
+        fill={wheel.fill}
         dayName={format(day, 'EEE')}
         dayNum={format(day, 'd')}
         isToday={today}
@@ -515,7 +486,7 @@ function WeekdayRow({
       <View className="flex-1 gap-1">
         {/* Pill + plan count */}
         <View className="flex-row items-center gap-2">
-          <AvailPill {...availInfo} />
+          <WheelPill wheel={wheel} />
           {dayPlans.length > 0 && (
             <Text className="font-sans text-xs text-muted-foreground">
               · {dayPlans.length} plan{dayPlans.length > 1 ? 's' : ''}
@@ -765,9 +736,10 @@ export default function PlansTab() {
   const { user } = useAuth();
   const setUserId    = usePlannerStore((s) => s.setUserId);
   const loadAllData  = usePlannerStore((s) => s.loadAllData);
-  const plans        = usePlannerStore((s) => s.plans);
-  const availability = usePlannerStore((s) => s.availability);
-  const isLoading    = usePlannerStore((s) => s.isLoading);
+  const plans           = usePlannerStore((s) => s.plans);
+  const availability    = usePlannerStore((s) => s.availability);
+  const isLoading       = usePlannerStore((s) => s.isLoading);
+  const defaultSettings = useAvailabilityStore((s) => s.defaultSettings);
   const { data: trips, refetch: refetchTrips } = useUpcomingTrips(user?.id);
 
   const [weekOffset, setWeekOffset] = useState(0);
@@ -803,8 +775,13 @@ export default function PlansTab() {
   const weekend   = [days[5], days[6]]; // Sat, Sun
   const label     = getWeekLabel(weekStart, weekEnd);
 
-  // First upcoming free window in the displayed week → drives the CTA
-  const nextFreeWindow = findNextFreeWindow(days, availability, plans);
+  // First upcoming free window in the displayed week → drives the CTA.
+  // Fully-past weeks have no upcoming windows by definition — hide the CTA
+  // instead of misreporting "Booked up".
+  const weekIsPast = format(weekEnd, 'yyyy-MM-dd') < format(today, 'yyyy-MM-dd');
+  const nextFreeWindow = weekIsPast
+    ? null
+    : findNextFreeWindow(days, availability, plans, defaultSettings, trips ?? []);
 
   // ── Week-relative trip lookahead ────────────────────────────────────────────
   // The next-trip card is relative to the *selected* week: trips inside the
@@ -935,10 +912,18 @@ export default function PlansTab() {
               const dayPlans = plans.filter((p) =>
                 isSameDay(p.date instanceof Date ? p.date : new Date(p.date), day),
               );
-              const availInfo = getAvailInfo(day, availability);
               const dayTrip   = (trips ?? []).find((t) =>
                 tripOverlapsDays(t, [day]),
               );
+              const wheel = computeDayWheel({
+                date: day,
+                dayAvail: availability.find(
+                  (a) => format(a.date, 'yyyy-MM-dd') === dateStr,
+                ),
+                settings: defaultSettings,
+                dayPlans: dayPlans.map((p) => ({ timeSlot: p.timeSlot as string })),
+                onTrip: !!dayTrip,
+              });
 
               return (
                 <WeekdayRow
@@ -946,16 +931,14 @@ export default function PlansTab() {
                   day={day}
                   trip={dayTrip}
                   dayPlans={dayPlans}
-                  availInfo={availInfo}
+                  wheel={wheel}
                 />
               );
             })}
           </View>
 
           {/* ── Availability CTA — not shown for past weeks ───────────── */}
-          {!isLoading && format(weekEnd, 'yyyy-MM-dd') >= format(today, 'yyyy-MM-dd') && (
-            <AvailabilityCTA nextFree={nextFreeWindow} />
-          )}
+          {!isLoading && !weekIsPast && <AvailabilityCTA nextFree={nextFreeWindow} />}
 
           {/* ── Next trip (relative to the selected week) ─────────────── */}
           <View className="px-5 gap-2">

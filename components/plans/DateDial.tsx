@@ -7,8 +7,11 @@
  */
 import { View, Text } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
-import { PARADE_GREEN, EMBER, MARIGOLD, ELEPHANT, tint } from '@/lib/colors';
+import { PARADE_GREEN, EMBER, MARIGOLD, ELEPHANT, tint, TINT } from '@/lib/colors';
 import { TC } from '@/lib/theme';
+import { TIME_SLOT_HOURS } from '@/stores/helpers/mapAvailability';
+import type { DefaultAvailabilitySettings } from '@/stores/helpers/types';
+import type { DayAvailability, TimeSlot } from '@/types/planner';
 
 export type DayDialStatus =
   | 'open'
@@ -55,6 +58,144 @@ const STATUS_COLOR: Record<DayDialStatus, string> = {
 
 export function dayStatusColor(status: DayDialStatus): string {
   return STATUS_COLOR[status];
+}
+
+// ─── Standardized day wheel ───────────────────────────────────────────────────
+
+const ALL_SLOTS: TimeSlot[] = [
+  'early-morning', 'late-morning', 'early-afternoon',
+  'late-afternoon', 'evening', 'late-night',
+];
+
+/** Pill palettes for each wheel state */
+const PILL = {
+  open:  { bg: TINT.primaryBorder, text: '#1A5C3A' },
+  some:  { bg: TINT.amberSubtle,   text: '#92400E' },
+  gray:  { bg: TINT.grayFaint,     text: '#6E6E74' },
+} as const;
+
+export interface DayWheel {
+  status: DayDialStatus;            // 'open' | 'some' | 'unavailable'
+  fill: number;                     // arc fraction (yellow arc = slots taken)
+  label: string;                    // pill copy
+  pill: { bg: string; text: string };
+  free: number;                     // free social slots
+  total: number;                    // social slot capacity for the day
+}
+
+/**
+ * Standardized wheel semantics, consistent across weeks:
+ *  - Social days come from settings (profiles.preferred_social_days). No
+ *    preference set = every day is socially available.
+ *  - A non-social day with no explicit availability → gray dotted
+ *    "Not available". Explicitly setting availability on it overrides.
+ *  - A social day is judged on its SOCIAL slots (all six, minus work-hour
+ *    slots on work days): all free = full green; some busy = partial
+ *    yellow arc sized by slots taken; all busy = gray dotted "Booked".
+ *  - Trip days → traveling but available: the trip's blanket availability
+ *    block is ignored; only the work schedule, social preferences, and
+ *    actual plans mark slots busy.
+ */
+export interface DayWheelInput {
+  date: Date;
+  dayAvail?: DayAvailability;
+  settings?: DefaultAvailabilitySettings | null;
+  /** Plans on this date, with kebab-case timeSlot */
+  dayPlans: Array<{ timeSlot?: string | null }>;
+  onTrip: boolean;
+}
+
+export interface DaySlotAvailability {
+  /** Day is gated off — non-social day with no explicit availability */
+  notAvailable: boolean;
+  /** The day's social capacity (all 6 slots minus work-hour slots) */
+  socialSlots: TimeSlot[];
+  /** Social slots currently free, in chronological order */
+  freeSlots: TimeSlot[];
+}
+
+/**
+ * Per-slot resolution behind the day wheel — also drives the Plans tab
+ * CTA so "free window" and the wheel can never disagree.
+ */
+export function getDaySlotAvailability({
+  date,
+  dayAvail,
+  settings,
+  dayPlans,
+  onTrip,
+}: DayWheelInput): DaySlotAvailability {
+  const dayName = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][date.getDay()];
+  const isWorkDay = settings?.workDays?.includes(dayName) ?? false;
+
+  const workBlocked = new Set<TimeSlot>();
+  if (isWorkDay && settings) {
+    for (const [slot, hours] of Object.entries(TIME_SLOT_HOURS)) {
+      if (hours.start < settings.workEndHour && hours.end > settings.workStartHour) {
+        workBlocked.add(slot as TimeSlot);
+      }
+    }
+  }
+  const socialSlots = isWorkDay
+    ? ALL_SLOTS.filter((s) => !workBlocked.has(s))
+    : [...ALL_SLOTS];
+
+  // Social days from settings — empty preference = all days social
+  const socialDays = settings?.socialDays ?? [];
+  const isSocialDay = socialDays.length === 0 || socialDays.includes(dayName);
+  const isExplicit = !!dayAvail && dayAvail.isDefault === false;
+
+  // Non-social day (and the user hasn't explicitly set availability on it,
+  // which overrides the preference) → not available. Same when work hours
+  // swallow every slot.
+  if ((!isSocialDay && !isExplicit) || socialSlots.length === 0) {
+    return { notAvailable: true, socialSlots, freeSlots: [] };
+  }
+
+  const planBusy = new Set(
+    dayPlans.map((p) => (p.timeSlot ?? '').replace(/_/g, '-')),
+  );
+  const slotFree = (s: TimeSlot): boolean => {
+    if (planBusy.has(s)) return false;
+    if (onTrip) return true; // ignore the trip's blanket block
+    return dayAvail ? !!dayAvail.slots[s] : true;
+  };
+
+  return {
+    notAvailable: false,
+    socialSlots,
+    freeSlots: socialSlots.filter(slotFree),
+  };
+}
+
+export function computeDayWheel(input: DayWheelInput): DayWheel {
+  const { notAvailable, socialSlots, freeSlots } = getDaySlotAvailability(input);
+  const total = socialSlots.length;
+  const free = freeSlots.length;
+
+  if (notAvailable) {
+    return {
+      status: 'unavailable', fill: 0,
+      label: 'Not available', pill: PILL.gray,
+      free: 0, total,
+    };
+  }
+
+  const busy = total - free;
+  if (free === 0) {
+    return { status: 'unavailable', fill: 0, label: 'Booked', pill: PILL.gray, free, total };
+  }
+  if (busy === 0) {
+    return { status: 'open', fill: 1, label: 'Open', pill: PILL.open, free, total };
+  }
+  return {
+    status: 'some',
+    fill: busy / total, // yellow portion grows with slots taken
+    label: 'Some time',
+    pill: PILL.some,
+    free,
+    total,
+  };
 }
 
 export function DateDial({

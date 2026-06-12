@@ -242,7 +242,7 @@ export const useAvailabilityStore = create<AvailabilityState & AvailabilityActio
     const [availResult, profileResult] = await Promise.all([
       supabase.from('availability').select('*').eq('user_id', userId).gte('date', availStartDate).lte('date', availEndDate),
       supabase.from('profiles')
-        .select('current_vibe, location_status, custom_vibe_tags, vibe_gif_url, default_work_days, default_work_start_hour, default_work_end_hour, default_availability_status, default_vibes, home_address, timezone')
+        .select('current_vibe, location_status, custom_vibe_tags, vibe_gif_url, default_work_days, default_work_start_hour, default_work_end_hour, default_availability_status, default_vibes, preferred_social_days, home_address, timezone')
         .eq('user_id', userId).single(),
     ]);
 
@@ -255,6 +255,7 @@ export const useAvailabilityStore = create<AvailabilityState & AvailabilityActio
       workEndHour: (profile as any)?.default_work_end_hour ?? 17,
       defaultStatus: (profile as any)?.default_availability_status || 'free',
       defaultVibes: (profile as any)?.default_vibes || [],
+      socialDays: (profile as any)?.preferred_social_days || [],
     };
 
     const availDataMap = new Map<string, any>();

@@ -18,7 +18,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Bell, Settings } from 'lucide-react-native';
+import { Bell, Moon, Settings, Sun } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
@@ -29,7 +29,7 @@ import { formatDisplayName } from '@/lib/utils';
 import { WeeklyIntentionCard } from '@/components/profile/WeeklyIntentionCard';
 import { QuickStatsCard } from '@/components/profile/QuickStatsCard';
 import { PlanHistorySection } from '@/components/profile/PlanHistorySection';
-import { TC } from '@/lib/theme';
+import { TC, useScheme, setSchemeOverride } from '@/lib/theme';
 import { TINT } from '@/lib/colors';
 
 // ─── Profile query ────────────────────────────────────────────────────────────
@@ -71,6 +71,7 @@ export default function ProfileTab() {
   const plans   = usePlannerStore((s) => s.plans);
   const { data: profile, isLoading, refetch } = useProfile(user?.id);
   const [refreshing, setRefreshing] = useState(false);
+  const scheme = useScheme();
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -113,6 +114,17 @@ export default function ProfileTab() {
       >
         {/* ── Top-right action icons ───────────────────────────────────── */}
         <View className="flex-row items-center justify-end gap-1 px-3 pt-2 pb-1">
+          <Pressable
+            onPress={() => setSchemeOverride(scheme === 'dark' ? 'light' : 'dark')}
+            hitSlop={6}
+            className="w-9 h-9 items-center justify-center rounded-full active:opacity-70"
+          >
+            {scheme === 'dark' ? (
+              <Sun size={20} color={TC.icon} strokeWidth={1.75} />
+            ) : (
+              <Moon size={20} color={TC.icon} strokeWidth={1.75} />
+            )}
+          </Pressable>
           <Pressable
             onPress={() => router.push('/(app)/notifications')}
             hitSlop={6}
