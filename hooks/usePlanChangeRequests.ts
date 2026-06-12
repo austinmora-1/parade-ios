@@ -9,6 +9,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { invalidatePlanData } from '@/lib/dashboardQuery';
 import type { TimeSlot } from '@/types/planner';
 
 export interface PlanChangeRequest {
@@ -151,8 +152,9 @@ export function useRespondToChange() {
       if (error) throw error;
     },
     onSuccess: (_data, vars) => {
-      queryClient.invalidateQueries({ queryKey: ['plan-change-request', vars.planId] });
-      queryClient.invalidateQueries({ queryKey: ['plan', vars.planId] });
+      // An accepted change may be applied to the plan server-side, so refresh
+      // the dashboard (and Zustand stores) along with the per-plan queries.
+      invalidatePlanData(vars.planId);
     },
   });
 }

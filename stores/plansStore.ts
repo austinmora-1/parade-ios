@@ -5,7 +5,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { validatePlan } from '@/lib/validation';
 import { deduplicatePlanRows, mapRawPlanToModel, buildParticipantsMap } from './helpers/mapPlans';
 import { createDefaultAvailability } from './helpers/mapAvailability';
+import { transformDashboardData } from './helpers/transformDashboard';
 import { getPlanSlotCoverage } from '@/lib/planSlotCoverage';
+import { invalidatePlanData } from '@/lib/dashboardQuery';
 
 const BLOCKING_STATUSES = new Set(['confirmed', 'tentative', 'proposed']);
 
@@ -202,6 +204,8 @@ export const usePlansStore = create<PlansState & PlansActions>((set, get) => ({
         endTime: plan.endTime || null,
       });
     }
+
+    invalidatePlanData(data.id);
   },
 
   updatePlan: async (id, updates, userId) => {
@@ -314,6 +318,8 @@ export const usePlansStore = create<PlansState & PlansActions>((set, get) => ({
         );
       }
     }
+
+    invalidatePlanData(id);
   },
 
   deletePlan: async (id, userId, getAvailabilityState) => {
@@ -355,6 +361,8 @@ export const usePlansStore = create<PlansState & PlansActions>((set, get) => ({
         remainingPlans.map((p) => ({ timeSlot: p.timeSlot, startTime: p.startTime || null, endTime: p.endTime || null, status: p.status })),
       );
     }
+
+    invalidatePlanData(id);
   },
 
   proposePlan: async (proposal, userId, userTimezone, reloadAll) => {
@@ -426,6 +434,7 @@ export const usePlansStore = create<PlansState & PlansActions>((set, get) => ({
       } catch {}
     })();
 
+    invalidatePlanData(data.id);
     await reloadAll();
   },
 
@@ -435,6 +444,7 @@ export const usePlansStore = create<PlansState & PlansActions>((set, get) => ({
         .from('plan_participants')
         .update({ status: 'declined', responded_at: new Date().toISOString() })
         .eq('id', participantRowId);
+      invalidatePlanData(planId);
       return;
     }
 
@@ -444,6 +454,7 @@ export const usePlansStore = create<PlansState & PlansActions>((set, get) => ({
       .update({ status: 'accepted', responded_at: new Date().toISOString() })
       .eq('id', participantRowId);
 
+    invalidatePlanData(planId);
     await reloadAll();
   },
 
@@ -525,8 +536,6 @@ export const usePlansStore = create<PlansState & PlansActions>((set, get) => ({
         return;
       }
 
-      // We need to import transformDashboardData dynamically to avoid circular deps
-      const { transformDashboardData } = await import('./plannerStore');
       const more = transformDashboardData(rpcData, userId);
       const existingIds = new Set(plans.map(p => p.id));
       const newPlans = more.plans.filter(p => !existingIds.has(p.id));

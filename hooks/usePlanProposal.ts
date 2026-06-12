@@ -10,6 +10,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { invalidatePlanData } from '@/lib/dashboardQuery';
 import type { TimeSlot } from '@/types/planner';
 
 export interface PlanProposalOption {
@@ -138,8 +139,9 @@ export function useFinalizeProposal() {
       if (error) throw error;
     },
     onSuccess: (_data, vars) => {
-      queryClient.invalidateQueries({ queryKey: ['plan', vars.planId] });
-      queryClient.invalidateQueries({ queryKey: ['plan-proposal', vars.planId] });
+      // Covers ['plan'] and ['plan-proposal'] plus the dashboard query, which
+      // pushes the new date/status into the Zustand stores.
+      invalidatePlanData(vars.planId);
     },
   });
 }

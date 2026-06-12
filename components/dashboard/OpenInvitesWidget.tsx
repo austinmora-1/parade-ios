@@ -14,6 +14,7 @@ import { Sparkles, Check, X, Clock, MapPin } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { supabase } from '@/integrations/supabase/client';
+import { invalidatePlanData } from '@/lib/dashboardQuery';
 import { TIME_SLOT_LABELS } from '@/types/planner';
 import type { Plan, TimeSlot } from '@/types/planner';
 import { activityAccent } from '@/lib/activityColors';
@@ -156,7 +157,6 @@ export function OpenInvitesWidget() {
   const { user } = useAuth();
   const plans     = usePlannerStore((s) => s.plans);
   const friends   = usePlannerStore((s) => s.friends);
-  const loadAll   = usePlannerStore((s) => s.loadAllData);
 
   /** plan.id → which response is in-flight */
   const [pending, setPending] = useState<
@@ -220,8 +220,9 @@ export function OpenInvitesWidget() {
             .eq('id', planId);
         }
 
-        // Refresh local store so the invite disappears from this widget
-        await loadAll(true);
+        // Refresh the dashboard query (mirrored into the planner stores) and
+        // per-plan queries so the invite disappears from this widget.
+        await invalidatePlanData(planId);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch (err) {
         console.error('Open-invite RSVP failed', err);
@@ -230,7 +231,7 @@ export function OpenInvitesWidget() {
         setPending((p) => ({ ...p, [planId]: null }));
       }
     },
-    [user?.id, loadAll],
+    [user?.id],
   );
 
   if (openInvites.length === 0) return null;

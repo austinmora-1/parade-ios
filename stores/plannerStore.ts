@@ -1,112 +1,36 @@
 import { create } from 'zustand';
-import { Plan, Friend, DayAvailability, Vibe, TimeSlot, LocationStatus, ActivityType, VibeType, PlanStatus } from '@/types/planner';
-import { addDays, format } from 'date-fns';
-import { supabase } from '@/integrations/supabase/client';
-import { getUserTimezone } from '@/lib/timezone';
-import { getCachedDashboard, setCachedDashboard } from '@/lib/dashboardCache';
+import { Plan, Friend, DayAvailability, Vibe, TimeSlot, LocationStatus, ActivityType, VibeType } from '@/types/planner';
+import { getCachedDashboard } from '@/lib/dashboardCache';
+import { queryClient } from '@/lib/queryClient';
+import { fetchDashboard } from '@/lib/dashboardQuery';
 
-import type { DashboardData, DefaultAvailabilitySettings } from './helpers/types';
-import { createDefaultAvailability, mapAvailabilityRow, buildAvailabilityMap } from './helpers/mapAvailability';
-import { buildParticipantsMap, deduplicatePlanRows, mapRawPlanToModel } from './helpers/mapPlans';
-import { mapOutgoingFriendships, mapIncomingFriendships, dedupeFriends } from './helpers/mapFriends';
+import type { DefaultAvailabilitySettings } from './helpers/types';
+import { transformDashboardData } from './helpers/transformDashboard';
 
 import { usePlansStore } from './plansStore';
 import { useFriendsStore } from './friendsStore';
 import { useAvailabilityStore } from './availabilityStore';
 import { useVibeStore } from './vibeStore';
 
-// ── Transform raw RPC data into store state (exported for loadMorePlans) ─────
-export function transformDashboardData(rpcData: unknown, userId: string) {
-  const d = rpcData as unknown as DashboardData;
+// Re-export for existing callers; the implementation lives in helpers to
+// avoid a plannerStore ↔ plansStore import cycle.
+export { transformDashboardData } from './helpers/transformDashboard';
 
-  const participantsMap = buildParticipantsMap(d.plan_participants || []);
-  const profilesMap: Record<string, string> = {};
-  const profileAvatarsMap: Record<string, string | null> = {};
-  for (const p of (d.participant_profiles || [])) {
-    if (p.user_id) {
-      profilesMap[p.user_id] = p.display_name || 'Friend';
-      profileAvatarsMap[p.user_id] = p.avatar_url;
-    }
-  }
-
-  const profile = d.profile;
-  const homeAddr = profile?.home_address || null;
-  const explicitTz = profile?.timezone || null;
-
-  const availData = d.availability || [];
-  const todayStrForTz = format(new Date(), 'yyyy-MM-dd');
-  const todayAvailRaw = availData.find(a => a.date === todayStrForTz);
-  const todayLocStatus = (todayAvailRaw?.location_status as LocationStatus) || 'home';
-  const todayTripLoc = todayAvailRaw?.trip_location || undefined;
-  const viewerTimezone = getUserTimezone(todayLocStatus, homeAddr, todayTripLoc, explicitTz);
-
-  const plansData = deduplicatePlanRows(d.own_plans || [], d.participated_plans || []);
-  const plans: Plan[] = plansData.map((p: any) =>
-    mapRawPlanToModel(p, userId, participantsMap, profilesMap, profileAvatarsMap, viewerTimezone)
-  );
-
-  const outgoingAvatarMap = new Map<string, string | null>(
-    (d.outgoing_friend_profiles || []).map(p => [p.user_id, p.avatar_url])
-  );
-  const incomingProfilesMap = new Map(
-    (d.incoming_friend_profiles || []).map(p => [p.user_id, p])
-  );
-  const outgoingFriends = mapOutgoingFriendships(d.outgoing_friendships || [], outgoingAvatarMap);
-  const incomingFriends = mapIncomingFriendships(d.incoming_friendships || [], incomingProfilesMap);
-  const friends = dedupeFriends(outgoingFriends, incomingFriends);
-
-  const customTags = profile?.custom_vibe_tags || [];
-  const vibeGifUrl = profile?.vibe_gif_url || undefined;
-  const currentVibe = profile?.current_vibe
-    ? {
-        type: profile.current_vibe as VibeType,
-        customTags: customTags.length > 0 ? customTags : undefined,
-        gifUrl: vibeGifUrl,
-      }
-    : null;
-
-  const defaultSettings: DefaultAvailabilitySettings = {
-    workDays: profile?.default_work_days || ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
-    workStartHour: profile?.default_work_start_hour ?? 9,
-    workEndHour: profile?.default_work_end_hour ?? 17,
-    defaultStatus: (profile?.default_availability_status as 'free' | 'unavailable') || 'free',
-    defaultVibes: profile?.default_vibes || [],
-    socialDays: profile?.preferred_social_days || [],
-  };
-
-  const availDataMap = new Map<string, typeof availData[0]>();
-  for (const a of availData) {
-    availDataMap.set(a.date, a);
-  }
-
-  const start = addDays(new Date(), -7);
-  const windowDays = 42;
-  const allDates = Array.from({ length: windowDays }, (_, i) => format(addDays(start, i), 'yyyy-MM-dd'));
-  const availabilityWithDefaults: DayAvailability[] = allDates.map((dateStr, i) => {
-    const existing = availDataMap.get(dateStr);
-    const date = addDays(start, i);
-    if (existing) return mapAvailabilityRow(existing, date, defaultSettings);
-    return createDefaultAvailability(date, defaultSettings);
+/** Push a transformed dashboard payload into the domain stores. The facade
+ * mirrors domain-store changes via its subscriptions, so this is the single
+ * write path for dashboard state regardless of where the fetch originated. */
+function pushDashboardToStores(transformed: ReturnType<typeof transformDashboardData>, userId: string) {
+  usePlansStore.setState({ plans: transformed.plans, hasMorePlans: transformed.hasMorePlans });
+  useFriendsStore.setState({ friends: transformed.friends });
+  useAvailabilityStore.setState({
+    availability: transformed.availability,
+    availabilityMap: transformed.availabilityMap,
+    locationStatus: transformed.locationStatus,
+    defaultSettings: transformed.defaultSettings,
+    homeAddress: transformed.homeAddress,
   });
-
-  const availabilityMap = buildAvailabilityMap(availabilityWithDefaults);
-
-  const todayStr = format(new Date(), 'yyyy-MM-dd');
-  const todayAvail = availabilityMap[todayStr];
-  const todayLocationStatus = todayAvail?.locationStatus || 'home';
-
-  return {
-    plans,
-    friends,
-    availability: availabilityWithDefaults,
-    availabilityMap,
-    currentVibe,
-    locationStatus: todayLocationStatus,
-    defaultSettings,
-    homeAddress: homeAddr,
-    userTimezone: viewerTimezone,
-    hasMorePlans: !!(d as any).has_more_plans,
-  };
+  useVibeStore.setState({ userTimezone: transformed.userTimezone });
+  useVibeStore.getState().bootstrapVibe(transformed.currentVibe, userId);
 }
 
 // ── Facade interface (unchanged from before) ─────────────────────────────────
@@ -189,15 +113,6 @@ function syncFromDomainStores(set: (partial: Partial<PlannerState>) => void) {
   });
 }
 
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) => {
-      setTimeout(() => reject(new Error(`${label} timed out`)), timeoutMs);
-    }),
-  ]);
-}
-
 // ── Facade store ─────────────────────────────────────────────────────────────
 export const usePlannerStore = create<PlannerState>((set, get) => {
   // Subscribe to domain store changes and mirror into facade
@@ -205,6 +120,20 @@ export const usePlannerStore = create<PlannerState>((set, get) => {
   useFriendsStore.subscribe(() => syncFromDomainStores(set));
   useAvailabilityStore.subscribe(() => syncFromDomainStores(set));
   useVibeStore.subscribe(() => syncFromDomainStores(set));
+
+  // Mirror every successful ['dashboard', userId] fetch into the domain
+  // stores — whether triggered by loadAllData or by any React Query hook
+  // invalidating the dashboard (see lib/dashboardQuery.invalidatePlanData).
+  // This is what keeps the Zustand facade and React Query screens in sync.
+  queryClient.getQueryCache().subscribe((event) => {
+    if (event.type !== 'updated' || event.action?.type !== 'success') return;
+    const { queryKey, state } = event.query;
+    const userId = get().userId;
+    if (!userId || queryKey[0] !== 'dashboard' || queryKey[1] !== userId) return;
+    if (!state.data) return;
+    pushDashboardToStores(transformDashboardData(state.data, userId), userId);
+    set({ lastFetchedAt: state.dataUpdatedAt, loadError: null });
+  });
 
   return {
     // ── State (initial values) ──────────────────────────────────────────────
@@ -229,7 +158,7 @@ export const usePlannerStore = create<PlannerState>((set, get) => {
     setUserId: (userId) => set({ userId }),
 
     loadAllData: async (force) => {
-      const { userId, lastFetchedAt } = get();
+      const { userId, lastFetchedAt, initialLoadDone } = get();
       if (!userId) {
         set({ isLoading: false, initialLoadDone: true });
         return;
@@ -241,109 +170,53 @@ export const usePlannerStore = create<PlannerState>((set, get) => {
 
       set({ isLoading: true, loadError: null });
 
-      // Stale-while-revalidate
-      try {
-        const cached = await getCachedDashboard(userId);
-        if (cached && Date.now() - cached.cachedAt < 5 * 60 * 1000) {
-          const stale = transformDashboardData(cached.data, userId);
-          // Push to domain stores
-          usePlansStore.setState({ plans: stale.plans, hasMorePlans: stale.hasMorePlans });
-          useFriendsStore.setState({ friends: stale.friends });
-          useAvailabilityStore.setState({
-            availability: stale.availability,
-            availabilityMap: stale.availabilityMap,
-            locationStatus: stale.locationStatus,
-            defaultSettings: stale.defaultSettings,
-            homeAddress: stale.homeAddress,
-          });
-          useVibeStore.setState({ userTimezone: stale.userTimezone });
-          useVibeStore.getState().bootstrapVibe(stale.currentVibe, userId);
-          set({ isLoading: false, lastFetchedAt: cached.cachedAt, initialLoadDone: true });
-          if (!force && Date.now() - cached.cachedAt < 120_000) {
-            return;
+      // Cold-start stale-while-revalidate: serve the MMKV snapshot instantly,
+      // then let the React Query fetch below revalidate in the foreground.
+      if (!initialLoadDone) {
+        try {
+          const cached = await getCachedDashboard(userId);
+          if (cached && Date.now() - cached.cachedAt < 5 * 60 * 1000) {
+            pushDashboardToStores(transformDashboardData(cached.data, userId), userId);
+            set({ isLoading: false, lastFetchedAt: cached.cachedAt, initialLoadDone: true });
+            if (!force && Date.now() - cached.cachedAt < 120_000) {
+              return;
+            }
           }
+        } catch {
+          // Cache miss
         }
-      } catch {
-        // Cache miss
       }
 
       try {
-        let rpcData: any = null;
-        let lastError: any = null;
-        for (let attempt = 0; attempt < 3; attempt++) {
-          const response = await withTimeout(
-            Promise.resolve(supabase.rpc('get_dashboard_data' as any, {
-              p_user_id: userId,
-              p_plan_cursor: null,
-            })),
-            8000,
-            'Dashboard data request'
-          );
-          const { data, error } = response as { data: any; error: any };
-          if (!error) {
-            rpcData = data;
-            break;
-          }
-          lastError = error;
-          console.warn(`get_dashboard_data attempt ${attempt + 1} failed:`, error.message);
-          if (attempt < 2) await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
-        }
-
-        if (!rpcData) {
-          console.error('get_dashboard_data failed after retries:', lastError);
-          let fallbackOk = true;
-          try {
-            await withTimeout(
-              Promise.all([
-                get().loadFriends(),
-                get().loadPlans(),
-                get().loadProfileAndAvailability(),
-              ]),
-              10000,
-              'Fallback dashboard loaders'
-            );
-          } catch (fallbackErr) {
-            console.error('Fallback loaders also failed:', fallbackErr);
-            fallbackOk = false;
-          }
-          set({
-            isLoading: false,
-            lastFetchedAt: Date.now(),
-            loadError: fallbackOk ? null : 'We couldn’t load your dashboard. Please try again.',
-            initialLoadDone: true,
-          });
-          return;
-        }
-
-        const transformed = transformDashboardData(rpcData, userId);
-        // Push to domain stores
-        usePlansStore.setState({ plans: transformed.plans, hasMorePlans: transformed.hasMorePlans });
-        useFriendsStore.setState({ friends: transformed.friends });
-        useAvailabilityStore.setState({
-          availability: transformed.availability,
-          availabilityMap: transformed.availabilityMap,
-          locationStatus: transformed.locationStatus,
-          defaultSettings: transformed.defaultSettings,
-          homeAddress: transformed.homeAddress,
-        });
-        useVibeStore.setState({ userTimezone: transformed.userTimezone });
-        useVibeStore.getState().bootstrapVibe(transformed.currentVibe, userId);
+        // Single fetch path through the React Query cache. The query-cache
+        // subscriber (above) transforms and pushes the result into the
+        // domain stores, so there is no separate push here.
+        await fetchDashboard(userId, { force });
         set({ isLoading: false, lastFetchedAt: Date.now(), loadError: null, initialLoadDone: true });
-
-        setCachedDashboard(userId, rpcData).catch(() => {});
       } catch (error) {
-        console.error('loadAllData error:', error);
+        console.error('get_dashboard_data failed after retries:', error);
+        let fallbackOk = true;
+        try {
+          await Promise.all([
+            get().loadFriends(),
+            get().loadPlans(),
+            get().loadProfileAndAvailability(),
+          ]);
+        } catch (fallbackErr) {
+          console.error('Fallback loaders also failed:', fallbackErr);
+          fallbackOk = false;
+        }
         set({
           isLoading: false,
-          loadError: (error as Error)?.message || 'We couldn’t load your dashboard. Please try again.',
+          lastFetchedAt: Date.now(),
+          loadError: fallbackOk ? null : 'We couldn’t load your dashboard. Please try again.',
           initialLoadDone: true,
         });
       }
     },
 
     forceRefresh: async () => {
-      set({ lastFetchedAt: null });
-      await get().loadAllData();
+      await get().loadAllData(true);
     },
 
     // ── Delegated to domain stores ──────────────────────────────────────────
