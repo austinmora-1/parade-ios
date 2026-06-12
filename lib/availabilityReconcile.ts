@@ -12,6 +12,11 @@
  *   - not on a day covered by an existing trip (trip days are left as-is —
  *     trips still write away-blocks for friends' views)
  *
+ * Released slots are set to NULL ("no opinion"), NOT true: an explicit true
+ * would permanently override the user's default work schedule, which only
+ * applies to untouched (NULL) slots. Releasing to NULL lets the schedule
+ * defaults govern again.
+ *
  * Runs once per device (MMKV flag, set only after a successful pass so
  * transient failures retry next launch).
  */
@@ -108,7 +113,7 @@ export async function reconcileStaleBusyDays(
       if (row[col] !== false) continue; // only explicit busy values
       const key = `${row.date}:${slot}`;
       if (!planBusy.has(key) && !calendarBusy.has(key)) {
-        upd[col] = true;
+        upd[col] = null; // back to "untouched" so schedule defaults apply
         released++;
       }
     }

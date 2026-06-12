@@ -23,10 +23,12 @@ ALTER TABLE public.availability
 -- 2. Trip-covered days carry the location change
 INSERT INTO public.availability (user_id, date, location_status, trip_location,
   early_morning, late_morning, early_afternoon, late_afternoon, evening, late_night)
-SELECT t.user_id, d::date, 'away', t.location,
+SELECT DISTINCT ON (t.user_id, d::date) t.user_id, d::date, 'away', t.location,
   NULL, NULL, NULL, NULL, NULL, NULL
 FROM public.trips t
 CROSS JOIN LATERAL generate_series(t.start_date::timestamp, t.end_date::timestamp, interval '1 day') AS d
+-- Overlapping trips: the most recently created trip wins the day's location
+ORDER BY t.user_id, d::date, t.created_at DESC
 ON CONFLICT (user_id, date) DO UPDATE
   SET location_status = 'away',
       trip_location   = EXCLUDED.trip_location,
