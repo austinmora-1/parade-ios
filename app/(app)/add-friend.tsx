@@ -47,13 +47,11 @@ function useProfileSearch(query: string, currentUserId: string | undefined) {
     queryKey: ['profile-search', trimmed],
     staleTime: 30_000,
     queryFn: async (): Promise<ProfileMatch[]> => {
-      // Match against display_name OR first_name (case-insensitive)
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('user_id, display_name, first_name, last_name, avatar_url')
-        .neq('user_id', currentUserId!)
-        .or(`display_name.ilike.%${trimmed}%,first_name.ilike.%${trimmed}%`)
-        .limit(20);
+      // Match against display_name OR first_name (case-insensitive). Goes
+      // through the search_profiles RPC: profiles RLS no longer exposes
+      // non-friend rows, and the RPC returns only safe columns.
+      const { data, error } = await (supabase as any)
+        .rpc('search_profiles', { p_query: trimmed });
       if (error) throw error;
       return (data ?? []) as ProfileMatch[];
     },
