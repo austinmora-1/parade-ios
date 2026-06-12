@@ -109,7 +109,7 @@ export function FreeWindowCard() {
       {/* Section eyebrow — matches PWA */}
       <View className="flex-row items-center gap-1.5 px-0.5">
         <Sparkles size={12} color="#23744D" strokeWidth={2} />
-        <Text className="font-sans text-[13px] font-semibold uppercase tracking-widest text-muted-foreground">
+        <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
           Recommended
         </Text>
       </View>
@@ -142,8 +142,8 @@ export function FreeWindowCard() {
         </ScrollView>
       ) : windows.length === 0 ? (
         <View className="bg-card rounded-2xl border border-dashed border-border/40 px-4 py-5 items-center gap-1">
-          <Text className="font-sans text-base text-muted-foreground">No open time this week</Text>
-          <Text className="font-sans text-sm text-muted-foreground/60">
+          <Text className="font-sans text-[13px] text-muted-foreground">No open time this week</Text>
+          <Text className="font-sans text-xs text-muted-foreground/60">
             Mark some days free in your availability
           </Text>
         </View>
@@ -166,13 +166,13 @@ export function FreeWindowCard() {
                 style={{ width: 176 }}
               >
                 {/* Day eyebrow */}
-                <Text className="font-sans text-sm uppercase tracking-wide text-muted-foreground">
+                <Text className="font-sans text-xs uppercase tracking-wide text-muted-foreground">
                   {w.label}
                 </Text>
 
                 {/* Time range — Fraunces headline */}
                 <Text
-                  className="font-display text-xl leading-tight text-evergreen"
+                  className="font-display text-[17px] leading-tight text-evergreen"
                   numberOfLines={1}
                 >
                   {w.timeRange}
@@ -193,14 +193,14 @@ export function FreeWindowCard() {
                           />
                         ))}
                       </View>
-                      <Text className="font-sans text-sm text-muted-foreground">
+                      <Text className="font-sans text-xs text-muted-foreground">
                         {overlappingFriends.length} free
                       </Text>
                     </>
                   ) : (
                     <>
                       <Users size={11} color="#929298" strokeWidth={1.75} />
-                      <Text className="font-sans text-sm text-muted-foreground/60">
+                      <Text className="font-sans text-xs text-muted-foreground/60">
                         No overlap yet
                       </Text>
                     </>

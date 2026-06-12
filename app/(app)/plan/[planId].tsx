@@ -17,8 +17,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { MoreHorizontal } from 'lucide-react-native';
-import { useActionSheet } from '@expo/react-native-action-sheet';
+import { Pencil, Trash2, Share2 } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useState, useCallback } from 'react';
 import * as Haptics from 'expo-haptics';
@@ -28,6 +27,7 @@ import { ProposalVotingSection } from '@/components/plan/ProposalVotingSection';
 import { RsvpSection } from '@/components/plan/RsvpSection';
 import { JoinRequestSection } from '@/components/plan/JoinRequestSection';
 import { PlanCommentsSection } from '@/components/plan/PlanCommentsSection';
+import { SharePlanModal } from '@/components/plan/SharePlanModal';
 import { PlanPhotosSection } from '@/components/plan/PlanPhotosSection';
 import { ReactionBar } from '@/components/primitives/ReactionBar';
 import { ScreenHeader } from '@/components/primitives/ScreenHeader';
@@ -36,6 +36,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { TC } from '@/lib/theme';
+import { EMBER } from '@/lib/colors';
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
@@ -62,7 +63,6 @@ export default function PlanDetailScreen() {
   const { planId } = useLocalSearchParams<{ planId: string }>();
   const { user } = useAuth();
   const deletePlan = usePlannerStore((s) => s.deletePlan);
-  const { showActionSheetWithOptions } = useActionSheet();
 
   const { data, isLoading, error, refetch } = usePlan(planId);
   const plan = data?.plan as any;
@@ -80,7 +80,7 @@ export default function PlanDetailScreen() {
   const isOwner = plan?.user_id === user?.id;
   const myParticipant = participants.find((p) => p.friend_id === user?.id);
 
-  // ── Delete + Edit menu (owner only) ───────────────────────────────────────
+  // ── Header actions: edit / share / delete, inline (no menu) ───────────────
   const handleDelete = useCallback(() => {
     Alert.alert(
       'Delete plan?',
@@ -107,25 +107,9 @@ export default function PlanDetailScreen() {
     );
   }, [deletePlan, planId]);
 
-  const openOwnerMenu = useCallback(() => {
-    Haptics.selectionAsync();
-    const options = ['Edit plan', 'Propose change', 'Delete plan', 'Cancel'];
-    const destructiveButtonIndex = 2;
-    const cancelButtonIndex = 3;
-
-    showActionSheetWithOptions(
-      { options, destructiveButtonIndex, cancelButtonIndex },
-      (selectedIndex) => {
-        if (selectedIndex === 0) {
-          router.push(`/(app)/new-plan?planId=${planId}`);
-        } else if (selectedIndex === 1) {
-          router.push(`/(app)/propose-change?planId=${planId}`);
-        } else if (selectedIndex === 2) {
-          handleDelete();
-        }
-      },
-    );
-  }, [showActionSheetWithOptions, planId, handleDelete]);
+  // Share modal mints a unique join link and offers Messages / WhatsApp /
+  // Signal / copy
+  const [shareOpen, setShareOpen] = useState(false);
 
   return (
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
@@ -133,26 +117,45 @@ export default function PlanDetailScreen() {
         title={plan?.title ?? 'Plan'}
         rightAction={
           isOwner || myParticipant ? (
-            <Pressable
-              onPress={() => {
-                if (isOwner) {
-                  openOwnerMenu();
-                } else {
-                  // Participant menu: just propose change
+            <View className="flex-row items-center">
+              {/* Edit: owners edit directly; participants propose a change */}
+              <Pressable
+                onPress={() => {
                   Haptics.selectionAsync();
-                  showActionSheetWithOptions(
-                    { options: ['Propose change', 'Cancel'], cancelButtonIndex: 1 },
-                    (i) => {
-                      if (i === 0) router.push(`/(app)/propose-change?planId=${planId}`);
-                    },
+                  router.push(
+                    isOwner
+                      ? `/(app)/new-plan?planId=${planId}`
+                      : `/(app)/propose-change?planId=${planId}`,
                   );
-                }
-              }}
-              hitSlop={8}
-              className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
-            >
-              <MoreHorizontal size={20} color={TC.icon} strokeWidth={2} />
-            </Pressable>
+                }}
+                hitSlop={8}
+                accessibilityLabel={isOwner ? 'Edit plan' : 'Propose change'}
+                className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
+              >
+                <Pencil size={18} color={TC.icon} strokeWidth={2} />
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  setShareOpen(true);
+                }}
+                hitSlop={8}
+                accessibilityLabel="Share plan"
+                className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
+              >
+                <Share2 size={18} color={TC.icon} strokeWidth={2} />
+              </Pressable>
+              {isOwner && (
+                <Pressable
+                  onPress={handleDelete}
+                  hitSlop={8}
+                  accessibilityLabel="Delete plan"
+                  className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
+                >
+                  <Trash2 size={18} color={EMBER} strokeWidth={2} />
+                </Pressable>
+              )}
+            </View>
           ) : undefined
         }
       />
@@ -227,6 +230,16 @@ export default function PlanDetailScreen() {
           {/* ── Comments ──────────────────────────────────────────────── */}
           <PlanCommentsSection planId={planId} />
         </ScrollView>
+      )}
+
+      {user && (
+        <SharePlanModal
+          visible={shareOpen}
+          onClose={() => setShareOpen(false)}
+          planId={planId}
+          planTitle={plan?.title}
+          userId={user.id}
+        />
       )}
     </SafeAreaView>
   );

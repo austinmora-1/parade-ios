@@ -7,6 +7,7 @@
  * styling is a static className; reach for TINT only in style objects.
  */
 export const PARADE_GREEN = '#23744D';
+export const MINT         = '#67B28E'; // faded mint (PWA --go-mint) — "mostly open"
 export const EMBER        = '#D46549';
 export const MARIGOLD     = '#DFA53A';
 export const ELEPHANT     = '#929298'; // muted-foreground gray

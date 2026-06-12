@@ -26,8 +26,8 @@ export function FriendVibeStrip() {
 
   return (
     <View className="gap-3">
-      {/* Section eyebrow — matches PWA "text-xs font-semibold uppercase tracking-wider" */}
-      <Text className="font-sans text-[13px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5">
+      {/* Section eyebrow — matches PWA "text-[10px] font-semibold uppercase tracking-wider" */}
+      <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5">
         Who's around this week
       </Text>
 
@@ -91,7 +91,7 @@ export function FriendVibeStrip() {
                     <View className="flex-row items-center gap-1">
                       <MapPin size={10} color="#929298" strokeWidth={2} />
                       <Text
-                        className="font-sans text-xs text-muted-foreground uppercase tracking-wider"
+                        className="font-sans text-[10px] text-muted-foreground uppercase tracking-wider"
                         numberOfLines={1}
                       >
                         {vibeData.city}
@@ -102,14 +102,14 @@ export function FriendVibeStrip() {
                     className="text-evergreen"
                     style={{
                       fontFamily: 'Fraunces_700Bold',
-                      fontSize: 20,
-                      lineHeight: 24,
+                      fontSize: 17,
+                      lineHeight: 20,
                     }}
                     numberOfLines={1}
                   >
                     {firstName}
                   </Text>
-                  <Text className="font-sans text-[13px] font-semibold text-primary">
+                  <Text className="font-sans text-[11px] font-semibold text-primary">
                     {slotCount} slot{slotCount === 1 ? '' : 's'} w/ you
                   </Text>
                 </View>

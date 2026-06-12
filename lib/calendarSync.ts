@@ -87,10 +87,10 @@ function eventToSlotKeys(event: Calendar.Event): string[] {
   const start = new Date(event.startDate);
   const end   = new Date(event.endDate);
 
-  if (event.allDay) {
-    const days = eachDay(start, end);
-    return days.flatMap((d) => ALL_SLOTS.map((s) => `${d}:${s}`));
-  }
+  // All-day events (holidays, birthdays, "out of office" banners) don't
+  // describe real time commitments — ignore them for availability
+  // blocking entirely. Reconciliation releases slots they blocked before.
+  if (event.allDay) return [];
 
   const startDate = format(start, 'yyyy-MM-dd');
   const endDate   = format(end,   'yyyy-MM-dd');

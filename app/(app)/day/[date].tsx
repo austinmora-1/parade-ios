@@ -49,7 +49,7 @@ import { createDefaultAvailability } from '@/stores/helpers/mapAvailability';
 import { formatCityForDisplay } from '@/lib/formatCity';
 import { ScreenHeader } from '@/components/primitives/ScreenHeader';
 import { LocationAutocomplete } from '@/components/primitives/LocationAutocomplete';
-import { DateDial, computeDayWheel } from '@/components/plans/DateDial';
+import { DateDial, computeDayWheel, planBlocksAvailability } from '@/components/plans/DateDial';
 import { useAvailabilityStore } from '@/stores/availabilityStore';
 import { TINT, PARADE_GREEN, EMBER, ELEPHANT, tint } from '@/lib/colors';
 
@@ -88,22 +88,16 @@ function useDayData(userId: string | undefined, date: string) {
     enabled: !!userId,
     queryKey: ['day', userId, date],
     queryFn: async () => {
-      const [{ data: avail }, { data: ownPlans }, { data: partRows }, { data: trips }] = await Promise.all([
+      // Plans come from the planner store (timezone-normalized, includes
+      // joined plans/proposals — the same source the Plans tab wheel reads),
+      // so this query only covers the availability row and any trip.
+      const [{ data: avail }, { data: trips }] = await Promise.all([
         supabase
           .from('availability')
           .select('*')
           .eq('user_id', userId!)
           .eq('date', date)
           .maybeSingle(),
-        supabase
-          .from('plans')
-          .select('id, title, time_slot, start_time, end_time, location, activity')
-          .eq('user_id', userId!)
-          .eq('date', date),
-        supabase
-          .from('plan_participants')
-          .select('plan_id')
-          .eq('friend_id', userId!),
         supabase
           .from('trips')
           .select('id, name, location')
@@ -112,22 +106,7 @@ function useDayData(userId: string | undefined, date: string) {
           .gte('end_date', date),
       ]);
 
-      // Plans the user joined (invited/imported) on this day, beyond their own
-      let plans = ownPlans ?? [];
-      const ownIds = new Set(plans.map((p: any) => p.id));
-      const joinedIds = (partRows ?? [])
-        .map((r: any) => r.plan_id)
-        .filter((id: string) => !ownIds.has(id));
-      if (joinedIds.length > 0) {
-        const { data: joined } = await supabase
-          .from('plans')
-          .select('id, title, time_slot, start_time, end_time, location, activity')
-          .in('id', joinedIds)
-          .eq('date', date);
-        plans = [...plans, ...(joined ?? [])];
-      }
-
-      return { avail, plans, trip: (trips ?? [])[0] ?? null };
+      return { avail, trip: (trips ?? [])[0] ?? null };
     },
   });
 }
@@ -196,6 +175,7 @@ export default function DayDetailScreen() {
   const setLocationStatus  = usePlannerStore((s) => s.setLocationStatus);
   const homeAddress        = usePlannerStore((s) => s.homeAddress);
   const setUserId          = usePlannerStore((s) => s.setUserId);
+  const loadAllData        = usePlannerStore((s) => s.loadAllData);
   const availabilityMap    = usePlannerStore((s) => s.availabilityMap);
   const defaultSettings    = useAvailabilityStore((s) => s.defaultSettings);
 
@@ -204,12 +184,31 @@ export default function DayDetailScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await refetch();
+    await Promise.all([refetch(), loadAllData(true)]);
     setRefreshing(false);
-  }, [refetch]);
+  }, [refetch, loadAllData]);
   const avail: any = data?.avail;
-  const plans = (data?.plans ?? []) as any[];
   const dayTrip: any = data?.trip ?? null;
+
+  // Day's plans from the planner store — same normalized pipeline as the
+  // Plans tab, mapped into the snake_case shape this screen renders.
+  const storePlans = usePlannerStore((s) => s.plans);
+  const plans = storePlans
+    .filter(
+      (p) =>
+        format(p.date instanceof Date ? p.date : new Date(p.date), 'yyyy-MM-dd') === date,
+    )
+    .map((p) => ({
+      id: p.id,
+      title: p.title,
+      time_slot: p.timeSlot as string,
+      start_time: p.startTime ?? null,
+      end_time: p.endTime ?? null,
+      location: typeof p.location === 'string' ? p.location : (p.location as any)?.name ?? '',
+      activity: p.activity as string | undefined,
+      status: p.status,
+      myRsvpStatus: p.myRsvpStatus,
+    }));
 
   // Calendar events blocking slots on this day (empty without permission)
   const [calBlockers, setCalBlockers] = useState<Partial<Record<TimeSlot, string>>>({});
@@ -227,7 +226,7 @@ export default function DayDetailScreen() {
   // Slots covered by a plan's actual start/end times — catches spillover
   // into slots other than the plan's primary one
   const planBlockers = new Map<string, string>();
-  for (const p of plans) {
+  for (const p of plans.filter(planBlocksAvailability)) {
     const coverage = getPlanSlotCoverage({
       timeSlot: normalizeSlot(p.time_slot) as TimeSlot,
       startTime: p.start_time,
@@ -273,7 +272,12 @@ export default function DayDetailScreen() {
 
   // Ensure planner store has the userId set
   useEffect(() => {
-    if (user?.id) setUserId(user.id);
+    if (user?.id) {
+      setUserId(user.id);
+      // Plans render from the planner store — make sure it's hydrated when
+      // this screen is deep-linked before the tabs have loaded it.
+      loadAllData();
+    }
   }, [user?.id]);
 
   const locStatus: LocationStatus =
@@ -322,7 +326,10 @@ export default function DayDetailScreen() {
     date: parsedDate,
     dayAvail: wheelAvail,
     settings: defaultSettings,
-    dayPlans: plans.map((p) => ({ timeSlot: normalizeSlot(p.time_slot) })),
+    dayPlans: plans
+      .filter(planBlocksAvailability)
+      .map((p) => ({ timeSlot: normalizeSlot(p.time_slot) })),
+    onTrip: !!dayTrip,
   });
 
   const toggleSlot = useCallback(
@@ -474,6 +481,7 @@ export default function DayDetailScreen() {
             <DateDial
               status={wheel.status}
               fill={wheel.fill}
+              arcColor={wheel.arcColor}
               dayName={format(parsedDate, 'EEE')}
               dayNum={format(parsedDate, 'd')}
               isToday={today}

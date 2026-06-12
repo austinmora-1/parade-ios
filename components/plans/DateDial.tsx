@@ -7,7 +7,7 @@
  */
 import { View, Text } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
-import { PARADE_GREEN, EMBER, MARIGOLD, ELEPHANT, tint, TINT } from '@/lib/colors';
+import { PARADE_GREEN, MINT, EMBER, MARIGOLD, ELEPHANT, tint, TINT } from '@/lib/colors';
 import { TC } from '@/lib/theme';
 import { TIME_SLOT_HOURS } from '@/stores/helpers/mapAvailability';
 import type { DefaultAvailabilitySettings } from '@/stores/helpers/types';
@@ -69,14 +69,18 @@ const ALL_SLOTS: TimeSlot[] = [
 
 /** Pill palettes for each wheel state */
 const PILL = {
-  open:  { bg: TINT.primaryBorder, text: '#1A5C3A' },
-  some:  { bg: TINT.amberSubtle,   text: '#92400E' },
-  gray:  { bg: TINT.grayFaint,     text: '#6E6E74' },
+  open:   { bg: TINT.primaryBorder,   text: '#1A5C3A' },
+  mostly: { bg: tint(MINT, 0.2),      text: '#2F7D57' },
+  some:   { bg: TINT.amberSubtle,     text: '#92400E' },
+  tight:  { bg: TINT.secondarySubtle, text: '#D46549' },
+  gray:   { bg: TINT.grayFaint,       text: '#6E6E74' },
 } as const;
 
 export interface DayWheel {
   status: DayDialStatus;            // 'open' | 'some' | 'unavailable'
-  fill: number;                     // arc fraction (yellow arc = slots taken)
+  fill: number;                     // arc fraction = FREE share of capacity
+  /** Arc color escalates as the day fills: green → yellow → red */
+  arcColor: string;
   label: string;                    // pill copy
   pill: { bg: string; text: string };
   free: number;                     // free social slots
@@ -113,6 +117,20 @@ export interface DaySlotAvailability {
   socialSlots: TimeSlot[];
   /** Social slots currently free, in chronological order */
   freeSlots: TimeSlot[];
+}
+
+/** Plan statuses that actually take a slot — mirrors plansStore's
+ *  BLOCKING_STATUSES. Cancelled plans and invites you declined don't
+ *  count against the wheel. */
+const BLOCKING_PLAN_STATUSES = new Set(['confirmed', 'tentative', 'proposed']);
+
+export function planBlocksAvailability(p: {
+  status?: string | null;
+  myRsvpStatus?: string | null;
+}): boolean {
+  if (p.status && !BLOCKING_PLAN_STATUSES.has(p.status)) return false;
+  if (p.myRsvpStatus === 'declined') return false;
+  return true;
 }
 
 /**
@@ -174,26 +192,45 @@ export function computeDayWheel(input: DayWheelInput): DayWheel {
 
   if (notAvailable) {
     return {
-      status: 'unavailable', fill: 0,
+      status: 'unavailable', fill: 0, arcColor: 'transparent',
       label: 'Not available', pill: PILL.gray,
       free: 0, total,
     };
   }
 
-  const busy = total - free;
+  // Arc always shows the FREE share of capacity (gray track = taken);
+  // the color escalates as the day fills: green while less than half
+  // taken, yellow after, red when only one window remains.
+  const taken = total - free;
+  const fill = total > 0 ? free / total : 0;
+
   if (free === 0) {
-    return { status: 'unavailable', fill: 0, label: 'Booked', pill: PILL.gray, free, total };
+    return {
+      status: 'unavailable', fill: 0, arcColor: 'transparent',
+      label: 'Booked', pill: PILL.gray, free, total,
+    };
   }
-  if (busy === 0) {
-    return { status: 'open', fill: 1, label: 'Open', pill: PILL.open, free, total };
+  if (taken === 0) {
+    return {
+      status: 'open', fill: 1, arcColor: PARADE_GREEN,
+      label: 'Open', pill: PILL.open, free, total,
+    };
+  }
+  if (free === 1) {
+    return {
+      status: 'some', fill, arcColor: EMBER,
+      label: 'Almost booked', pill: PILL.tight, free, total,
+    };
+  }
+  if (taken < total / 2) {
+    return {
+      status: 'some', fill, arcColor: MINT,
+      label: 'Mostly open', pill: PILL.mostly, free, total,
+    };
   }
   return {
-    status: 'some',
-    fill: busy / total, // yellow portion grows with slots taken
-    label: 'Some time',
-    pill: PILL.some,
-    free,
-    total,
+    status: 'some', fill, arcColor: MARIGOLD,
+    label: 'Some time', pill: PILL.some, free, total,
   };
 }
 
@@ -204,6 +241,7 @@ export function DateDial({
   dayNum,
   isToday = false,
   size = 56,
+  arcColor,
 }: {
   status: DayDialStatus;
   fill: number; // 0–1 fraction of free slots
@@ -211,6 +249,8 @@ export function DateDial({
   dayNum: string;
   isToday?: boolean;
   size?: number;
+  /** Overrides the status-derived arc color (green/yellow/red escalation) */
+  arcColor?: string;
 }) {
   const stroke = 3;
   const r = (size - stroke) / 2;
@@ -238,7 +278,7 @@ export function DateDial({
             cy={size / 2}
             r={r}
             fill="none"
-            stroke={STATUS_COLOR[status]}
+            stroke={arcColor ?? STATUS_COLOR[status]}
             strokeWidth={stroke}
             strokeLinecap="round"
             strokeDasharray={`${dash} ${c - dash}`}
@@ -247,25 +287,27 @@ export function DateDial({
         )}
       </Svg>
 
-      {/* Day label inside the ring */}
+      {/* Day label inside the ring — compact sizes drop the day name */}
       <View className="absolute inset-0 items-center justify-center">
+        {size >= 44 && dayName ? (
+          <Text
+            style={{
+              fontFamily: 'Fraunces_900Black',
+              fontSize: size >= 60 ? 10 : 9,
+              letterSpacing: 0.8,
+              textTransform: 'uppercase',
+              color: isToday ? PARADE_GREEN : ELEPHANT,
+            }}
+          >
+            {dayName}
+          </Text>
+        ) : null}
         <Text
           style={{
             fontFamily: 'Fraunces_900Black',
-            fontSize: size >= 60 ? 10 : 9,
-            letterSpacing: 0.8,
-            textTransform: 'uppercase',
-            color: isToday ? PARADE_GREEN : ELEPHANT,
-          }}
-        >
-          {dayName}
-        </Text>
-        <Text
-          style={{
-            fontFamily: 'Fraunces_900Black',
-            fontSize: size >= 60 ? 24 : 20,
-            lineHeight: size >= 60 ? 28 : 24,
-            marginTop: 1,
+            fontSize: size < 44 ? 12 : size >= 60 ? 24 : 20,
+            lineHeight: size < 44 ? 14 : size >= 60 ? 28 : 24,
+            marginTop: size < 44 ? 0 : 1,
             color: isToday ? PARADE_GREEN : TC.icon,
           }}
         >

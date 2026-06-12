@@ -53,6 +53,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       NSCameraUsageDescription: PERMISSION_COPY.camera,
       NSUserTrackingUsageDescription: PERMISSION_COPY.tracking,
       ITSAppUsesNonExemptEncryption: false,
+      // Share targets the plan share modal can hand off to
+      LSApplicationQueriesSchemes: ['whatsapp', 'sgnl', 'sms'],
     },
   },
   plugins: [

@@ -65,6 +65,7 @@ export const mapAvailabilityRow = (row: any, date: Date, settings?: DefaultAvail
   const defaults = createDefaultAvailability(date, settings).slots;
   return {
     date,
+    isDefault: false, // real DB row — explicit data, not schedule-derived
     slots: {
       'early-morning':   row.early_morning   ?? defaults['early-morning'],
       'late-morning':    row.late_morning    ?? defaults['late-morning'],

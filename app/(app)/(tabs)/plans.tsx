@@ -35,6 +35,7 @@ import {
 import {
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   CalendarDays,
   ArrowLeft,
   Plus,
@@ -42,9 +43,11 @@ import {
   Plane,
   Zap,
   Users,
+  Share2,
 } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
+import { useFriendDashboardData } from '@/hooks/useFriendDashboardData';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { supabase } from '@/integrations/supabase/client';
 import { TIME_SLOT_LABELS } from '@/types/planner';
@@ -56,6 +59,7 @@ import {
   DateDial,
   computeDayWheel,
   getDaySlotAvailability,
+  planBlocksAvailability,
   type DayWheel,
 } from '@/components/plans/DateDial';
 import { useAvailabilityStore } from '@/stores/availabilityStore';
@@ -101,6 +105,21 @@ const SLOT_END_HOUR: Record<string, number> = {
   'late-night':      26,
 };
 
+/** Chronological slot order for sorting a day's plans morning → late night */
+const SLOT_RANK: Record<string, number> = {
+  'early-morning': 0, 'late-morning': 1, 'early-afternoon': 2,
+  'late-afternoon': 3, 'evening': 4, 'late-night': 5,
+};
+
+function sortPlansChronologically(dayPlans: Plan[]): Plan[] {
+  return [...dayPlans].sort((a, b) => {
+    const ra = SLOT_RANK[a.timeSlot as string] ?? 99;
+    const rb = SLOT_RANK[b.timeSlot as string] ?? 99;
+    if (ra !== rb) return ra - rb;
+    return (a.startTime ?? '').localeCompare(b.startTime ?? '');
+  });
+}
+
 interface FreeWindow { date: Date; slot: TimeSlot }
 
 /** First upcoming free window in the given days — resolved through the
@@ -127,7 +146,9 @@ function findNextFreeWindow(
       date: day,
       dayAvail: availability.find((a) => format(a.date, 'yyyy-MM-dd') === dateStr),
       settings,
-      dayPlans: dayPlans.map((p) => ({ timeSlot: p.timeSlot as string })),
+      dayPlans: dayPlans
+        .filter(planBlocksAvailability)
+        .map((p) => ({ timeSlot: p.timeSlot as string })),
       onTrip: trips.some((t) => tripOverlapsDays(t, [day])),
     });
     if (notAvailable) continue;
@@ -384,8 +405,10 @@ function WeekendHeroCard({
       {/* Sat / Sun grid */}
       <View className="flex-row gap-2.5">
         {days.map((day) => {
-          const dayPlans = plans.filter((p) =>
-            isSameDay(p.date instanceof Date ? p.date : new Date(p.date), day),
+          const dayPlans = sortPlansChronologically(
+            plans.filter((p) =>
+              isSameDay(p.date instanceof Date ? p.date : new Date(p.date), day),
+            ),
           );
           const dateStr = format(day, 'yyyy-MM-dd');
           return (
@@ -450,6 +473,145 @@ function WeekendHeroCard({
   );
 }
 
+/** Today card — today's plans in detail + friends free to hang today */
+function TodayCard({
+  todayPlans,
+  friendsFreeCount,
+}: {
+  todayPlans: Plan[];
+  friendsFreeCount: number;
+}) {
+  const todayDate = new Date();
+  const dateStr = format(todayDate, 'yyyy-MM-dd');
+
+  return (
+    <Pressable
+      onPress={() => router.push(`/(app)/day/${dateStr}`)}
+      className="mx-5 bg-card rounded-2xl border border-border/30 shadow-sm px-4 py-3.5 gap-2.5 active:opacity-90"
+    >
+      {/* Header */}
+      <View className="flex-row items-center gap-2">
+        <View className="w-1.5 h-1.5 rounded-full bg-primary" />
+        <Text className="font-sans text-[11px] font-bold uppercase tracking-wider text-primary">
+          Today
+        </Text>
+        <Text className="font-sans text-[11px] text-muted-foreground">
+          {format(todayDate, 'EEEE, MMM d')}
+        </Text>
+        <ChevronRight size={12} color="#929298" strokeWidth={2} style={{ marginLeft: 'auto' }} />
+      </View>
+
+      {/* Today's plans, with details */}
+      {todayPlans.length > 0 ? (
+        <View className="gap-2">
+          {todayPlans.map((p) => {
+            const slotMeta = TIME_SLOT_LABELS[p.timeSlot as TimeSlot];
+            const locationStr =
+              typeof p.location === 'string' ? p.location : (p.location as any)?.name ?? '';
+            return (
+              <Pressable
+                key={p.id}
+                onPress={() => router.push(`/(app)/plan/${p.id}`)}
+                className="flex-row items-center gap-2.5 active:opacity-70"
+              >
+                <View
+                  style={{
+                    width: 8, height: 8, borderRadius: 4,
+                    backgroundColor: activityAccent(p.activity as string | undefined),
+                  }}
+                />
+                <View className="flex-1">
+                  <Text className="font-sans text-sm font-semibold text-foreground" numberOfLines={1}>
+                    {p.title || 'Untitled plan'}
+                  </Text>
+                  <Text className="font-sans text-[11px] text-muted-foreground" numberOfLines={1}>
+                    {slotMeta ? `${slotMeta.label} · ${slotMeta.time}` : ''}
+                    {locationStr ? `${slotMeta ? ' · ' : ''}${locationStr}` : ''}
+                  </Text>
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : (
+        <Text className="font-sans text-sm italic text-muted-foreground/60">
+          Nothing planned today
+        </Text>
+      )}
+
+      {/* Friends free today */}
+      <Pressable
+        onPress={() => router.push('/(app)/find-time')}
+        className="flex-row items-center gap-2 rounded-xl px-3 py-2.5 active:opacity-70"
+        style={{ backgroundColor: TINT.primaryFaint }}
+      >
+        <Users size={14} color={PARADE_GREEN} strokeWidth={2} />
+        <Text className="font-sans text-xs font-semibold flex-1" style={{ color: PARADE_GREEN }}>
+          {friendsFreeCount > 0
+            ? `${friendsFreeCount} friend${friendsFreeCount > 1 ? 's' : ''} free to hang today`
+            : 'No friends free today yet'}
+        </Text>
+        <ChevronRight size={13} color={PARADE_GREEN} strokeWidth={2} />
+      </Pressable>
+    </Pressable>
+  );
+}
+
+/** Week-at-a-glance — 7 mini availability dials, taps through to each day */
+function WeekSummaryCard({
+  dayInfos,
+}: {
+  dayInfos: Array<{ day: Date; dateStr: string; wheel: DayWheel }>;
+}) {
+  const openCount = dayInfos.filter((d) => d.wheel.status === 'open').length;
+  const someCount = dayInfos.filter((d) => d.wheel.status === 'some').length;
+  const offCount  = dayInfos.filter((d) => d.wheel.status === 'unavailable').length;
+
+  const parts: string[] = [];
+  if (openCount) parts.push(`${openCount} open`);
+  if (someCount) parts.push(`${someCount} some time`);
+  if (offCount)  parts.push(`${offCount} off`);
+
+  return (
+    <View className="mx-5 bg-card rounded-2xl border border-border/30 shadow-sm px-4 py-3 gap-2.5">
+      <View className="flex-row items-center justify-between">
+        <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+          Week at a glance
+        </Text>
+        <Text className="font-sans text-[11px] text-muted-foreground">
+          {parts.join(' · ')}
+        </Text>
+      </View>
+
+      <View className="flex-row justify-between">
+        {dayInfos.map(({ day, dateStr, wheel }) => (
+          <Pressable
+            key={dateStr}
+            onPress={() => router.push(`/(app)/day/${dateStr}`)}
+            className="items-center gap-1 active:opacity-60"
+          >
+            <Text
+              className="font-sans text-[9px] font-semibold uppercase tracking-wide"
+              style={{ color: isToday(day) ? PARADE_GREEN : '#929298' }}
+            >
+              {format(day, 'EEEEE')}
+            </Text>
+            <DateDial
+              status={wheel.status}
+              fill={wheel.fill}
+              arcColor={wheel.arcColor}
+              dayName=""
+              dayNum={format(day, 'd')}
+              isToday={isToday(day)}
+              size={34}
+            />
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 /** Single weekday row — DateDial + availability pill + plan items + "+" */
 function WeekdayRow({
   day,
@@ -476,6 +638,7 @@ function WeekdayRow({
       <DateDial
         status={wheel.status}
         fill={wheel.fill}
+        arcColor={wheel.arcColor}
         dayName={format(day, 'EEE')}
         dayNum={format(day, 'd')}
         isToday={today}
@@ -744,7 +907,9 @@ export default function PlansTab() {
 
   const [weekOffset, setWeekOffset] = useState(0);
   const [weekPickerOpen, setWeekPickerOpen] = useState(false);
+  const [weekdaysOpen, setWeekdaysOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const { data: friendData } = useFriendDashboardData();
 
   useEffect(() => {
     if (user?.id) {
@@ -771,7 +936,6 @@ export default function PlansTab() {
   const weekStart = startOfWeek(addWeeks(today, weekOffset), { weekStartsOn: 1 });
   const weekEnd   = addDays(weekStart, 6);
   const days      = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
-  const weekdays  = days.slice(0, 5);   // Mon–Fri
   const weekend   = [days[5], days[6]]; // Sat, Sun
   const label     = getWeekLabel(weekStart, weekEnd);
 
@@ -812,6 +976,39 @@ export default function PlansTab() {
         })()
     : '';
 
+  // ── Per-day wheel info for the displayed week (summary + weekday rows) ─────
+  const dayInfos = days.map((day) => {
+    const dateStr = format(day, 'yyyy-MM-dd');
+    const dayPlans = sortPlansChronologically(
+      plans.filter((p) =>
+        isSameDay(p.date instanceof Date ? p.date : new Date(p.date), day),
+      ),
+    );
+    const dayTrip = (trips ?? []).find((t) => tripOverlapsDays(t, [day]));
+    const wheel = computeDayWheel({
+      date: day,
+      dayAvail: availability.find((a) => format(a.date, 'yyyy-MM-dd') === dateStr),
+      settings: defaultSettings,
+      // Only plans that actually take a slot count against the wheel
+      dayPlans: dayPlans
+        .filter(planBlocksAvailability)
+        .map((p) => ({ timeSlot: p.timeSlot as string })),
+      onTrip: !!dayTrip,
+    });
+    return { day, dateStr, dayPlans, dayTrip, wheel };
+  });
+  const weekdayInfos = dayInfos.slice(0, 5); // Mon–Fri
+
+  // ── Today section data ──────────────────────────────────────────────────────
+  const todayPlans = sortPlansChronologically(
+    plans.filter((p) =>
+      isSameDay(p.date instanceof Date ? p.date : new Date(p.date), today),
+    ),
+  );
+  const friendsFreeToday = (friendData ?? []).filter((f) =>
+    f.overlapSlots.some((o) => o.date === todayStr),
+  ).length;
+
   // ── Upcoming plans (all future, sorted) ────────────────────────────────────
   const upcomingPlans = plans
     .filter((p) => {
@@ -838,11 +1035,18 @@ export default function PlansTab() {
         }
       >
         {/* ── Page header ─────────────────────────────────────────────── */}
-        <View className="px-5 pt-4 pb-2">
+        <View className="px-5 pt-4 pb-2 flex-row items-center justify-between">
           {/* "Plans & Trips" — font-display matches PWA font-display font-black */}
           <Text className="font-display text-2xl text-foreground">
             Plans &amp; Trips
           </Text>
+          <Pressable
+            onPress={() => router.push('/(app)/share-availability')}
+            hitSlop={8}
+            className="w-9 h-9 rounded-full items-center justify-center bg-card border border-border/30 active:opacity-70"
+          >
+            <Share2 size={16} color={PARADE_GREEN} strokeWidth={2} />
+          </Pressable>
         </View>
 
         {/* ── Week navigator ───────────────────────────────────────────── */}
@@ -894,38 +1098,36 @@ export default function PlansTab() {
             trip={(trips ?? []).find((t) => tripOverlapsDays(t, weekend))}
           />
 
-          {/* ── Weekdays section ──────────────────────────────────────── */}
+          {/* ── Today ─────────────────────────────────────────────────── */}
+          <TodayCard todayPlans={todayPlans} friendsFreeCount={friendsFreeToday} />
+
+          {/* ── Week at a glance ──────────────────────────────────────── */}
+          <WeekSummaryCard dayInfos={dayInfos} />
+
+          {/* ── Weekdays section (collapsible, default collapsed) ──────── */}
           <View className="px-5 gap-2">
-            {/* Section header — matches PWA ember dot + "Weekdays" label */}
-            <View className="flex-row items-center px-1 mb-1">
+            <Pressable
+              onPress={() => setWeekdaysOpen((v) => !v)}
+              className="flex-row items-center px-1 mb-1 active:opacity-70"
+            >
               <View className="w-1.5 h-1.5 rounded-full bg-secondary mr-2" />
               <Text className="font-sans text-[11px] font-bold uppercase tracking-wider text-secondary">
                 Weekdays
               </Text>
-              <Text className="font-sans text-[11px] font-medium text-muted-foreground ml-auto">
-                Mon – Fri
-              </Text>
-            </View>
+              <View className="flex-row items-center gap-1 ml-auto">
+                <Text className="font-sans text-[11px] font-medium text-muted-foreground">
+                  Mon – Fri
+                </Text>
+                {weekdaysOpen ? (
+                  <ChevronDown size={14} color="#929298" strokeWidth={2} />
+                ) : (
+                  <ChevronRight size={14} color="#929298" strokeWidth={2} />
+                )}
+              </View>
+            </Pressable>
 
-            {weekdays.map((day) => {
-              const dateStr  = format(day, 'yyyy-MM-dd');
-              const dayPlans = plans.filter((p) =>
-                isSameDay(p.date instanceof Date ? p.date : new Date(p.date), day),
-              );
-              const dayTrip   = (trips ?? []).find((t) =>
-                tripOverlapsDays(t, [day]),
-              );
-              const wheel = computeDayWheel({
-                date: day,
-                dayAvail: availability.find(
-                  (a) => format(a.date, 'yyyy-MM-dd') === dateStr,
-                ),
-                settings: defaultSettings,
-                dayPlans: dayPlans.map((p) => ({ timeSlot: p.timeSlot as string })),
-                onTrip: !!dayTrip,
-              });
-
-              return (
+            {weekdaysOpen &&
+              weekdayInfos.map(({ day, dateStr, dayPlans, dayTrip, wheel }) => (
                 <WeekdayRow
                   key={dateStr}
                   day={day}
@@ -933,8 +1135,7 @@ export default function PlansTab() {
                   dayPlans={dayPlans}
                   wheel={wheel}
                 />
-              );
-            })}
+              ))}
           </View>
 
           {/* ── Availability CTA — not shown for past weeks ───────────── */}

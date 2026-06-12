@@ -75,13 +75,13 @@ export function PolishProfileCard() {
         <Sparkles size={18} color="#DFA53A" strokeWidth={2} />
       </View>
       <View className="flex-1 gap-0.5">
-        <Text className="font-sans text-xs font-semibold uppercase tracking-wider text-marigold">
+        <Text className="font-sans text-[10px] font-semibold uppercase tracking-wider text-marigold">
           Polish your profile
         </Text>
-        <Text className="font-display text-xl text-foreground">
+        <Text className="font-display text-[17px] text-foreground">
           Help friends know you
         </Text>
-        <Text className="font-sans text-sm text-muted-foreground leading-relaxed">
+        <Text className="font-sans text-xs text-muted-foreground leading-relaxed">
           Add interests, social goals, and your weekly capacity.
         </Text>
       </View>

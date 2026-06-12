@@ -24,6 +24,7 @@ import {
   Zap,
   Plane,
   UserPlus,
+  CalendarRange,
   ChevronRight,
 } from 'lucide-react-native';
 import { TC } from '@/lib/theme';
@@ -123,6 +124,14 @@ export default function WhatPlanningScreen() {
         />
 
         <View className="h-px bg-border/30 my-1 mx-2" />
+
+        <PathRow
+          icon={<CalendarRange size={20} color="#23744D" strokeWidth={2} />}
+          iconBg={TINT.primarySubtle}
+          title="Share availability"
+          subtitle="Send friends a link to when you're free — next week, month, or quarter."
+          onPress={() => go('/(app)/share-availability')}
+        />
 
         <PathRow
           icon={<UserPlus size={20} color="#D46549" strokeWidth={2} />}

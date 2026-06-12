@@ -39,6 +39,16 @@ export const SLOT_START_HOUR: Record<TimeSlot, number> = {
   'late-night':      22,
 };
 
+/** Hour each slot ends (26 = 2am next day for late-night). */
+export const SLOT_END_HOUR: Record<TimeSlot, number> = {
+  'early-morning':   9,
+  'late-morning':    12,
+  'early-afternoon': 15,
+  'late-afternoon':  18,
+  'evening':         22,
+  'late-night':      26,
+};
+
 /** Evenings any day, or any slot on weekends. */
 export function isSocialSlot(date: Date, slot: TimeSlot): boolean {
   const dow = date.getDay(); // 0 = Sun, 6 = Sat
