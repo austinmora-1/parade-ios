@@ -2,8 +2,10 @@
  * Share availability — send friends a view of when you're free.
  *
  * Two paths:
- *   1. Share a link (omni-channel via the native share sheet) — points at
- *      the public PWA share page: helloparade.app/share/{code}?view=…&src=ios
+ *   1. Share a link — a Preview button (opens the exact public page the
+ *      recipient sees) plus an omni-channel grid matching the PWA
+ *      UnifiedShareSheet (Messages, WhatsApp, Telegram, Email, Copy, More).
+ *      Links point at helloparade.app/share/{code}?view=…&src=ios.
  *   2. Send directly to friends on Parade — inserts an in-app notification
  *      row per friend + fires send-push-notification (same fn as the other
  *      flows), deep-linking them to your profile.
@@ -17,7 +19,6 @@ import {
   View,
   Text,
   Pressable,
-  Share,
   Alert,
   ActivityIndicator,
 } from 'react-native';
@@ -26,15 +27,17 @@ import { router } from 'expo-router';
 import { useState, useMemo, useCallback } from 'react';
 import { addDays, format, isSaturday, isSunday } from 'date-fns';
 import * as Haptics from 'expo-haptics';
+import * as WebBrowser from 'expo-web-browser';
 import { useQuery } from '@tanstack/react-query';
 import {
   X,
-  Link2,
   Send,
   Check,
   CalendarRange,
   Users,
+  Eye,
 } from 'lucide-react-native';
+import { ShareChannelGrid } from '@/components/share/ShareChannelGrid';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlannerStore } from '@/stores/plannerStore';
@@ -99,21 +102,20 @@ export default function ShareAvailabilityScreen() {
   }, [range.days, availabilityMap, defaultSettings]);
   const freeWeekendCount = weekendDays.filter((d) => d.free).length;
 
-  // ── Path 1: omni-channel link via the native share sheet ──────────────────
-  const [sharingLink, setSharingLink] = useState(false);
-  const handleShareLink = useCallback(async () => {
-    if (!shareUrl || sharingLink) return;
-    setSharingLink(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  // ── Path 1: omni-channel link sharing (channel grid below) ────────────────
+  const shareMessage = `Here's when I'm free over the next ${range.label} — let's make a plan!`;
+  const emailSubject = `${myName} shared their Parade availability`;
+
+  // Preview opens the exact public page the recipient will see.
+  const handlePreview = useCallback(async () => {
+    if (!shareUrl) return;
+    Haptics.selectionAsync();
     try {
-      await Share.share({
-        message: `Here's when I'm free over the next ${range.label} — let's make a plan! ${shareUrl}`,
-        url: shareUrl,
-      });
-    } finally {
-      setSharingLink(false);
+      await WebBrowser.openBrowserAsync(shareUrl, { presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET });
+    } catch {
+      /* ignore */
     }
-  }, [shareUrl, sharingLink, range.label]);
+  }, [shareUrl]);
 
   // ── Path 2: direct in-app share to connected friends ──────────────────────
   const connectedFriends = useMemo(
@@ -270,31 +272,38 @@ export default function ShareAvailabilityScreen() {
           </Text>
         </View>
 
-        {/* Path 1 — share link */}
-        <Pressable
-          onPress={handleShareLink}
-          disabled={!shareUrl || sharingLink}
-          className={`flex-row items-center rounded-2xl border px-4 py-4 gap-3 shadow-sm active:opacity-80 ${
-            shareUrl ? 'bg-card border-border/30' : 'bg-muted border-border/20'
-          }`}
-        >
-          <View
-            className="w-11 h-11 rounded-xl items-center justify-center"
-            style={{ backgroundColor: TINT.primarySubtle }}
+        {/* Path 1 — preview + omni-channel link share */}
+        <View className="gap-3">
+          {/* Preview: opens the exact page the recipient sees */}
+          <Pressable
+            onPress={handlePreview}
+            disabled={!shareUrl}
+            className={`flex-row items-center gap-3 rounded-xl border-2 border-dashed px-3 py-2.5 active:opacity-70 ${
+              shareUrl ? 'border-primary/30 bg-primary/5' : 'border-border/30 bg-muted/40'
+            }`}
           >
-            {sharingLink ? (
-              <ActivityIndicator size="small" color={PARADE_GREEN} />
-            ) : (
-              <Link2 size={20} color={PARADE_GREEN} strokeWidth={2} />
-            )}
-          </View>
-          <View className="flex-1 gap-0.5">
-            <Text className="font-display text-base text-foreground">Share a link</Text>
-            <Text className="font-sans text-xs text-muted-foreground leading-relaxed">
-              Text, email, or post it — anyone with the link can see when you're free.
-            </Text>
-          </View>
-        </Pressable>
+            <View
+              className="w-9 h-9 rounded-full items-center justify-center"
+              style={{ backgroundColor: TINT.primarySubtle }}
+            >
+              <Eye size={16} color={PARADE_GREEN} strokeWidth={2} />
+            </View>
+            <View className="flex-1">
+              <Text className="font-sans text-sm font-semibold text-foreground">Preview</Text>
+              <Text className="font-sans text-xs text-muted-foreground">
+                See exactly what friends will see
+              </Text>
+            </View>
+          </Pressable>
+
+          {/* Channel grid (matches PWA UnifiedShareSheet) */}
+          <ShareChannelGrid
+            link={shareUrl}
+            message={shareMessage}
+            emailSubject={emailSubject}
+            title="My availability"
+          />
+        </View>
 
         {/* Path 2 — direct to friends on Parade */}
         <View>
