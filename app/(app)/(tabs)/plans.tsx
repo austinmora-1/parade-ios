@@ -47,6 +47,7 @@ import {
 } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
+import { useFloatingTabBarHeight } from '@/components/navigation/FloatingTabBar';
 import { useFriendDashboardData } from '@/hooks/useFriendDashboardData';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { supabase } from '@/integrations/supabase/client';
@@ -896,6 +897,7 @@ function NextTripCard({ trip, eyebrow }: { trip: any; eyebrow: string }) {
 // ─── Main tab ─────────────────────────────────────────────────────────────────
 
 export default function PlansTab() {
+  const tabBarHeight = useFloatingTabBarHeight();
   const { user } = useAuth();
   const setUserId    = usePlannerStore((s) => s.setUserId);
   const loadAllData  = usePlannerStore((s) => s.loadAllData);
@@ -1025,7 +1027,7 @@ export default function PlansTab() {
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
       <ScrollView
         className="flex-1"
-        contentContainerClassName="pb-10"
+        contentContainerStyle={{ paddingBottom: tabBarHeight }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

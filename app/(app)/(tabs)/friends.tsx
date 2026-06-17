@@ -28,6 +28,7 @@ import { format } from 'date-fns';
 import { Search, UserPlus, Users, ChevronRight, Check, X, Flame } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useAuth } from '@/hooks/useAuth';
+import { useFloatingTabBarHeight } from '@/components/navigation/FloatingTabBar';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { useFriendDashboardData } from '@/hooks/useFriendDashboardData';
 import {
@@ -267,6 +268,7 @@ function EmptyState({ onInvite }: { onInvite: () => void }) {
 // ─── Main tab ────────────────────────────────────────────────────────────────
 
 export default function FriendsTab() {
+  const tabBarHeight = useFloatingTabBarHeight();
   const { user } = useAuth();
   const setUserId   = usePlannerStore((s) => s.setUserId);
   const loadAllData = usePlannerStore((s) => s.loadAllData);
@@ -369,7 +371,7 @@ export default function FriendsTab() {
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
       <ScrollView
         className="flex-1"
-        contentContainerClassName="pb-10"
+        contentContainerStyle={{ paddingBottom: tabBarHeight }}
         keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl

@@ -21,6 +21,7 @@ import { useCallback, useState } from 'react';
 import { Bell, Moon, Settings, Sun } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
+import { useFloatingTabBarHeight } from '@/components/navigation/FloatingTabBar';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { Avatar } from '@/components/primitives/Avatar';
@@ -66,6 +67,7 @@ function StatItem({ value, label }: { value: number; label: string }) {
 // ─── Main tab ────────────────────────────────────────────────────────────────
 
 export default function ProfileTab() {
+  const tabBarHeight = useFloatingTabBarHeight();
   const { user } = useAuth();
   const friends = usePlannerStore((s) => s.friends);
   const plans   = usePlannerStore((s) => s.plans);
@@ -103,7 +105,7 @@ export default function ProfileTab() {
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
       <ScrollView
         className="flex-1"
-        contentContainerClassName="pb-10"
+        contentContainerStyle={{ paddingBottom: tabBarHeight }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

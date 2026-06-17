@@ -1,34 +1,19 @@
 /**
- * Tab bar — matches the PWA bottom nav exactly:
- *   Background:    #FAF3E6  (sidebar-chalk custard)
- *   Active tint:   #23744D  (parade green)
- *   Inactive tint: #929298  (elephant gray)
- *   Border:        #DED4C3
- *   Active stroke:   2.2  |  Inactive stroke: 1.8
- *   Label font:    Inter 10px medium
+ * Tab bar — Instagram-style floating pill nav.
+ *   The visual treatment (rounded ends, sliding highlight, smooth tab
+ *   transition) lives in FloatingTabBar; this file wires up the screens,
+ *   icons, and the profile avatar.
  */
 import { Tabs } from 'expo-router';
 import { Home, CalendarDays, Users, User } from 'lucide-react-native';
-import { Platform, View, Image } from 'react-native';
-import { useColorScheme } from 'nativewind';
+import { View, Image } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { FloatingTabBar } from '@/components/navigation/FloatingTabBar';
 
 import { TINT } from '@/lib/colors';
-const LIGHT = {
-  active:   '#23744D',  // parade green
-  inactive: '#929298',  // elephant gray
-  surface:  '#F9F7F1',  // sidebar eggshell
-  border:   '#DED4C3',
-};
-const DARK = {
-  active:   '#3B9B68',  // brighter parade green
-  inactive: '#8A8377',  // warm gray
-  surface:  '#1D1A16',  // warm espresso surface (matches --sidebar-chalk dark)
-  border:   '#3B352D',
-};
-const PARADE_GREEN = LIGHT.active;
+const PARADE_GREEN = '#23744D';
 
 /** Tiny avatar fetch for the bottom-nav profile tab icon. */
 function useTabAvatarUrl(): string | null {
@@ -49,16 +34,16 @@ function useTabAvatarUrl(): string | null {
   return data ?? null;
 }
 
-function ProfileTabIcon({ color, focused, avatarUrl }: { color: string; focused: boolean; avatarUrl: string | null }) {
+function ProfileTabIcon({ color, focused, avatarUrl, size = 24 }: { color: string; focused: boolean; avatarUrl: string | null; size?: number }) {
   if (!avatarUrl) {
-    return <User color={color} size={22} strokeWidth={focused ? 2.2 : 1.8} />;
+    return <User color={color} size={size} strokeWidth={focused ? 2.2 : 1.8} />;
   }
   return (
     <View
       style={{
-        width: 26,
-        height: 26,
-        borderRadius: 13,
+        width: size + 4,
+        height: size + 4,
+        borderRadius: (size + 4) / 2,
         overflow: 'hidden',
         borderWidth: focused ? 2 : 1,
         borderColor: focused ? PARADE_GREEN : TINT.graySolid,
@@ -71,36 +56,17 @@ function ProfileTabIcon({ color, focused, avatarUrl }: { color: string; focused:
 
 export default function TabsLayout() {
   const avatarUrl = useTabAvatarUrl();
-  const { colorScheme } = useColorScheme();
-  const c = colorScheme === 'dark' ? DARK : LIGHT;
   return (
     <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarStyle: {
-          backgroundColor: c.surface,
-          borderTopColor: c.border,
-          borderTopWidth: 1,
-          paddingTop: 6,
-          paddingBottom: Platform.OS === 'ios' ? 24 : 10,
-          height: Platform.OS === 'ios' ? 84 : 64,
-        },
-        tabBarActiveTintColor:   c.active,
-        tabBarInactiveTintColor: c.inactive,
-        tabBarLabelStyle: {
-          fontFamily: 'Inter_400Regular',
-          fontSize: 10,
-          fontWeight: '500',
-          marginTop: 2,
-        },
-      }}
+      tabBar={(props) => <FloatingTabBar {...props} />}
+      screenOptions={{ headerShown: false }}
     >
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color, focused }) => (
-            <Home color={color} size={22} strokeWidth={focused ? 2.2 : 1.8} />
+          tabBarIcon: ({ color, focused, size }) => (
+            <Home color={color} size={size} strokeWidth={focused ? 2.2 : 1.8} />
           ),
         }}
       />
@@ -108,8 +74,8 @@ export default function TabsLayout() {
         name="plans"
         options={{
           title: 'Plans',
-          tabBarIcon: ({ color, focused }) => (
-            <CalendarDays color={color} size={22} strokeWidth={focused ? 2.2 : 1.8} />
+          tabBarIcon: ({ color, focused, size }) => (
+            <CalendarDays color={color} size={size} strokeWidth={focused ? 2.2 : 1.8} />
           ),
         }}
       />
@@ -117,8 +83,8 @@ export default function TabsLayout() {
         name="friends"
         options={{
           title: 'Friends',
-          tabBarIcon: ({ color, focused }) => (
-            <Users color={color} size={22} strokeWidth={focused ? 2.2 : 1.8} />
+          tabBarIcon: ({ color, focused, size }) => (
+            <Users color={color} size={size} strokeWidth={focused ? 2.2 : 1.8} />
           ),
         }}
       />
@@ -126,8 +92,8 @@ export default function TabsLayout() {
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color, focused }) => (
-            <ProfileTabIcon color={color} focused={focused} avatarUrl={avatarUrl} />
+          tabBarIcon: ({ color, focused, size }) => (
+            <ProfileTabIcon color={color} focused={focused} avatarUrl={avatarUrl} size={size} />
           ),
         }}
       />
