@@ -23,9 +23,9 @@ import { formatDisplayName } from '@/lib/utils';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { useFriendDashboardData } from '@/hooks/useFriendDashboardData';
 import { FriendVibeStrip } from '@/components/dashboard/FriendVibeStrip';
-import { FreeWindowCard } from '@/components/dashboard/FreeWindowCard';
+// TEST: "Recommended" section removed from Home — restore this import + <FreeWindowCard /> below to bring it back
+// import { FreeWindowCard } from '@/components/dashboard/FreeWindowCard';
 import { UpcomingPlansWidget } from '@/components/dashboard/UpcomingPlansWidget';
-import { UpcomingTripsWidget } from '@/components/dashboard/UpcomingTripsWidget';
 import { OpenInvitesWidget } from '@/components/dashboard/OpenInvitesWidget';
 import { SmartPrimaryCTA } from '@/components/dashboard/SmartPrimaryCTA';
 import { PolishProfileCard } from '@/components/dashboard/PolishProfileCard';
@@ -453,9 +453,9 @@ export default function HomeTab() {
           <TripProposalInvitesWidget />
           <DiscoverableInvitesWidget />
           <FriendVibeStrip />
-          <FreeWindowCard />
+          {/* TEST: "Recommended" free-window section removed — restore <FreeWindowCard /> to bring it back */}
+          {/* Upcoming Trips moved off Home — trips live on the Plans & Trips tab */}
           <UpcomingPlansWidget />
-          <UpcomingTripsWidget />
         </View>
       </ScrollView>
     </SafeAreaView>

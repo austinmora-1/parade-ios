@@ -18,7 +18,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useCallback, useMemo } from 'react';
 import { CalendarDays, MapPin, Flame, Clock } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
-import { format, isToday, parseISO, isTomorrow } from 'date-fns';
+import { format, isToday, parseISO, isTomorrow, isThisYear } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlannerStore } from '@/stores/plannerStore';
@@ -91,7 +91,7 @@ function useSharedPlans(friendUserId: string, currentUserId: string | undefined)
         .select('plan_id')
         .eq('friend_id', friendUserId);
       const friendPlanIds = new Set((friendRows ?? []).map((r: any) => r.plan_id));
-      if (friendPlanIds.size === 0) return [] as any[];
+      if (friendPlanIds.size === 0) return { upcoming: [] as any[], past: [] as any[] };
 
       // Get plans where the current user is owner OR participant in those plan_ids
       const planIdArr = [...friendPlanIds];
@@ -113,16 +113,22 @@ function useSharedPlans(friendUserId: string, currentUserId: string | undefined)
       const sharedIds = [...friendPlanIds].filter(
         (id) => ownerIds.has(id) || userParticipantIds.has(id),
       );
-      if (sharedIds.length === 0) return [] as any[];
+      if (sharedIds.length === 0) return { upcoming: [] as any[], past: [] as any[] };
 
       const todayStr = new Date().toISOString().slice(0, 10);
       const { data: full } = await supabase
         .from('plans')
         .select('id, title, activity, date, time_slot, location, status')
         .in('id', sharedIds)
-        .gte('date', todayStr)
         .order('date', { ascending: true });
-      return (full ?? []) as any[];
+      const all = (full ?? []) as any[];
+      // Split into what's coming up (ascending) and the shared history
+      // (past, most-recent first).
+      const upcoming = all.filter((p) => p.date >= todayStr);
+      const past = all
+        .filter((p) => p.date < todayStr)
+        .sort((a, b) => (a.date < b.date ? 1 : -1));
+      return { upcoming, past };
     },
   });
 }
@@ -151,6 +157,57 @@ function useFriendAvailability(userId: string) {
   });
 }
 
+/** A single shared-plan row. Past rows use a muted accent + absolute date. */
+function renderSharedPlanRow(plan: any, isPast: boolean) {
+  const planDate = parseISO(plan.date);
+  const slotLabel = TIME_SLOT_LABELS[plan.time_slot as TimeSlot]?.time ?? '';
+  const dateLabel = isPast
+    ? format(planDate, isThisYear(planDate) ? 'MMM d' : 'MMM d, yyyy')
+    : isToday(planDate)
+      ? 'Today'
+      : isTomorrow(planDate)
+        ? 'Tomorrow'
+        : format(planDate, 'EEE, MMM d');
+  const locationStr = typeof plan.location === 'string' ? plan.location : '';
+  return (
+    <Pressable
+      key={plan.id}
+      onPress={() => router.push(`/(app)/plan/${plan.id}`)}
+      className={`bg-card rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm active:opacity-80 ${
+        isPast ? 'opacity-80' : ''
+      }`}
+    >
+      <View style={{ width: 4, backgroundColor: isPast ? '#C9C2B4' : '#23744D' }} />
+      <View className="flex-1 px-4 py-3 gap-1">
+        <View className="flex-row items-start justify-between gap-2">
+          <Text className="font-display text-sm text-foreground flex-1" numberOfLines={1}>
+            {plan.title || 'Untitled plan'}
+          </Text>
+          <Text className="font-sans text-xs text-muted-foreground">{dateLabel}</Text>
+        </View>
+        {(slotLabel || locationStr) && (
+          <View className="flex-row items-center gap-3">
+            {slotLabel ? (
+              <View className="flex-row items-center gap-1">
+                <Clock size={11} color="#929298" strokeWidth={1.75} />
+                <Text className="font-sans text-xs text-muted-foreground">{slotLabel}</Text>
+              </View>
+            ) : null}
+            {locationStr ? (
+              <View className="flex-row items-center gap-1 flex-1">
+                <MapPin size={11} color="#929298" strokeWidth={1.75} />
+                <Text className="font-sans text-xs text-muted-foreground" numberOfLines={1}>
+                  {locationStr}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        )}
+      </View>
+    </Pressable>
+  );
+}
+
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function FriendProfileScreen() {
@@ -158,7 +215,9 @@ export default function FriendProfileScreen() {
   const { user } = useAuth();
   const { data: profile, isLoading, refetch: refetchProfile } = useFriendProfile(userId);
   const { data: availability, refetch: refetchAvail } = useFriendAvailability(userId);
-  const { data: sharedPlans } = useSharedPlans(userId, user?.id);
+  const { data: shared } = useSharedPlans(userId, user?.id);
+  const upcomingShared = shared?.upcoming ?? [];
+  const pastShared = shared?.past ?? [];
   const { data: lastHungOutMap } = useLastHungOut();
   const myAvailability = usePlannerStore((s) => s.availability);
   const [refreshing, setRefreshing] = useState(false);
@@ -425,66 +484,37 @@ export default function FriendProfileScreen() {
             </View>
           )}
 
-          {/* ── Shared upcoming plans ─────────────────────────────────── */}
-          {(sharedPlans?.length ?? 0) > 0 && (
-            <View className="px-5 gap-2">
-              <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground px-1">
-                Plans together
-              </Text>
-              {sharedPlans!.map((plan: any) => {
-                const planDate = parseISO(plan.date);
-                const slotLabel = TIME_SLOT_LABELS[plan.time_slot as TimeSlot]?.time ?? '';
-                const dateLabel = isToday(planDate)
-                  ? 'Today'
-                  : isTomorrow(planDate)
-                    ? 'Tomorrow'
-                    : format(planDate, 'EEE, MMM d');
-                return (
-                  <Pressable
-                    key={plan.id}
-                    onPress={() => router.push(`/(app)/plan/${plan.id}`)}
-                    className="bg-card rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm active:opacity-80"
-                  >
-                    <View style={{ width: 4, backgroundColor: '#23744D' }} />
-                    <View className="flex-1 px-4 py-3 gap-1">
-                      <View className="flex-row items-start justify-between gap-2">
-                        <Text
-                          className="font-display text-sm text-foreground flex-1"
-                          numberOfLines={1}
-                        >
-                          {plan.title || 'Untitled plan'}
-                        </Text>
-                        <Text className="font-sans text-xs text-muted-foreground">
-                          {dateLabel}
-                        </Text>
-                      </View>
-                      {(slotLabel || plan.location) && (
-                        <View className="flex-row items-center gap-3">
-                          {slotLabel && (
-                            <View className="flex-row items-center gap-1">
-                              <Clock size={11} color="#929298" strokeWidth={1.75} />
-                              <Text className="font-sans text-xs text-muted-foreground">
-                                {slotLabel}
-                              </Text>
-                            </View>
-                          )}
-                          {plan.location && (
-                            <View className="flex-row items-center gap-1 flex-1">
-                              <MapPin size={11} color="#929298" strokeWidth={1.75} />
-                              <Text
-                                className="font-sans text-xs text-muted-foreground"
-                                numberOfLines={1}
-                              >
-                                {typeof plan.location === 'string' ? plan.location : ''}
-                              </Text>
-                            </View>
-                          )}
-                        </View>
-                      )}
+          {/* ── Shared plans: coming up + history ──────────────────────── */}
+          {(upcomingShared.length > 0 || pastShared.length > 0) && (
+            <View className="px-5 gap-4">
+              {upcomingShared.length > 0 && (
+                <View className="gap-2">
+                  <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground px-1">
+                    Coming up together
+                  </Text>
+                  {upcomingShared.map((plan: any) =>
+                    renderSharedPlanRow(plan, false),
+                  )}
+                </View>
+              )}
+
+              {pastShared.length > 0 && (
+                <View className="gap-2">
+                  <View className="flex-row items-center gap-1.5 px-1">
+                    <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                      Plans together
+                    </Text>
+                    <View className="bg-muted rounded-full px-2 py-0.5">
+                      <Text className="font-sans text-xs text-muted-foreground font-medium">
+                        {pastShared.length}
+                      </Text>
                     </View>
-                  </Pressable>
-                );
-              })}
+                  </View>
+                  {pastShared.slice(0, 10).map((plan: any) =>
+                    renderSharedPlanRow(plan, true),
+                  )}
+                </View>
+              )}
             </View>
           )}
         </ScrollView>

@@ -7,7 +7,7 @@
 import { View, Text, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import { useMemo } from 'react';
-import { format, addDays, isToday, isTomorrow } from 'date-fns';
+import { format, addDays, isToday, isTomorrow, startOfDay } from 'date-fns';
 import { CalendarCheck, MapPin, Clock, ChevronRight } from 'lucide-react-native';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { TIME_SLOT_LABELS } from '@/types/planner';
@@ -30,12 +30,14 @@ export function UpcomingPlansWidget() {
   const isLoading = usePlannerStore((s) => s.isLoading);
 
   const { upcoming, totalCount } = useMemo(() => {
-    const now    = new Date();
-    const cutoff = addDays(now, 7);
+    // Compare against the start of today so plans earlier today still count
+    // as upcoming (plan dates are stored at midnight).
+    const dayStart = startOfDay(new Date());
+    const cutoff   = addDays(dayStart, 14);
     const sorted = plans
       .filter((p) => {
         const d = p.date instanceof Date ? p.date : new Date(p.date);
-        return d >= now && d <= cutoff;
+        return d >= dayStart && d <= cutoff;
       })
       .sort((a, b) => {
         const da = a.date instanceof Date ? a.date : new Date(a.date);
