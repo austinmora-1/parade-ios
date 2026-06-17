@@ -17,6 +17,7 @@ import { format, addDays, startOfWeek, parseISO, differenceInCalendarDays } from
 import { formatCityForDisplay } from '@/lib/formatCity';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useFloatingTabBarHeight } from '@/components/navigation/FloatingTabBar';
 import { Skeleton } from '@/components/primitives/Skeleton';
 import { formatDisplayName } from '@/lib/utils';
 import { usePlannerStore } from '@/stores/plannerStore';
@@ -51,26 +52,6 @@ function useProfile(userId: string | undefined) {
         .single();
       if (error) throw error;
       return data as any;
-    },
-  });
-}
-
-/**
- * Returns walkthrough_completed flag for the current user. Used to gate the
- * first-launch EllyWalkthrough modal.
- */
-function useWalkthroughStatus(userId: string | undefined) {
-  return useQuery({
-    enabled: !!userId,
-    queryKey: ['walkthrough-status', userId],
-    staleTime: 60_000,
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('walkthrough_completed')
-        .eq('user_id', userId!)
-        .maybeSingle();
-      return (data?.walkthrough_completed as boolean | undefined) ?? false;
     },
   });
 }
@@ -156,6 +137,7 @@ function getGreetingConfig(hour: number, dark: boolean) {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function HomeTab() {
+  const tabBarHeight = useFloatingTabBarHeight();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const setUserId = usePlannerStore((s) => s.setUserId);
@@ -168,11 +150,8 @@ export default function HomeTab() {
   const { data: unreadCount } = useUnreadCount(user?.id);
   const { data: nextTrip } = useNextTrip(user?.id);
   const { data: friendData }  = useFriendDashboardData();
-  const { data: walkthroughDone, isLoading: walkthroughLoading } =
-    useWalkthroughStatus(user?.id);
 
   const [refreshing, setRefreshing] = useState(false);
-  const [walkthroughTriggered, setWalkthroughTriggered] = useState(false);
   // Measured hero size so the SVG gradient can fill it with explicit pixel
   // dimensions (percentage heights in react-native-svg resolve unreliably and
   // were leaving the bottom edge of the banner uncovered).
@@ -186,22 +165,9 @@ export default function HomeTab() {
     }
   }, [user?.id]);
 
-  // Trigger first-launch walkthrough — /welcome for empty users (brand
-  // intro), /tour for non-empty users (feature tour). Both write
-  // walkthrough_completed=true on dismiss.
-  useEffect(() => {
-    if (walkthroughTriggered) return;
-    if (walkthroughLoading || storeLoading) return;
-    if (walkthroughDone) return;
-    if (!user?.id) return;
-    setWalkthroughTriggered(true);
-    const connectedCount = friends.filter((f) => f.status === 'connected').length;
-    const isEmpty = connectedCount === 0 && plans.length === 0;
-    router.push(isEmpty ? '/(app)/welcome' : '/(app)/tour');
-  }, [
-    walkthroughTriggered, walkthroughLoading, storeLoading,
-    walkthroughDone, user?.id, friends, plans.length,
-  ]);
+  // First-run education now lives entirely in the merged onboarding flow
+  // (app/(app)/onboarding.tsx), which every new account passes through. The
+  // tour (app/(app)/tour.tsx) stays available as a manual replay from Settings.
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -265,7 +231,7 @@ export default function HomeTab() {
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
       <ScrollView
         className="flex-1"
-        contentContainerClassName="pb-10"
+        contentContainerStyle={{ paddingBottom: tabBarHeight }}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#23744D" />
         }

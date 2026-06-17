@@ -69,6 +69,14 @@ export default function WhatPlanningScreen() {
     router.replace(path as any);
   }, []);
 
+  // Close → go back if possible, else fall back to Home. (Entering from
+  // onboarding leaves no base screen, so a bare router.back() would dispatch
+  // an unhandled GO_BACK.)
+  const close = useCallback(() => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(app)/(tabs)');
+  }, []);
+
   return (
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
       {/* Header */}
@@ -78,7 +86,7 @@ export default function WhatPlanningScreen() {
           What are you planning?
         </Text>
         <Pressable
-          onPress={() => router.back()}
+          onPress={close}
           hitSlop={8}
           className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
         >
