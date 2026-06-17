@@ -20,10 +20,10 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
-import { useState, useMemo, useCallback } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { format, addDays, isSameDay, isToday, isTomorrow } from 'date-fns';
+import { format, addDays, isSameDay, isToday, isTomorrow, differenceInDays, parseISO } from 'date-fns';
 import * as Haptics from 'expo-haptics';
 import { X, Plane } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
@@ -79,6 +79,8 @@ function Chip({
 
 export default function NewTripScreen() {
   const { user } = useAuth();
+  const { tripId } = useLocalSearchParams<{ tripId?: string }>();
+  const isEditing = !!tripId;
   const queryClient     = useQueryClient();
   const setUserId       = usePlannerStore((s) => s.setUserId);
 
@@ -93,6 +95,38 @@ export default function NewTripScreen() {
   const [duration,  setDuration]  = useState<number>(3);
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState<string | null>(null);
+  // When editing, remember the original away-range so a date change can clear it
+  const [loadingTrip, setLoadingTrip] = useState(isEditing);
+  const [originalRange, setOriginalRange] = useState<{ start: Date; end: Date } | null>(null);
+
+  // Load the existing trip when editing
+  useEffect(() => {
+    if (!isEditing || !user?.id) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error: loadErr } = await supabase
+        .from('trips')
+        .select('name, location, start_date, end_date')
+        .eq('id', tripId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (cancelled) return;
+      if (loadErr || !data) {
+        Alert.alert('Could not load trip', 'Please try again.');
+        router.back();
+        return;
+      }
+      const start = parseISO(data.start_date);
+      const end = parseISO(data.end_date);
+      setName(data.name ?? '');
+      setLocation(data.location ?? '');
+      setStartDate(start);
+      setDuration(Math.max(1, differenceInDays(end, start) + 1));
+      setOriginalRange({ start, end });
+      setLoadingTrip(false);
+    })();
+    return () => { cancelled = true; };
+  }, [isEditing, tripId, user?.id]);
 
   // Start-date options: next 30 days
   const startDateOptions = useMemo(
@@ -116,34 +150,57 @@ export default function NewTripScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
-      const { error: insertErr } = await supabase.from('trips').insert({
-        user_id:    user.id,
-        name:       name.trim(),
-        location:   location.trim() || null,
-        start_date: format(startDate, 'yyyy-MM-dd'),
-        end_date:   format(endDate, 'yyyy-MM-dd'),
-        needs_return_date: false,
-      } as any);
-      if (insertErr) throw insertErr;
+      const loc = location.trim() || null;
+      if (isEditing && tripId) {
+        const { error: updateErr } = await supabase
+          .from('trips')
+          .update({
+            name:       name.trim(),
+            location:   loc,
+            start_date: format(startDate, 'yyyy-MM-dd'),
+            end_date:   format(endDate, 'yyyy-MM-dd'),
+          } as any)
+          .eq('id', tripId)
+          .eq('user_id', user.id);
+        if (updateErr) throw updateErr;
 
-      // Mark the trip days as a location change ("away" + destination) —
-      // availability slots stay untouched so the trip never blocks plans
-      await setTripLocationRange(user.id, startDate, endDate, location.trim() || null, true);
+        // If the dates moved, clear the old away-range first so stale days
+        // don't stay marked "away", then stamp the new range.
+        if (originalRange) {
+          await setTripLocationRange(user.id, originalRange.start, originalRange.end, null, false);
+        }
+        await setTripLocationRange(user.id, startDate, endDate, loc, true);
+      } else {
+        const { error: insertErr } = await supabase.from('trips').insert({
+          user_id:    user.id,
+          name:       name.trim(),
+          location:   loc,
+          start_date: format(startDate, 'yyyy-MM-dd'),
+          end_date:   format(endDate, 'yyyy-MM-dd'),
+          needs_return_date: false,
+        } as any);
+        if (insertErr) throw insertErr;
+
+        // Mark the trip days as a location change ("away" + destination) —
+        // availability slots stay untouched so the trip never blocks plans
+        await setTripLocationRange(user.id, startDate, endDate, loc, true);
+      }
 
       // Refresh anything that lists trips
       await queryClient.invalidateQueries({ queryKey: ['trips'] });
+      if (isEditing) await queryClient.invalidateQueries({ queryKey: ['trip', tripId] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
     } catch (err: any) {
-      console.error('Create trip failed', err);
+      console.error(isEditing ? 'Update trip failed' : 'Create trip failed', err);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert('Could not create trip', err?.message ?? 'Please try again.');
+      Alert.alert(isEditing ? 'Could not update trip' : 'Could not create trip', err?.message ?? 'Please try again.');
     } finally {
       setSaving(false);
     }
-  }, [user?.id, name, location, startDate, endDate, queryClient]);
+  }, [user?.id, isEditing, tripId, name, location, startDate, endDate, originalRange, queryClient]);
 
-  const canSubmit = name.trim().length > 0 && !saving;
+  const canSubmit = name.trim().length > 0 && !saving && !loadingTrip;
 
   return (
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
@@ -156,7 +213,7 @@ export default function NewTripScreen() {
         >
           <X size={20} color={TC.icon} strokeWidth={2} />
         </Pressable>
-        <Text className="font-display text-base text-foreground">New trip</Text>
+        <Text className="font-display text-base text-foreground">{isEditing ? 'Edit trip' : 'New trip'}</Text>
         <Pressable
           onPress={handleSubmit}
           disabled={!canSubmit}
@@ -168,7 +225,7 @@ export default function NewTripScreen() {
               canSubmit ? 'text-white' : 'text-muted-foreground'
             }`}
           >
-            {saving ? 'Saving…' : 'Create'}
+            {saving ? 'Saving…' : isEditing ? 'Save' : 'Create'}
           </Text>
         </Pressable>
       </View>
@@ -192,7 +249,8 @@ export default function NewTripScreen() {
             </Text>
           </View>
 
-          {/* Switch to proposal flow */}
+          {/* Switch to proposal flow — not offered while editing */}
+          {!isEditing && (
           <Pressable
             onPress={() => router.replace('/(app)/new-trip-proposal')}
             className="flex-row items-center justify-between bg-card border border-border/30 rounded-xl px-4 py-3 active:opacity-80 shadow-sm"
@@ -209,6 +267,7 @@ export default function NewTripScreen() {
               Propose →
             </Text>
           </Pressable>
+          )}
 
           {/* Name */}
           <View>

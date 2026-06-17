@@ -15,14 +15,18 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useCallback } from 'react';
 import {
   Plane,
+  Home,
   Calendar,
   MapPin,
-  MoreHorizontal,
+  Clock,
+  Users,
+  Pencil,
+  Share2,
+  Trash2,
 } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
-import { useActionSheet } from '@expo/react-native-action-sheet';
 import * as Haptics from 'expo-haptics';
-import { format, differenceInDays, isAfter } from 'date-fns';
+import { format, differenceInDays, isAfter, eachDayOfInterval } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlannerStore } from '@/stores/plannerStore';
@@ -30,24 +34,105 @@ import { setTripLocationRange } from '@/lib/tripBusy';
 import { resetCalendarSyncCache, syncCalendarBusyTimes } from '@/lib/calendarSync';
 import * as ExpoCalendar from 'expo-calendar';
 import { TripActivitiesSection } from '@/components/trip/TripActivitiesSection';
+import { ShareTripModal } from '@/components/trip/ShareTripModal';
 import { TC } from '@/lib/theme';
+import { PARADE_GREEN, EMBER } from '@/lib/colors';
 import { ScreenHeader } from '@/components/primitives/ScreenHeader';
+import { Avatar } from '@/components/primitives/Avatar';
+import { TIME_SLOT_LABELS, TimeSlot } from '@/types/planner';
+import { getTravelKind } from '@/lib/visitVsTrip';
+import { formatCityForDisplay } from '@/lib/formatCity';
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
+
+interface TripPerson {
+  user_id: string;
+  display_name: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  avatar_url: string | null;
+}
 
 function useTrip(tripId: string) {
   return useQuery({
     queryKey: ['trip', tripId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data: trip, error } = await supabase
         .from('trips')
-        .select('id, user_id, name, location, start_date, end_date, available_slots, proposal_id')
+        .select(
+          'id, user_id, name, location, start_date, end_date, available_slots, priority_friend_ids, proposal_id',
+        )
         .eq('id', tripId)
         .single();
       if (error) throw error;
-      return data as any;
+
+      // Travel companions live in trip_participants; friends to see are the
+      // trip's priority_friend_ids. Resolve both to display names + avatars.
+      const { data: participants } = await supabase
+        .from('trip_participants')
+        .select('friend_user_id')
+        .eq('trip_id', tripId);
+      const companionIds = (participants ?? []).map((p: any) => p.friend_user_id);
+      const friendIds = (trip as any).priority_friend_ids ?? [];
+
+      const allIds = [...new Set([...companionIds, ...friendIds])] as string[];
+      let profileMap = new Map<string, TripPerson>();
+      if (allIds.length > 0) {
+        const { data: profiles } = await supabase.rpc('get_display_names_for_users', {
+          p_user_ids: allIds,
+        });
+        for (const p of (profiles ?? []) as TripPerson[]) {
+          profileMap.set(p.user_id, p);
+        }
+      }
+
+      const toPeople = (ids: string[]) =>
+        ids.map((id) => profileMap.get(id)).filter(Boolean) as TripPerson[];
+
+      return {
+        trip,
+        companions: toPeople(companionIds),
+        friendsToSee: toPeople(friendIds),
+      };
     },
   });
+}
+
+// People row shared by Traveling With + Friends to See
+function PersonRow({
+  person,
+  badge,
+}: {
+  person: TripPerson;
+  badge?: React.ReactNode;
+}) {
+  const name = person.display_name || [person.first_name, person.last_name].filter(Boolean).join(' ') || 'Friend';
+  return (
+    <Pressable
+      onPress={() => router.push(`/(app)/friend/${person.user_id}`)}
+      className="flex-row items-center gap-2.5 rounded-xl border border-border/30 bg-card p-2.5 active:opacity-70"
+    >
+      <Avatar
+        url={person.avatar_url}
+        firstName={person.first_name}
+        lastName={person.last_name}
+        displayName={person.display_name}
+        size="sm"
+      />
+      <Text className="font-sans text-sm text-foreground font-medium flex-1" numberOfLines={1}>
+        {name}
+      </Text>
+      {badge}
+    </Pressable>
+  );
+}
+
+function SectionEmpty({ text }: { text: string }) {
+  return (
+    <View className="rounded-xl border border-border/30 bg-card p-4">
+      <Text className="font-sans text-xs text-muted-foreground text-center">{text}</Text>
+    </View>
+  );
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -79,11 +164,15 @@ function DetailRow({
 export default function TripDetailScreen() {
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
   const { user } = useAuth();
-  const { data: trip, isLoading, error, refetch } = useTrip(tripId);
+  const { data, isLoading, error, refetch } = useTrip(tripId);
+  const trip = data?.trip as any;
+  const companions = data?.companions ?? [];
+  const friendsToSee = data?.friendsToSee ?? [];
+  const homeAddress = usePlannerStore((s) => s.homeAddress);
   const setAvailability = usePlannerStore((s) => s.setAvailability);
-  const { showActionSheetWithOptions } = useActionSheet();
   const [deleting, setDeleting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -161,20 +250,6 @@ export default function TripDetailScreen() {
     );
   }, [tripId]);
 
-  const openOwnerMenu = useCallback(() => {
-    Haptics.selectionAsync();
-    showActionSheetWithOptions(
-      {
-        options: ['Delete trip', 'Cancel'],
-        destructiveButtonIndex: 0,
-        cancelButtonIndex: 1,
-      },
-      (i) => {
-        if (i === 0) handleDelete();
-      },
-    );
-  }, [showActionSheetWithOptions, handleDelete]);
-
   // ── Computed display values ────────────────────────────────────────────────
   let dateLabel = '';
   let durationLabel = '';
@@ -193,20 +268,62 @@ export default function TripDetailScreen() {
     ? isAfter(new Date(trip.start_date), new Date())
     : false;
 
+  // Visit (hosting at home → green/Home) vs trip (away → ember/Plane)
+  const isVisit = trip ? getTravelKind(trip.location, [homeAddress]) === 'visit' : false;
+  const accentColor = isVisit ? PARADE_GREEN : EMBER;
+  const HeroIcon = isVisit ? Home : Plane;
+  const cityLabel = trip?.location
+    ? formatCityForDisplay(trip.location) || trip.location
+    : null;
+
+  const tripDays =
+    trip?.start_date && trip?.end_date
+      ? eachDayOfInterval({
+          start: new Date(trip.start_date + 'T00:00:00'),
+          end: new Date(trip.end_date + 'T00:00:00'),
+        })
+      : [];
+  const availableSlots: string[] = trip?.available_slots ?? [];
+
   return (
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
       <ScreenHeader
         title={trip?.name ?? 'Trip'}
         rightAction={
           isOwner && !isLoading && !error ? (
-            <Pressable
-              onPress={openOwnerMenu}
-              disabled={deleting}
-              hitSlop={8}
-              className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
-            >
-              <MoreHorizontal size={20} color={TC.icon} strokeWidth={2} />
-            </Pressable>
+            <View className="flex-row items-center">
+              <Pressable
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  router.push(`/(app)/new-trip?tripId=${tripId}`);
+                }}
+                hitSlop={8}
+                accessibilityLabel="Edit trip"
+                className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
+              >
+                <Pencil size={18} color={TC.icon} strokeWidth={2} />
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  setShareOpen(true);
+                }}
+                hitSlop={8}
+                accessibilityLabel="Share trip"
+                className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
+              >
+                <Share2 size={18} color={TC.icon} strokeWidth={2} />
+              </Pressable>
+              <Pressable
+                onPress={handleDelete}
+                disabled={deleting}
+                hitSlop={8}
+                accessibilityLabel="Delete trip"
+                className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
+              >
+                <Trash2 size={18} color={EMBER} strokeWidth={2} />
+              </Pressable>
+            </View>
           ) : undefined
         }
       />
@@ -226,14 +343,17 @@ export default function TripDetailScreen() {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#23744D" />
           }
         >
-          {/* Hero card — white with parade-green accent + Plane icon */}
+          {/* Hero card — accent + icon reflect visit (home) vs trip (away) */}
           <View className="bg-card rounded-2xl border border-border/30 overflow-hidden flex-row shadow-sm">
-            <View style={{ width: 4, backgroundColor: '#23744D' }} />
+            <View style={{ width: 4, backgroundColor: accentColor }} />
             <View className="flex-1 px-5 py-4 gap-1.5">
               <View className="flex-row items-center gap-1.5">
-                <Plane size={14} color="#23744D" strokeWidth={2} />
-                <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-primary">
-                  Trip
+                <HeroIcon size={14} color={accentColor} strokeWidth={2} />
+                <Text
+                  className="font-sans text-[11px] font-semibold uppercase tracking-widest"
+                  style={{ color: accentColor }}
+                >
+                  {isVisit ? 'Visit' : 'Trip'}
                 </Text>
                 {isUpcoming && (
                   <View className="ml-auto bg-primary/10 rounded-full px-2 py-0.5">
@@ -244,13 +364,13 @@ export default function TripDetailScreen() {
                 )}
               </View>
               <Text className="font-display text-2xl text-foreground leading-tight">
-                {trip.name || 'Untitled trip'}
+                {trip.name || (cityLabel ? `${isVisit ? 'Visit' : 'Trip'} to ${cityLabel}` : 'Untitled trip')}
               </Text>
-              {trip.location && (
+              {cityLabel && (
                 <View className="flex-row items-center gap-1 mt-0.5">
                   <MapPin size={12} color="#929298" strokeWidth={1.75} />
                   <Text className="font-sans text-sm text-muted-foreground">
-                    {trip.location}
+                    {cityLabel}
                   </Text>
                 </View>
               )}
@@ -272,11 +392,123 @@ export default function TripDetailScreen() {
             )}
           </View>
 
+          {/* Available time slots — when you're free to meet up on the trip */}
+          <View className="gap-2">
+            <Text className="font-display text-sm font-semibold text-foreground">
+              Available Time Slots
+            </Text>
+            {availableSlots.length > 0 ? (
+              <View className="flex-row flex-wrap gap-1.5">
+                {availableSlots.map((slot) => {
+                  const label = TIME_SLOT_LABELS[slot as TimeSlot];
+                  return (
+                    <View
+                      key={slot}
+                      className="flex-row items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1"
+                    >
+                      <Clock size={12} color={PARADE_GREEN} strokeWidth={2} />
+                      <Text className="font-sans text-xs font-medium text-primary">
+                        {label ? `${label.label} (${label.time})` : slot}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            ) : (
+              <Text className="font-sans text-xs text-muted-foreground">
+                Available all day
+              </Text>
+            )}
+          </View>
+
+          {/* Trip days */}
+          {tripDays.length > 0 && (
+            <View className="gap-2">
+              <Text className="font-display text-sm font-semibold text-foreground">
+                Trip Days
+              </Text>
+              <View className="flex-row flex-wrap gap-1.5">
+                {tripDays.map((day) => (
+                  <View
+                    key={day.toISOString()}
+                    className="items-center rounded-lg bg-away/10 px-2.5 py-1.5"
+                    style={{ minWidth: 44 }}
+                  >
+                    <Text className="font-sans text-[10px] text-muted-foreground">
+                      {format(day, 'EEE')}
+                    </Text>
+                    <Text className="font-sans text-sm font-medium text-foreground">
+                      {format(day, 'd')}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* Traveling with — companions on the trip */}
+          <View className="gap-2">
+            <View className="flex-row items-center gap-1.5">
+              <Plane size={15} color="#929298" strokeWidth={1.75} />
+              <Text className="font-display text-sm font-semibold text-foreground">
+                Traveling With ({companions.length})
+              </Text>
+            </View>
+            {companions.length > 0 ? (
+              <View className="gap-1.5">
+                {companions.map((p) => (
+                  <PersonRow
+                    key={p.user_id}
+                    person={p}
+                    badge={
+                      <View className="flex-row items-center gap-0.5">
+                        <Plane size={10} color={EMBER} strokeWidth={2} />
+                        <Text className="font-sans text-[10px] font-medium" style={{ color: EMBER }}>
+                          Companion
+                        </Text>
+                      </View>
+                    }
+                  />
+                ))}
+              </View>
+            ) : (
+              <SectionEmpty text="No travel companions added" />
+            )}
+          </View>
+
+          {/* Friends to see — who you're visiting / being visited by */}
+          <View className="gap-2">
+            <View className="flex-row items-center gap-1.5">
+              <Users size={15} color="#929298" strokeWidth={1.75} />
+              <Text className="font-display text-sm font-semibold text-foreground">
+                Friends to See ({friendsToSee.length})
+              </Text>
+            </View>
+            {friendsToSee.length > 0 ? (
+              <View className="gap-1.5">
+                {friendsToSee.map((p) => (
+                  <PersonRow key={p.user_id} person={p} />
+                ))}
+              </View>
+            ) : (
+              <SectionEmpty text="Going solo on this one — bring someone along?" />
+            )}
+          </View>
+
           {/* Activity suggestions — carries over from a finalized proposal */}
           {trip.proposal_id && (
             <TripActivitiesSection proposalId={trip.proposal_id} />
           )}
         </ScrollView>
+      )}
+
+      {trip && user && (
+        <ShareTripModal
+          visible={shareOpen}
+          onClose={() => setShareOpen(false)}
+          trip={trip}
+          userId={user.id}
+        />
       )}
     </SafeAreaView>
   );
