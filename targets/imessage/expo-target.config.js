@@ -15,7 +15,13 @@
  */
 module.exports = (config) => ({
   type: 'imessage',
+  // `name` is the Xcode TARGET name — must stay unique so it doesn't collide
+  // with the main app target ("Parade"), which would make both targets write
+  // to the same build dir ("Multiple commands produce conflicting outputs").
   name: 'ParadeMessages',
+  // `displayName` drives CFBundleDisplayName — this is the label shown under
+  // the icon in the iMessage app drawer. THIS is the user-facing "Parade".
+  displayName: 'Parade',
   // NOTE: no `icon` field. The plugin's icon generator only emits a SQUARE
   // "AppIcon" set, but iMessage extensions require an icon set literally
   // named "iMessage App Icon" with non-square sizes (the plugin hardcodes

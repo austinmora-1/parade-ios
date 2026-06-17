@@ -24,7 +24,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format, addDays, isSameDay, isToday, isTomorrow, addHours } from 'date-fns';
@@ -170,8 +170,15 @@ export default function FindPeopleScreen() {
   const [location, setLocation] = useState('');
   const [notes, setNotes] = useState('');
 
+  // Optional pre-selected friend(s) by friendUserId — e.g. opened from an
+  // iMessage "ask friends to join" bubble carrying the sender as ?preFriend=.
+  const { preFriend } = useLocalSearchParams<{ preFriend?: string }>();
+
   // Step 2 — audience
-  const [audience, setAudience] = useState<Audience>({ type: 'all_friends' });
+  const [audience, setAudience] = useState<Audience>(() => {
+    const ids = preFriend ? preFriend.split(',').filter(Boolean) : [];
+    return ids.length > 0 ? { type: 'friends', ids } : { type: 'all_friends' };
+  });
 
   const dateOptions = useMemo(
     () => Array.from({ length: 14 }, (_, i) => addDays(new Date(), i)),

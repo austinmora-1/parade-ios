@@ -29,7 +29,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -114,8 +114,14 @@ export default function GoSomewhereScreen() {
   const [tripType, setTripType] = useState<TripType | null>(null);
   const [hostMode, setHostMode] = useState<HostMode>('visiting');
 
+  // Optional pre-selected friend(s) by friendUserId — e.g. opened from an
+  // iMessage "go somewhere" bubble carrying the sender as ?preFriend=.
+  const { preFriend } = useLocalSearchParams<{ preFriend?: string }>();
+
   // Step 2
-  const [selectedFriendIds, setSelectedFriendIds] = useState<Set<string>>(new Set());
+  const [selectedFriendIds, setSelectedFriendIds] = useState<Set<string>>(
+    () => new Set(preFriend ? preFriend.split(',').filter(Boolean) : []),
+  );
   const [hostFriendId, setHostFriendId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
 

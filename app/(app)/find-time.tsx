@@ -20,7 +20,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format, addDays, parseISO } from 'date-fns';
@@ -75,8 +75,14 @@ export default function FindTimeScreen() {
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
 
+  // Optional pre-selected friend(s) by friendUserId — e.g. opened from an
+  // iMessage "find time" bubble carrying the sender as ?preFriend=.
+  const { preFriend } = useLocalSearchParams<{ preFriend?: string }>();
+
   // Step 1
-  const [selectedFriendIds, setSelectedFriendIds] = useState<Set<string>>(new Set());
+  const [selectedFriendIds, setSelectedFriendIds] = useState<Set<string>>(
+    () => new Set(preFriend ? preFriend.split(',').filter(Boolean) : []),
+  );
   const [guests, setGuests] = useState<string[]>([]);
   const [guestDraft, setGuestDraft] = useState('');
   const [query, setQuery] = useState('');

@@ -13,6 +13,7 @@ import {
 import type { User, Session } from '@supabase/supabase-js';
 import * as Linking from 'expo-linking';
 import { supabase } from '@/integrations/supabase/client';
+import { syncSessionToAppGroup } from '@/lib/sessionBridge';
 
 const AUTH_INIT_TIMEOUT_MS = 5_000;
 
@@ -61,6 +62,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(newSession?.user ?? null);
       setAuthError(null);
       setLoading(false);
+      // Phase B: mirror identity into the App Group for the iMessage extension
+      // (fires on INITIAL_SESSION / SIGNED_IN / TOKEN_REFRESHED / SIGNED_OUT).
+      void syncSessionToAppGroup(newSession);
     });
 
     withTimeout(supabase.auth.getSession(), AUTH_INIT_TIMEOUT_MS)
