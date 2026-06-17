@@ -33,8 +33,11 @@ function AppLayoutInner() {
       <Stack.Screen name="plan/[planId]" options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="trip/[tripId]" options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="friend/[userId]" options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="pending-requests" options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="pods" options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="day/[date]" options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="notifications" options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="trips" options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
       <Stack.Screen
         name="new-plan"

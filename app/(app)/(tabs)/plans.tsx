@@ -44,6 +44,7 @@ import {
   Zap,
   Users,
   Share2,
+  Sparkles,
 } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
@@ -56,10 +57,10 @@ import type { Plan, DayAvailability, TimeSlot } from '@/types/planner';
 import { activityAccent } from '@/lib/activityColors';
 import { TC } from '@/lib/theme';
 import { TINT, PARADE_GREEN, MARIGOLD } from '@/lib/colors';
+import { computeRecommendedWindows, type RecommendedWindow } from '@/lib/recommendedWindows';
 import {
   DateDial,
   computeDayWheel,
-  getDaySlotAvailability,
   planBlocksAvailability,
   type DayWheel,
 } from '@/components/plans/DateDial';
@@ -83,6 +84,9 @@ const SLOT_SHORT: Record<string, string> = {
   'late-night':      '10pm',
 };
 
+/** Recommended windows shown in the horizontal CTA strip on the Plans tab. */
+const MAX_RECOMMENDED_CTA = 8;
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getWeekLabel(start: Date, end: Date): string {
@@ -95,16 +99,6 @@ function casualDayLabel(date: Date): string {
   if (isTomorrow(date)) return 'tomorrow';
   return format(date, 'EEEE');
 }
-
-/** Hour each slot ends — used to skip windows already past today */
-const SLOT_END_HOUR: Record<string, number> = {
-  'early-morning':   9,
-  'late-morning':    12,
-  'early-afternoon': 15,
-  'late-afternoon':  18,
-  'evening':         22,
-  'late-night':      26,
-};
 
 /** Chronological slot order for sorting a day's plans morning → late night */
 const SLOT_RANK: Record<string, number> = {
@@ -121,104 +115,108 @@ function sortPlansChronologically(dayPlans: Plan[]): Plan[] {
   });
 }
 
-interface FreeWindow { date: Date; slot: TimeSlot }
-
-/** First upcoming free window in the given days — resolved through the
- *  same standardized social-slot logic as the day wheels, so the CTA can
- *  never call a week "booked" while its wheels show open time. */
-function findNextFreeWindow(
-  days: Date[],
-  availability: DayAvailability[],
-  plans: Plan[],
-  settings: ReturnType<typeof useAvailabilityStore.getState>['defaultSettings'],
-  trips: any[],
-): FreeWindow | null {
-  const now = new Date();
-  const todayStr = format(now, 'yyyy-MM-dd');
-
-  for (const day of days) {
-    const dateStr = format(day, 'yyyy-MM-dd');
-    if (dateStr < todayStr) continue;
-
-    const dayPlans = plans.filter((p) =>
-      isSameDay(p.date instanceof Date ? p.date : new Date(p.date), day),
-    );
-    const { notAvailable, freeSlots } = getDaySlotAvailability({
-      date: day,
-      dayAvail: availability.find((a) => format(a.date, 'yyyy-MM-dd') === dateStr),
-      settings,
-      dayPlans: dayPlans
-        .filter(planBlocksAvailability)
-        .map((p) => ({ timeSlot: p.timeSlot as string })),
-      onTrip: trips.some((t) => tripOverlapsDays(t, [day])),
-    });
-    if (notAvailable) continue;
-
-    for (const slot of freeSlots) {
-      if (dateStr === todayStr && now.getHours() >= SLOT_END_HOUR[slot]) continue;
-      return { date: day, slot };
-    }
-  }
-  return null;
-}
-
-/** Availability-driven CTA — replaces the old "All Upcoming" list */
-function AvailabilityCTA({ nextFree }: { nextFree: FreeWindow | null }) {
-  if (nextFree) {
-    const slotMeta = TIME_SLOT_LABELS[nextFree.slot];
-    const dateStr = format(nextFree.date, 'yyyy-MM-dd');
+/** Recommended free-window slots in the CTA style — replaces the single
+ *  "You're free…" CTA with the same ranked windows the Home dashboard
+ *  surfaced, as a horizontal strip of compact cards. Falls back to the
+ *  "Booked up" find-time CTA when nothing is open this week. */
+function RecommendedCTA({ windows }: { windows: RecommendedWindow[] }) {
+  // No open social windows this week — point at find-time instead
+  if (windows.length === 0) {
     return (
       <Pressable
-        onPress={() => router.push(`/(app)/quick-plan?date=${dateStr}&slot=${nextFree.slot}`)}
+        onPress={() => router.push('/(app)/find-time')}
         className="mx-5 rounded-2xl px-4 py-3.5 flex-row items-center gap-3 active:opacity-80"
-        style={{ backgroundColor: TINT.primarySubtle, borderWidth: 1, borderColor: TINT.primaryBorder }}
+        style={{ backgroundColor: TINT.secondarySubtle, borderWidth: 1, borderColor: TINT.secondaryBorder }}
       >
         <View
           className="w-9 h-9 rounded-full items-center justify-center"
-          style={{ backgroundColor: PARADE_GREEN }}
+          style={{ backgroundColor: '#D46549' }}
         >
-          <Zap size={16} color="#FFFFFF" strokeWidth={2.25} />
+          <Users size={16} color="#FFFFFF" strokeWidth={2.25} />
         </View>
         <View className="flex-1">
-          <Text className="font-display text-sm" style={{ color: PARADE_GREEN }}>
-            You're free {casualDayLabel(nextFree.date)} {slotMeta.label.toLowerCase()}
+          <Text className="font-display text-sm" style={{ color: '#D46549' }}>
+            Booked up this week
           </Text>
           <Text className="font-sans text-xs text-muted-foreground mt-0.5">
-            {slotMeta.time} · grab the window before it fills up
+            See where your time overlaps with friends
           </Text>
         </View>
-        <View className="bg-primary rounded-full px-3 py-1.5">
-          <Text className="font-sans text-xs font-semibold text-white">Quick plan</Text>
+        <View className="rounded-full px-3 py-1.5" style={{ backgroundColor: '#D46549' }}>
+          <Text className="font-sans text-xs font-semibold text-white">Find time</Text>
         </View>
       </Pressable>
     );
   }
 
-  // No free windows left this week — point at find-time instead
   return (
-    <Pressable
-      onPress={() => router.push('/(app)/find-time')}
-      className="mx-5 rounded-2xl px-4 py-3.5 flex-row items-center gap-3 active:opacity-80"
-      style={{ backgroundColor: TINT.secondarySubtle, borderWidth: 1, borderColor: TINT.secondaryBorder }}
-    >
-      <View
-        className="w-9 h-9 rounded-full items-center justify-center"
-        style={{ backgroundColor: '#D46549' }}
+    <View className="gap-2">
+      {/* Section eyebrow — matches the dashboard "Recommended" header */}
+      <View className="flex-row items-center gap-1.5 px-5">
+        <Sparkles size={12} color={PARADE_GREEN} strokeWidth={2} />
+        <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+          Recommended
+        </Text>
+      </View>
+
+      {/* Horizontal strip of compact CTA cards */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerClassName="gap-2.5 px-5 pb-1"
       >
-        <Users size={16} color="#FFFFFF" strokeWidth={2.25} />
-      </View>
-      <View className="flex-1">
-        <Text className="font-display text-sm" style={{ color: '#D46549' }}>
-          Booked up this week
-        </Text>
-        <Text className="font-sans text-xs text-muted-foreground mt-0.5">
-          See where your time overlaps with friends
-        </Text>
-      </View>
-      <View className="rounded-full px-3 py-1.5" style={{ backgroundColor: '#D46549' }}>
-        <Text className="font-sans text-xs font-semibold text-white">Find time</Text>
-      </View>
-    </Pressable>
+        {windows.map((w) => {
+          const slotMeta = TIME_SLOT_LABELS[w.slot];
+          const overlap = w.overlappingFriendIds.length;
+          return (
+            <Pressable
+              key={`${w.dateStr}-${w.slot}`}
+              onPress={() => router.push(`/(app)/quick-plan?date=${w.dateStr}&slot=${w.slot}`)}
+              className="rounded-2xl px-3.5 py-3 gap-2 active:opacity-80"
+              style={{ width: 176, backgroundColor: TINT.primarySubtle, borderWidth: 1, borderColor: TINT.primaryBorder }}
+            >
+              {/* Icon + day eyebrow */}
+              <View className="flex-row items-center gap-2">
+                <View
+                  className="w-7 h-7 rounded-full items-center justify-center"
+                  style={{ backgroundColor: PARADE_GREEN }}
+                >
+                  <Zap size={13} color="#FFFFFF" strokeWidth={2.25} />
+                </View>
+                <Text
+                  className="font-sans text-[11px] uppercase tracking-wide text-muted-foreground"
+                  numberOfLines={1}
+                >
+                  {casualDayLabel(w.date)}
+                </Text>
+              </View>
+
+              {/* Slot headline + meta */}
+              <View>
+                <Text
+                  className="font-display text-[15px]"
+                  style={{ color: PARADE_GREEN }}
+                  numberOfLines={1}
+                >
+                  {slotMeta.label}
+                </Text>
+                <Text
+                  className="font-sans text-[11px] text-muted-foreground mt-0.5"
+                  numberOfLines={1}
+                >
+                  {overlap > 0 ? `${slotMeta.time} · ${overlap} free` : slotMeta.time}
+                </Text>
+              </View>
+
+              {/* Quick plan chip */}
+              <View className="bg-primary rounded-full px-2.5 py-1 self-start">
+                <Text className="font-sans text-[11px] font-semibold text-white">Quick plan</Text>
+              </View>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -941,13 +939,19 @@ export default function PlansTab() {
   const weekend   = [days[5], days[6]]; // Sat, Sun
   const label     = getWeekLabel(weekStart, weekEnd);
 
-  // First upcoming free window in the displayed week → drives the CTA.
-  // Fully-past weeks have no upcoming windows by definition — hide the CTA
-  // instead of misreporting "Booked up".
+  // Recommended open social windows for the displayed week (today-or-future
+  // days only), ranked by friend overlap → drives the Recommended CTA.
+  // Fully-past weeks have no upcoming windows by definition — hide the CTA.
   const weekIsPast = format(weekEnd, 'yyyy-MM-dd') < format(today, 'yyyy-MM-dd');
-  const nextFreeWindow = weekIsPast
-    ? null
-    : findNextFreeWindow(days, availability, plans, defaultSettings, trips ?? []);
+  const recommendedTodayStr = format(today, 'yyyy-MM-dd');
+  const recommendedWindows = weekIsPast
+    ? []
+    : computeRecommendedWindows(
+        days.filter((d) => format(d, 'yyyy-MM-dd') >= recommendedTodayStr),
+        availability,
+        friendData,
+        MAX_RECOMMENDED_CTA,
+      );
 
   // ── Week-relative trip lookahead ────────────────────────────────────────────
   // The next-trip card is relative to the *selected* week: trips inside the
@@ -1042,13 +1046,23 @@ export default function PlansTab() {
           <Text className="font-display text-2xl text-foreground">
             Plans &amp; Trips
           </Text>
-          <Pressable
-            onPress={() => router.push('/(app)/share-availability')}
-            hitSlop={8}
-            className="w-9 h-9 rounded-full items-center justify-center bg-card border border-border/30 active:opacity-70"
-          >
-            <Share2 size={16} color={PARADE_GREEN} strokeWidth={2} />
-          </Pressable>
+          <View className="flex-row items-center gap-2">
+            <Pressable
+              onPress={() => router.push('/(app)/trips')}
+              hitSlop={8}
+              className="flex-row items-center gap-1 rounded-full bg-card border border-border/30 px-3 h-9 active:opacity-70"
+            >
+              <Plane size={14} color={PARADE_GREEN} strokeWidth={2} />
+              <Text className="font-sans text-[13px] font-semibold text-primary">Trips</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => router.push('/(app)/share-availability')}
+              hitSlop={8}
+              className="w-9 h-9 rounded-full items-center justify-center bg-card border border-border/30 active:opacity-70"
+            >
+              <Share2 size={16} color={PARADE_GREEN} strokeWidth={2} />
+            </Pressable>
+          </View>
         </View>
 
         {/* ── Week navigator ───────────────────────────────────────────── */}
@@ -1140,8 +1154,8 @@ export default function PlansTab() {
               ))}
           </View>
 
-          {/* ── Availability CTA — not shown for past weeks ───────────── */}
-          {!isLoading && !weekIsPast && <AvailabilityCTA nextFree={nextFreeWindow} />}
+          {/* ── Recommended CTA — not shown for past weeks ────────────── */}
+          {!isLoading && !weekIsPast && <RecommendedCTA windows={recommendedWindows} />}
 
           {/* ── Next trip (relative to the selected week) ─────────────── */}
           <View className="px-5 gap-2">
