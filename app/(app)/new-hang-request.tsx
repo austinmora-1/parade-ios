@@ -24,7 +24,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { format, addDays, isToday, isTomorrow, isSameDay } from 'date-fns';
 import * as Haptics from 'expo-haptics';
-import { X, Check } from 'lucide-react-native';
+import { X, Check, Search } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -84,6 +84,13 @@ export default function NewHangRequestScreen() {
   const [day,     setDay]     = useState<Date>(addDays(new Date(), 1)); // default tomorrow
   const [slot,    setSlot]    = useState<TimeSlot>('evening');
   const [message, setMessage] = useState('');
+  const [friendQuery, setFriendQuery] = useState('');
+
+  const filteredFriends = useMemo(() => {
+    const q = friendQuery.trim().toLowerCase();
+    if (!q) return connectedFriends;
+    return connectedFriends.filter((f) => f.name.toLowerCase().includes(q));
+  }, [connectedFriends, friendQuery]);
 
   // If only one friend pre-selected and we came in with ?friendId, keep it
   useEffect(() => {
@@ -177,12 +184,40 @@ export default function NewHangRequestScreen() {
                   </Text>
                 </View>
               ) : (
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ gap: 14, paddingHorizontal: 2, paddingVertical: 4 }}
-                >
-                  {connectedFriends.map((f) => {
+                <>
+                  {/* Search — surfaced once there are enough friends to scroll */}
+                  {connectedFriends.length > 5 && (
+                    <View className="flex-row items-center gap-2 bg-card rounded-xl border border-border/40 px-3 mb-2.5 shadow-sm">
+                      <Search size={14} color="#929298" strokeWidth={2} />
+                      <TextInput
+                        value={friendQuery}
+                        onChangeText={setFriendQuery}
+                        placeholder="Search friends"
+                        placeholderTextColor="#929298"
+                        className="flex-1 py-2 font-sans text-[15px] text-foreground"
+                        autoCorrect={false}
+                      />
+                      {friendQuery.length > 0 && (
+                        <Pressable onPress={() => setFriendQuery('')} hitSlop={6}>
+                          <X size={13} color="#929298" strokeWidth={2} />
+                        </Pressable>
+                      )}
+                    </View>
+                  )}
+
+                  {filteredFriends.length === 0 ? (
+                    <View className="bg-card rounded-2xl border border-border/30 px-4 py-4 items-center shadow-sm">
+                      <Text className="font-sans text-sm text-muted-foreground">
+                        No friends match “{friendQuery.trim()}”.
+                      </Text>
+                    </View>
+                  ) : (
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={{ gap: 14, paddingHorizontal: 2, paddingVertical: 4 }}
+                    >
+                      {filteredFriends.map((f) => {
                     const selected = recipientId === f.friendUserId;
                     return (
                       <Pressable
@@ -219,8 +254,10 @@ export default function NewHangRequestScreen() {
                         </Text>
                       </Pressable>
                     );
-                  })}
-                </ScrollView>
+                      })}
+                    </ScrollView>
+                  )}
+                </>
               )}
             </View>
           )}

@@ -148,11 +148,11 @@ export default function WhatPlanningScreen() {
             onPress={() => go('/(app)/share-availability')}
           />
 
-          {/* ── Grow Parade ── */}
-          <GroupLabel>Grow Parade</GroupLabel>
+          {/* ── Invite ── */}
+          <GroupLabel>Invite</GroupLabel>
           <PathButton
             icon={<UserPlus size={18} color={EMBER} strokeWidth={2} />}
-            title="Invite friends to Parade"
+            title="Add friends"
             onPress={() => go('/(app)/add-friend')}
           />
         </View>
