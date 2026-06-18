@@ -24,7 +24,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { format, addDays, isToday, isTomorrow, isSameDay } from 'date-fns';
 import * as Haptics from 'expo-haptics';
-import { X } from 'lucide-react-native';
+import { X, Check } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -165,52 +165,63 @@ export default function NewHangRequestScreen() {
             </Text>
           </View>
 
-          {/* Friend picker */}
+          {/* Friend picker — horizontal avatar scroller (matches the rest of
+              the app's selection UIs and the friend-profile ping aesthetic) */}
           {!friendIdParam && (
             <View>
               <FieldLabel>Send to</FieldLabel>
-              <View className="bg-card rounded-2xl border border-border/30 shadow-sm overflow-hidden">
-                {connectedFriends.length === 0 ? (
-                  <View className="px-4 py-5 items-center">
-                    <Text className="font-sans text-sm text-muted-foreground">
-                      No friends yet — add some first.
-                    </Text>
-                  </View>
-                ) : (
-                  connectedFriends.map((f, i) => {
+              {connectedFriends.length === 0 ? (
+                <View className="bg-card rounded-2xl border border-border/30 px-4 py-5 items-center shadow-sm">
+                  <Text className="font-sans text-sm text-muted-foreground">
+                    No friends yet — add some first.
+                  </Text>
+                </View>
+              ) : (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ gap: 14, paddingHorizontal: 2, paddingVertical: 4 }}
+                >
+                  {connectedFriends.map((f) => {
                     const selected = recipientId === f.friendUserId;
                     return (
-                      <View key={f.id}>
-                        <Pressable
-                          onPress={() => {
-                            Haptics.selectionAsync();
-                            setRecipientId(f.friendUserId!);
+                      <Pressable
+                        key={f.id}
+                        onPress={() => {
+                          Haptics.selectionAsync();
+                          setRecipientId(f.friendUserId!);
+                        }}
+                        className="items-center active:opacity-70"
+                        style={{ width: 68 }}
+                      >
+                        <View
+                          className="rounded-full"
+                          style={{
+                            padding: 2,
+                            borderWidth: 2,
+                            borderColor: selected ? '#23744D' : 'transparent',
                           }}
-                          className={`flex-row items-center px-4 py-3 gap-3 active:bg-muted/30 ${
-                            selected ? 'bg-primary/8' : ''
+                        >
+                          <Avatar url={f.avatar} displayName={f.name} size="lg" />
+                          {selected && (
+                            <View className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-primary items-center justify-center border-2 border-card">
+                              <Check size={11} color="#FFFFFF" strokeWidth={3} />
+                            </View>
+                          )}
+                        </View>
+                        <Text
+                          numberOfLines={1}
+                          className={`font-sans text-[13px] mt-1.5 ${
+                            selected ? 'font-semibold text-foreground' : 'text-muted-foreground'
                           }`}
                         >
-                          <Avatar url={f.avatar} displayName={f.name} size="sm" />
-                          <Text className="flex-1 font-sans text-sm font-medium text-foreground" numberOfLines={1}>
-                            {f.name}
-                          </Text>
-                          <View
-                            style={{
-                              width: 20, height: 20, borderRadius: 999,
-                              borderWidth: 2,
-                              borderColor: selected ? '#23744D' : TINT.grayStrong,
-                              backgroundColor: selected ? '#23744D' : 'transparent',
-                            }}
-                          />
-                        </Pressable>
-                        {i < connectedFriends.length - 1 && (
-                          <View className="h-px bg-border/30 mx-4" />
-                        )}
-                      </View>
+                          {f.name.split(' ')[0]}
+                        </Text>
+                      </Pressable>
                     );
-                  })
-                )}
-              </View>
+                  })}
+                </ScrollView>
+              )}
             </View>
           )}
 
