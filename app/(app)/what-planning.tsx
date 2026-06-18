@@ -12,8 +12,8 @@
  * translucent dark fill gives the same read without a rebuild.
  */
 import { View, Text, Pressable } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { useFloatingTabBarHeight } from '@/components/navigation/FloatingTabBar';
 import { useCallback } from 'react';
 import * as Haptics from 'expo-haptics';
 import {
@@ -72,7 +72,7 @@ function GroupLabel({ children }: { children: string }) {
 }
 
 export default function WhatPlanningScreen() {
-  const insets = useSafeAreaInsets();
+  const tabBarHeight = useFloatingTabBarHeight();
 
   const go = useCallback((path: string) => {
     Haptics.selectionAsync();
@@ -93,11 +93,11 @@ export default function WhatPlanningScreen() {
         onPress={close}
       />
 
-      {/* Floating menu, anchored top-right under the FAB */}
+      {/* Floating menu, popping up from the bottom-nav FAB */}
       <View
         pointerEvents="box-none"
-        style={{ paddingTop: insets.top + 52 }}
-        className="items-end px-3"
+        style={{ paddingBottom: tabBarHeight + 28 }}
+        className="flex-1 items-center justify-end px-3"
       >
         <View
           className="rounded-3xl p-2 w-[280px]"

@@ -9,7 +9,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useColorScheme } from 'nativewind';
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Stop, Rect } from 'react-native-svg';
-import { Bell, Plus, MapPin, ChevronRight } from 'lucide-react-native';
+import { Bell, MapPin, ChevronRight } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useCallback, useState, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -342,7 +342,7 @@ export default function HomeTab() {
                 )}
               </View>
 
-              {/* Right: Bell + FAB */}
+              {/* Right: Bell (the create FAB now lives in the bottom nav) */}
               <View className="flex-row items-center gap-2">
                 <Pressable
                   onPress={() => router.push('/(app)/notifications')}
@@ -353,34 +353,6 @@ export default function HomeTab() {
                   {hasUnread && (
                     <View className="absolute top-1 right-1 w-2 h-2 rounded-full bg-ember" />
                   )}
-                </Pressable>
-                {/* FAB — parade→mint gradient circle, matches the PWA */}
-                <Pressable
-                  onPress={() => router.push('/(app)/what-planning')}
-                  className="w-9 h-9 rounded-full items-center justify-center overflow-hidden active:opacity-80"
-                  hitSlop={6}
-                  style={{
-                    shadowColor: '#23744D',
-                    shadowOpacity: 0.5,
-                    shadowRadius: 6,
-                    shadowOffset: { width: 0, height: 4 },
-                    elevation: 6,
-                  }}
-                >
-                  <Svg
-                    style={{ position: 'absolute', top: 0, left: 0 }}
-                    width={36}
-                    height={36}
-                  >
-                    <Defs>
-                      <SvgLinearGradient id="fabGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <Stop offset="0%" stopColor="#23744D" stopOpacity="1" />
-                        <Stop offset="100%" stopColor="#67B28E" stopOpacity="1" />
-                      </SvgLinearGradient>
-                    </Defs>
-                    <Rect x="0" y="0" width={36} height={36} fill="url(#fabGrad)" />
-                  </Svg>
-                  <Plus size={20} color="#FFFFFF" strokeWidth={2.5} />
                 </Pressable>
               </View>
             </View>

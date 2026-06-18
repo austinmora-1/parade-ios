@@ -15,6 +15,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColorScheme } from 'nativewind';
+import { router } from 'expo-router';
+import { Plus } from 'lucide-react-native';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 
 const LIGHT = {
@@ -66,11 +68,31 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
     transform: [{ translateX: withSpring(state.index * tabWidth, SPRING) }],
   }));
 
+  const bottomInset = insets.bottom > 0 ? insets.bottom : BOTTOM_GAP;
+
   return (
     <View
       pointerEvents="box-none"
-      style={[styles.wrapper, { paddingBottom: insets.bottom > 0 ? insets.bottom : BOTTOM_GAP }]}
+      style={[styles.wrapper, { paddingBottom: bottomInset }]}
     >
+      {/* Raised center FAB — opens the "What are you planning?" dropdown */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Create"
+        onPress={() => router.push('/(app)/what-planning')}
+        hitSlop={8}
+        style={[
+          styles.fab,
+          {
+            bottom: bottomInset + BAR_HEIGHT - 22,
+            backgroundColor: c.active,
+            borderColor: c.surface,
+            shadowColor: c.active,
+          },
+        ]}
+      >
+        <Plus size={26} color="#FFFFFF" strokeWidth={2.5} />
+      </Pressable>
       <View
         style={[
           styles.bar,
@@ -196,5 +218,21 @@ const styles = StyleSheet.create({
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  fab: {
+    position: 'absolute',
+    left: '50%',
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    marginLeft: -26, // center the 52-wide button on the 50% anchor
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3, // surface-colored ring lifts it off the bar
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.45,
+    shadowRadius: 8,
+    elevation: 10,
+    zIndex: 10,
   },
 });
