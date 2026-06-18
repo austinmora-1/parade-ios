@@ -250,9 +250,12 @@ export default function FriendProfileScreen() {
       })
     : '';
 
+  // Slot columns are booleans (true = free). A day counts as a free window if
+  // any slot is free.
   const freeDays = (availability ?? []).filter((row: any) =>
-    SLOTS.some((s) => row[s] === 'free'),
+    SLOTS.some((s) => row[s] === true),
   );
+  const mutualCount = freeDays.filter((r: any) => myFreeDateSet.has(r.date)).length;
 
   const vibe = p?.current_vibe as string | null;
   const showAvail = p?.show_availability !== false;
@@ -404,9 +407,15 @@ export default function FriendProfileScreen() {
                 </Text>
               </View>
 
-              {freeDays.slice(0, 7).map((row: any) => {
+              {/* Summary line — count of free days + mutual overlap */}
+              <Text className="font-sans text-[13px] text-muted-foreground px-0.5 -mt-1">
+                Free {freeDays.length} day{freeDays.length === 1 ? '' : 's'} in the next 2 weeks
+                {mutualCount > 0 ? ` · ${mutualCount} you're both free` : ''}
+              </Text>
+
+              {freeDays.map((row: any) => {
                 const day = new Date(row.date + 'T00:00:00');
-                const freeSlots = SLOTS.filter((s) => row[s] === 'free');
+                const freeSlots = SLOTS.filter((s) => row[s] === true);
                 const today = isToday(day);
                 const mutual = myFreeDateSet.has(row.date);
                 return (
