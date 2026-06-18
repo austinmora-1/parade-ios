@@ -49,8 +49,10 @@ export function WeeklyIntentionCard({
   return (
     <Pressable
       onPress={() => router.push('/(app)/edit-intention')}
-      className={`rounded-2xl border px-4 py-4 gap-2.5 shadow-sm active:opacity-80 ${
-        hasIntention ? 'bg-card border-border/30' : 'bg-primary/5 border-primary/30'
+      className={`rounded-2xl border px-4 py-4 gap-2.5 active:opacity-80 ${
+        hasIntention
+          ? 'bg-card border-border/30 shadow-sm'
+          : 'bg-primary/5 border-primary/30'
       }`}
     >
       <View className="flex-row items-center gap-1.5">
