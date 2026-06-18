@@ -84,5 +84,8 @@ export function computeGroupSlots({
       results.push({ date: dateStr, slot, freeFriendIds: [...selectedArr] });
     }
   }
-  return results.slice(0, 30);
+  // Return the full ~6-month set — the calendar grid colors every month, so
+  // capping here would hide later months (the old ranked-list cap of 30 was
+  // exhausted within the current month).
+  return results;
 }
