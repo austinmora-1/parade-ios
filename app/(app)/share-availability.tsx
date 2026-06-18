@@ -45,7 +45,7 @@ import { useAvailabilityStore } from '@/stores/availabilityStore';
 import { createDefaultAvailability } from '@/stores/helpers/mapAvailability';
 import { Avatar } from '@/components/primitives/Avatar';
 import { TC } from '@/lib/theme';
-import { TINT, PARADE_GREEN, ELEPHANT } from '@/lib/colors';
+import { PARADE_GREEN, ELEPHANT } from '@/lib/colors';
 
 const SHARE_DOMAIN = 'https://helloparade.app';
 
@@ -183,9 +183,6 @@ export default function ShareAvailabilityScreen() {
     }
   }, [user?.id, selectedIds, sending, myName, range.label, me?.share_code, view]);
 
-  const visibleWeekends = weekendDays.slice(0, 10);
-  const hiddenWeekends = weekendDays.length - visibleWeekends.length;
-
   return (
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
       {/* Header */}
@@ -231,70 +228,22 @@ export default function ShareAvailabilityScreen() {
           </View>
         </View>
 
-        {/* Weekend preview */}
-        <View className="bg-card rounded-2xl border border-border/30 p-4 gap-3 shadow-sm">
-          <View className="flex-row items-center gap-2">
-            <CalendarRange size={15} color={PARADE_GREEN} strokeWidth={2} />
-            <Text className="font-sans text-[15px] font-semibold text-foreground">
-              {freeWeekendCount} of {weekendDays.length} weekend days free
-            </Text>
-          </View>
-          <View className="flex-row flex-wrap gap-1.5">
-            {visibleWeekends.map((d) => (
-              <View
-                key={d.dateStr}
-                className="flex-row items-center gap-1.5 rounded-full border px-2.5 py-1"
-                style={{
-                  backgroundColor: d.free ? TINT.primarySubtle : TINT.grayFaint,
-                  borderColor: d.free ? 'rgba(35,116,77,0.35)' : 'rgba(146,146,152,0.25)',
-                }}
-              >
-                <View
-                  className="w-1.5 h-1.5 rounded-full"
-                  style={{ backgroundColor: d.free ? PARADE_GREEN : ELEPHANT }}
-                />
-                <Text className="font-sans text-[13px] font-medium text-foreground">
-                  {d.label}
-                </Text>
-              </View>
-            ))}
-            {hiddenWeekends > 0 && (
-              <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: TINT.grayFaint }}>
-                <Text className="font-sans text-[13px] text-muted-foreground">
-                  +{hiddenWeekends} more
-                </Text>
-              </View>
-            )}
-          </View>
-          <Text className="font-sans text-[13px] text-muted-foreground leading-relaxed">
-            Friends see your free time slots for the next {range.label} — busy slots stay
-            private, just marked unavailable.
+        {/* One-line availability summary (no per-day list) */}
+        <View className="flex-row items-center gap-2 px-0.5">
+          <CalendarRange size={14} color={PARADE_GREEN} strokeWidth={2} />
+          <Text className="font-sans text-[13px] text-muted-foreground">
+            {freeWeekendCount} of {weekendDays.length} weekend days free over the next {range.label}
           </Text>
         </View>
 
-        {/* Path 1 — preview + omni-channel link share */}
-        <View className="gap-3">
-          {/* Preview: opens the exact page the recipient sees */}
-          <Pressable
-            onPress={handlePreview}
-            disabled={!shareUrl}
-            className={`flex-row items-center gap-3 rounded-xl border-2 border-dashed px-3 py-2.5 active:opacity-70 ${
-              shareUrl ? 'border-primary/30 bg-primary/5' : 'border-border/30 bg-muted/40'
-            }`}
-          >
-            <View
-              className="w-9 h-9 rounded-full items-center justify-center"
-              style={{ backgroundColor: TINT.primarySubtle }}
-            >
-              <Eye size={16} color={PARADE_GREEN} strokeWidth={2} />
-            </View>
-            <View className="flex-1">
-              <Text className="font-sans text-sm font-semibold text-foreground">Preview</Text>
-              <Text className="font-sans text-xs text-muted-foreground">
-                See exactly what friends will see
-              </Text>
-            </View>
-          </Pressable>
+        {/* Prominent share card — the link + channels are the focus */}
+        <View className="bg-card rounded-2xl border border-border/30 p-4 gap-4 shadow-sm">
+          <View className="gap-0.5">
+            <Text className="font-display text-lg text-foreground">Send your link</Text>
+            <Text className="font-sans text-[13px] text-muted-foreground leading-relaxed">
+              Anyone with the link sees when you're free — busy slots stay private.
+            </Text>
+          </View>
 
           {/* Channel grid (matches PWA UnifiedShareSheet) */}
           <ShareChannelGrid
@@ -303,6 +252,20 @@ export default function ShareAvailabilityScreen() {
             emailSubject={emailSubject}
             title="My availability"
           />
+
+          {/* Preview: opens the exact page the recipient sees */}
+          <Pressable
+            onPress={handlePreview}
+            disabled={!shareUrl}
+            className={`flex-row items-center justify-center gap-2 rounded-xl border py-2.5 active:opacity-70 ${
+              shareUrl ? 'border-primary/30 bg-primary/5' : 'border-border/30 bg-muted/40'
+            }`}
+          >
+            <Eye size={15} color={PARADE_GREEN} strokeWidth={2} />
+            <Text className="font-sans text-sm font-semibold text-primary">
+              Preview what friends see
+            </Text>
+          </Pressable>
         </View>
 
         {/* Path 2 — direct to friends on Parade */}

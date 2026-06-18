@@ -126,7 +126,7 @@ export default function WhatPlanningScreen() {
           />
           <PathButton
             icon={<Plane size={18} color={GREEN} strokeWidth={2} />}
-            title="Go somewhere"
+            title="Visit somewhere"
             onPress={() => go('/(app)/go-somewhere')}
           />
 
