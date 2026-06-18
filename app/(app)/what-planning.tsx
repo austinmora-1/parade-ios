@@ -93,11 +93,11 @@ export default function WhatPlanningScreen() {
         onPress={close}
       />
 
-      {/* Floating menu, popping up from the bottom-nav FAB */}
+      {/* Floating menu, popping up from the bottom-left nav FAB */}
       <View
         pointerEvents="box-none"
         style={{ paddingBottom: tabBarHeight + 28 }}
-        className="flex-1 items-center justify-end px-3"
+        className="flex-1 items-start justify-end px-4"
       >
         <View
           className="rounded-3xl p-2 w-[280px]"
