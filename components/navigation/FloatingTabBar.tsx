@@ -37,8 +37,8 @@ const DARK = {
 const BAR_HEIGHT = 52;
 const SIDE_MARGIN = 20;
 const INNER_PADDING = 6;
-const FAB_SIZE = 40;
-const FAB_SLOT_WIDTH = 50; // left slot reserved for the create FAB
+const FAB_SIZE = 52; // standalone create button beside the nav bar
+const FAB_GAP = 12; // space between the FAB and the nav pill
 const BOTTOM_GAP = 12; // fallback bottom inset when the device has no home indicator
 const CONTENT_GAP = 10; // breathing room between scrolled content and the bar
 const SPRING = { damping: 18, stiffness: 200, mass: 0.6 };
@@ -59,17 +59,15 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
   const { colorScheme } = useColorScheme();
   const c = colorScheme === 'dark' ? DARK : LIGHT;
 
-  // Measured inner width of the bar (set once on layout), used to size + slide
-  // the pill. The 4 route tabs share the width *after* the left FAB slot.
+  // Measured inner width of the bar (set once on layout), used to size + slide the pill.
   const [innerWidth, setInnerWidth] = useState(0);
   const tabCount = state.routes.length;
-  const tabAreaWidth = innerWidth > FAB_SLOT_WIDTH ? innerWidth - FAB_SLOT_WIDTH : 0;
-  const tabWidth = tabAreaWidth > 0 ? tabAreaWidth / tabCount : 0;
+  const tabWidth = innerWidth > 0 ? innerWidth / tabCount : 0;
 
   const pillStyle = useAnimatedStyle(() => ({
     width: tabWidth,
     opacity: tabWidth > 0 ? withTiming(1, { duration: 120 }) : 0,
-    transform: [{ translateX: withSpring(FAB_SLOT_WIDTH + state.index * tabWidth, SPRING) }],
+    transform: [{ translateX: withSpring(state.index * tabWidth, SPRING) }],
   }));
 
   const bottomInset = insets.bottom > 0 ? insets.bottom : BOTTOM_GAP;
@@ -79,6 +77,17 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
       pointerEvents="box-none"
       style={[styles.wrapper, { paddingBottom: bottomInset }]}
     >
+      {/* Standalone create FAB — floats beside the nav pill */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Create"
+        onPress={() => router.push('/(app)/what-planning')}
+        hitSlop={8}
+        style={[styles.fab, { backgroundColor: c.active, shadowColor: c.active }]}
+      >
+        <Plus size={26} color="#FFFFFF" strokeWidth={2.5} />
+      </Pressable>
+
       <View
         style={[
           styles.bar,
@@ -89,22 +98,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
           style={styles.inner}
           onLayout={(e) => setInnerWidth(e.nativeEvent.layout.width)}
         >
-          {/* Left create FAB — opens the "What are you planning?" dropdown */}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Create"
-            onPress={() => router.push('/(app)/what-planning')}
-            hitSlop={8}
-            style={styles.fabSlot}
-          >
-            <View
-              style={[styles.fabCircle, { backgroundColor: c.active, shadowColor: c.active }]}
-            >
-              <Plus size={22} color="#FFFFFF" strokeWidth={2.5} />
-            </View>
-          </Pressable>
-
-          {/* Sliding highlight pill (offset past the FAB slot) */}
+          {/* Sliding highlight pill */}
           <Animated.View
             pointerEvents="none"
             style={[styles.pill, { backgroundColor: c.pill }, pillStyle]}
@@ -186,20 +180,34 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+    flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: SIDE_MARGIN,
+    gap: FAB_GAP,
   },
   bar: {
+    flex: 1,
     height: BAR_HEIGHT,
-    marginHorizontal: SIDE_MARGIN,
     paddingHorizontal: INNER_PADDING,
     borderRadius: BAR_HEIGHT / 2,
     borderWidth: StyleSheet.hairlineWidth,
     justifyContent: 'center',
-    alignSelf: 'stretch',
     // Floating drop shadow
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.18,
     shadowRadius: 16,
+    elevation: 12,
+  },
+  fab: {
+    width: FAB_SIZE,
+    height: FAB_SIZE,
+    borderRadius: FAB_SIZE / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // Floating drop shadow (tinted to the button color)
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
     elevation: 12,
   },
   inner: {
@@ -219,22 +227,5 @@ const styles = StyleSheet.create({
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  fabSlot: {
-    width: FAB_SLOT_WIDTH,
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  fabCircle: {
-    width: FAB_SIZE,
-    height: FAB_SIZE,
-    borderRadius: FAB_SIZE / 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
-    shadowRadius: 5,
-    elevation: 6,
   },
 });
