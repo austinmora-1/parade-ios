@@ -22,12 +22,12 @@ CREATE TABLE public.availability (
   id uuid DEFAULT gen_random_uuid() NOT NULL,
   user_id uuid NOT NULL,
   date date NOT NULL,
-  early_morning boolean DEFAULT true,
-  late_morning boolean DEFAULT true,
-  early_afternoon boolean DEFAULT true,
-  late_afternoon boolean DEFAULT true,
-  evening boolean DEFAULT true,
-  late_night boolean DEFAULT true,
+  early_morning boolean,
+  late_morning boolean,
+  early_afternoon boolean,
+  late_afternoon boolean,
+  evening boolean,
+  late_night boolean,
   created_at timestamp with time zone DEFAULT now() NOT NULL,
   updated_at timestamp with time zone DEFAULT now() NOT NULL,
   location_status text DEFAULT 'home'::text,
@@ -141,6 +141,19 @@ CREATE TABLE public.message_reactions (
   message_id uuid NOT NULL,
   user_id uuid NOT NULL,
   emoji text NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public.notifications (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  user_id uuid NOT NULL,
+  actor_id uuid,
+  type text DEFAULT 'general'::text NOT NULL,
+  title text NOT NULL,
+  body text,
+  url text,
+  data jsonb,
+  read boolean DEFAULT false NOT NULL,
   created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
@@ -613,6 +626,7 @@ ALTER TABLE public.hang_request_emails ADD CONSTRAINT hang_request_emails_pkey P
 ALTER TABLE public.hang_requests ADD CONSTRAINT hang_requests_pkey PRIMARY KEY (id);
 ALTER TABLE public.last_hung_out_cache ADD CONSTRAINT last_hung_out_cache_pkey PRIMARY KEY (user_id, friend_user_id);
 ALTER TABLE public.message_reactions ADD CONSTRAINT message_reactions_pkey PRIMARY KEY (id);
+ALTER TABLE public.notifications ADD CONSTRAINT notifications_pkey PRIMARY KEY (id);
 ALTER TABLE public.open_invite_responses ADD CONSTRAINT open_invite_responses_pkey PRIMARY KEY (id);
 ALTER TABLE public.open_invites ADD CONSTRAINT open_invites_pkey PRIMARY KEY (id);
 ALTER TABLE public.plan_change_requests ADD CONSTRAINT plan_change_requests_pkey PRIMARY KEY (id);
@@ -689,6 +703,8 @@ ALTER TABLE public.chat_messages ADD CONSTRAINT chat_messages_reply_to_id_fkey F
 ALTER TABLE public.conversation_participants ADD CONSTRAINT conversation_participants_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE;
 ALTER TABLE public.hang_request_emails ADD CONSTRAINT hang_request_emails_hang_request_id_fkey FOREIGN KEY (hang_request_id) REFERENCES hang_requests(id) ON DELETE CASCADE;
 ALTER TABLE public.message_reactions ADD CONSTRAINT message_reactions_message_id_fkey FOREIGN KEY (message_id) REFERENCES chat_messages(id) ON DELETE CASCADE;
+ALTER TABLE public.notifications ADD CONSTRAINT notifications_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES auth.users(id) ON DELETE SET NULL;
+ALTER TABLE public.notifications ADD CONSTRAINT notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 ALTER TABLE public.open_invite_responses ADD CONSTRAINT open_invite_responses_open_invite_id_fkey FOREIGN KEY (open_invite_id) REFERENCES open_invites(id) ON DELETE CASCADE;
 ALTER TABLE public.open_invites ADD CONSTRAINT open_invites_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES plans(id) ON DELETE CASCADE;
 ALTER TABLE public.open_invites ADD CONSTRAINT open_invites_trip_id_fkey FOREIGN KEY (trip_id) REFERENCES trips(id) ON DELETE CASCADE;
@@ -740,6 +756,7 @@ CREATE INDEX idx_hang_requests_share_code ON public.hang_requests USING btree (s
 CREATE INDEX idx_hang_requests_user_id_status ON public.hang_requests USING btree (user_id, status);
 CREATE INDEX idx_hang_requests_user_pending ON public.hang_requests USING btree (user_id) WHERE (status = 'pending'::text);
 CREATE INDEX idx_message_reactions_message_id ON public.message_reactions USING btree (message_id);
+CREATE INDEX notifications_user_created_idx ON public.notifications USING btree (user_id, created_at DESC);
 CREATE INDEX idx_open_invite_responses_invite ON public.open_invite_responses USING btree (open_invite_id);
 CREATE INDEX idx_open_invite_responses_user ON public.open_invite_responses USING btree (user_id);
 CREATE INDEX idx_open_invites_audience ON public.open_invites USING btree (audience_type, audience_ref);
@@ -860,6 +877,16 @@ CREATE OR REPLACE VIEW public.public_profiles AS
   WHERE discoverable = true;
 
 -- ============================================================
+-- Materialized views
+CREATE MATERIALIZED VIEW public.profile_cache AS
+ SELECT user_id,
+    display_name,
+    avatar_url,
+    home_address,
+    timezone
+   FROM profiles;
+
+-- ============================================================
 -- Functions
 CREATE OR REPLACE FUNCTION public.accept_friend_request(p_friendship_id uuid, p_requester_user_id uuid)
  RETURNS void
@@ -882,6 +909,7 @@ BEGIN
     SELECT 1 FROM friendships
     WHERE id = p_friendship_id
       AND friend_user_id = v_accepter_id
+      AND user_id = p_requester_user_id
       AND status = 'pending'
   ) THEN
     RAISE EXCEPTION 'Friend request not found or not pending';
@@ -1762,113 +1790,10 @@ AS $function$
   LEFT JOIN trip_people pa ON pa.trip_id = a.id
   LEFT JOIN trip_people pb ON pb.trip_id = b.id
   WHERE a.user_id = p_user_id
+    AND (p_user_id = (SELECT auth.uid()) OR coalesce(current_setting('request.jwt.claims', true)::json ->> 'role', '') = 'service_role')
     AND a.end_date >= CURRENT_DATE
     AND b.end_date >= CURRENT_DATE
   ORDER BY a.start_date;
-$function$
-;
-
-CREATE OR REPLACE FUNCTION public.get_dashboard_data(p_user_id uuid)
- RETURNS json
- LANGUAGE plpgsql
- STABLE SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
-DECLARE
-  v_avail_start date := (CURRENT_DATE - interval '7 days')::date;
-  v_avail_end   date := (CURRENT_DATE + interval '35 days')::date;
-  v_plan_start  date := (CURRENT_DATE - interval '14 days')::date;
-  v_result      json;
-BEGIN
-  WITH
-  own_plans AS (
-    SELECT p.id, p.user_id, p.title, p.activity, p.date, p.time_slot,
-      p.duration, p.start_time, p.end_time, p.location, p.notes,
-      p.status, p.feed_visibility, p.source, p.source_timezone,
-      p.end_date, p.recurring_plan_id, p.created_at
-    FROM public.plans p WHERE p.user_id = p_user_id AND p.date >= v_plan_start ORDER BY p.date ASC LIMIT 200
-  ),
-  participated_plan_ids AS (
-    SELECT pp.plan_id FROM public.plan_participants pp WHERE pp.friend_id = p_user_id
-  ),
-  participated_plans AS (
-    SELECT p.id, p.user_id, p.title, p.activity, p.date, p.time_slot,
-      p.duration, p.start_time, p.end_time, p.location, p.notes,
-      p.status, p.feed_visibility, p.source, p.source_timezone,
-      p.end_date, p.recurring_plan_id, p.created_at
-    FROM public.plans p INNER JOIN participated_plan_ids pid ON pid.plan_id = p.id
-    WHERE p.user_id <> p_user_id AND p.date >= v_plan_start ORDER BY p.date ASC LIMIT 200
-  ),
-  all_plan_ids AS (
-    SELECT id FROM own_plans UNION SELECT id FROM participated_plans
-  ),
-  plan_participants_data AS (
-    SELECT pp.plan_id, pp.friend_id, pp.status, pp.role, pp.responded_at
-    FROM public.plan_participants pp WHERE pp.plan_id IN (SELECT id FROM all_plan_ids)
-  ),
-  participant_user_ids AS (
-    SELECT DISTINCT pp.friend_id AS uid FROM plan_participants_data pp
-    UNION SELECT DISTINCT pp2.user_id AS uid FROM participated_plans pp2
-  ),
-  participant_profiles AS (
-    SELECT pr.user_id, pr.display_name, pr.avatar_url
-    FROM public.profile_cache pr
-    WHERE pr.user_id IN (SELECT uid FROM participant_user_ids) AND pr.user_id <> p_user_id
-  ),
-  outgoing_friendships AS (
-    SELECT f.id, f.user_id, f.friend_user_id, f.friend_name, f.friend_email,
-      f.status, f.is_pod_member, f.created_at, f.updated_at
-    FROM public.friendships f WHERE f.user_id = p_user_id
-  ),
-  outgoing_friend_user_ids AS (
-    SELECT DISTINCT f.friend_user_id AS uid FROM outgoing_friendships f WHERE f.friend_user_id IS NOT NULL
-  ),
-  outgoing_friend_profiles AS (
-    SELECT pr.user_id, pr.avatar_url FROM public.profile_cache pr
-    WHERE pr.user_id IN (SELECT uid FROM outgoing_friend_user_ids)
-  ),
-  incoming_friendships AS (
-    SELECT f.id, f.user_id, f.friend_user_id, f.friend_name, f.status, f.created_at, f.updated_at
-    FROM public.friendships f WHERE f.friend_user_id = p_user_id
-  ),
-  incoming_friend_user_ids AS (
-    SELECT DISTINCT f.user_id AS uid FROM incoming_friendships f
-  ),
-  incoming_friend_profiles AS (
-    SELECT pr.user_id, pr.display_name, pr.avatar_url FROM public.profile_cache pr
-    WHERE pr.user_id IN (SELECT uid FROM incoming_friend_user_ids)
-  ),
-  avail_data AS (
-    SELECT a.date, a.early_morning, a.late_morning, a.early_afternoon,
-      a.late_afternoon, a.evening, a.late_night,
-      a.location_status, a.trip_location, a.vibe,
-      a.slot_location_early_morning, a.slot_location_late_morning,
-      a.slot_location_early_afternoon, a.slot_location_late_afternoon,
-      a.slot_location_evening, a.slot_location_late_night
-    FROM public.availability a
-    WHERE a.user_id = p_user_id AND a.date >= v_avail_start AND a.date <= v_avail_end
-  ),
-  caller_profile AS (
-    SELECT pr.current_vibe, pr.location_status, pr.custom_vibe_tags,
-      pr.vibe_gif_url, pr.default_work_days, pr.default_work_start_hour,
-      pr.default_work_end_hour, pr.default_availability_status,
-      pr.default_vibes, pr.home_address, pr.timezone
-    FROM public.profiles pr WHERE pr.user_id = p_user_id
-  )
-  SELECT json_build_object(
-    'own_plans',               COALESCE((SELECT json_agg(row_to_json(op)) FROM own_plans op), '[]'::json),
-    'participated_plans',      COALESCE((SELECT json_agg(row_to_json(pp)) FROM participated_plans pp), '[]'::json),
-    'plan_participants',       COALESCE((SELECT json_agg(row_to_json(pd)) FROM plan_participants_data pd), '[]'::json),
-    'participant_profiles',    COALESCE((SELECT json_agg(row_to_json(prof)) FROM participant_profiles prof), '[]'::json),
-    'outgoing_friendships',    COALESCE((SELECT json_agg(row_to_json(of2)) FROM outgoing_friendships of2), '[]'::json),
-    'outgoing_friend_profiles',COALESCE((SELECT json_agg(row_to_json(ofp)) FROM outgoing_friend_profiles ofp), '[]'::json),
-    'incoming_friendships',    COALESCE((SELECT json_agg(row_to_json(inf)) FROM incoming_friendships inf), '[]'::json),
-    'incoming_friend_profiles',COALESCE((SELECT json_agg(row_to_json(ifp)) FROM incoming_friend_profiles ifp), '[]'::json),
-    'availability',            COALESCE((SELECT json_agg(row_to_json(av)) FROM avail_data av), '[]'::json),
-    'profile',                 (SELECT row_to_json(cp) FROM caller_profile cp)
-  ) INTO v_result;
-  RETURN v_result;
-END;
 $function$
 ;
 
@@ -1885,6 +1810,10 @@ DECLARE
   v_plan_limit  int := 200;
   v_result      json;
 BEGIN
+  IF p_user_id IS DISTINCT FROM (SELECT auth.uid())
+     AND coalesce(current_setting('request.jwt.claims', true)::json ->> 'role', '') <> 'service_role' THEN
+    RAISE EXCEPTION 'forbidden: callers may only access their own data' USING ERRCODE = '42501';
+  END IF;
   WITH
   own_plans AS (
     SELECT p.id, p.user_id, p.title, p.activity, p.date, p.time_slot,
@@ -1998,6 +1927,114 @@ END;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.get_dashboard_data(p_user_id uuid)
+ RETURNS json
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_avail_start date := (CURRENT_DATE - interval '7 days')::date;
+  v_avail_end   date := (CURRENT_DATE + interval '35 days')::date;
+  v_plan_start  date := (CURRENT_DATE - interval '14 days')::date;
+  v_result      json;
+BEGIN
+  IF p_user_id IS DISTINCT FROM (SELECT auth.uid())
+     AND coalesce(current_setting('request.jwt.claims', true)::json ->> 'role', '') <> 'service_role' THEN
+    RAISE EXCEPTION 'forbidden: callers may only access their own data' USING ERRCODE = '42501';
+  END IF;
+  WITH
+  own_plans AS (
+    SELECT p.id, p.user_id, p.title, p.activity, p.date, p.time_slot,
+      p.duration, p.start_time, p.end_time, p.location, p.notes,
+      p.status, p.feed_visibility, p.source, p.source_timezone,
+      p.end_date, p.recurring_plan_id, p.created_at
+    FROM public.plans p WHERE p.user_id = p_user_id AND p.date >= v_plan_start ORDER BY p.date ASC LIMIT 200
+  ),
+  participated_plan_ids AS (
+    SELECT pp.plan_id FROM public.plan_participants pp WHERE pp.friend_id = p_user_id
+  ),
+  participated_plans AS (
+    SELECT p.id, p.user_id, p.title, p.activity, p.date, p.time_slot,
+      p.duration, p.start_time, p.end_time, p.location, p.notes,
+      p.status, p.feed_visibility, p.source, p.source_timezone,
+      p.end_date, p.recurring_plan_id, p.created_at
+    FROM public.plans p INNER JOIN participated_plan_ids pid ON pid.plan_id = p.id
+    WHERE p.user_id <> p_user_id AND p.date >= v_plan_start ORDER BY p.date ASC LIMIT 200
+  ),
+  all_plan_ids AS (
+    SELECT id FROM own_plans UNION SELECT id FROM participated_plans
+  ),
+  plan_participants_data AS (
+    SELECT pp.plan_id, pp.friend_id, pp.status, pp.role, pp.responded_at
+    FROM public.plan_participants pp WHERE pp.plan_id IN (SELECT id FROM all_plan_ids)
+  ),
+  participant_user_ids AS (
+    SELECT DISTINCT pp.friend_id AS uid FROM plan_participants_data pp
+    UNION SELECT DISTINCT pp2.user_id AS uid FROM participated_plans pp2
+  ),
+  participant_profiles AS (
+    SELECT pr.user_id, pr.display_name, pr.avatar_url
+    FROM public.profile_cache pr
+    WHERE pr.user_id IN (SELECT uid FROM participant_user_ids) AND pr.user_id <> p_user_id
+  ),
+  outgoing_friendships AS (
+    SELECT f.id, f.user_id, f.friend_user_id, f.friend_name, f.friend_email,
+      f.status, f.is_pod_member, f.created_at, f.updated_at
+    FROM public.friendships f WHERE f.user_id = p_user_id
+  ),
+  outgoing_friend_user_ids AS (
+    SELECT DISTINCT f.friend_user_id AS uid FROM outgoing_friendships f WHERE f.friend_user_id IS NOT NULL
+  ),
+  outgoing_friend_profiles AS (
+    SELECT pr.user_id, pr.avatar_url FROM public.profile_cache pr
+    WHERE pr.user_id IN (SELECT uid FROM outgoing_friend_user_ids)
+  ),
+  incoming_friendships AS (
+    SELECT f.id, f.user_id, f.friend_user_id, f.friend_name, f.status, f.created_at, f.updated_at
+    FROM public.friendships f WHERE f.friend_user_id = p_user_id
+  ),
+  incoming_friend_user_ids AS (
+    SELECT DISTINCT f.user_id AS uid FROM incoming_friendships f
+  ),
+  incoming_friend_profiles AS (
+    SELECT pr.user_id, pr.display_name, pr.avatar_url FROM public.profile_cache pr
+    WHERE pr.user_id IN (SELECT uid FROM incoming_friend_user_ids)
+  ),
+  avail_data AS (
+    SELECT a.date, a.early_morning, a.late_morning, a.early_afternoon,
+      a.late_afternoon, a.evening, a.late_night,
+      a.location_status, a.trip_location, a.vibe,
+      a.slot_location_early_morning, a.slot_location_late_morning,
+      a.slot_location_early_afternoon, a.slot_location_late_afternoon,
+      a.slot_location_evening, a.slot_location_late_night
+    FROM public.availability a
+    WHERE a.user_id = p_user_id AND a.date >= v_avail_start AND a.date <= v_avail_end
+  ),
+  caller_profile AS (
+    SELECT pr.current_vibe, pr.location_status, pr.custom_vibe_tags,
+      pr.vibe_gif_url, pr.default_work_days, pr.default_work_start_hour,
+      pr.default_work_end_hour, pr.default_availability_status,
+      pr.default_vibes, pr.home_address, pr.timezone
+    FROM public.profiles pr WHERE pr.user_id = p_user_id
+  )
+  SELECT json_build_object(
+    'own_plans',               COALESCE((SELECT json_agg(row_to_json(op)) FROM own_plans op), '[]'::json),
+    'participated_plans',      COALESCE((SELECT json_agg(row_to_json(pp)) FROM participated_plans pp), '[]'::json),
+    'plan_participants',       COALESCE((SELECT json_agg(row_to_json(pd)) FROM plan_participants_data pd), '[]'::json),
+    'participant_profiles',    COALESCE((SELECT json_agg(row_to_json(prof)) FROM participant_profiles prof), '[]'::json),
+    'outgoing_friendships',    COALESCE((SELECT json_agg(row_to_json(of2)) FROM outgoing_friendships of2), '[]'::json),
+    'outgoing_friend_profiles',COALESCE((SELECT json_agg(row_to_json(ofp)) FROM outgoing_friend_profiles ofp), '[]'::json),
+    'incoming_friendships',    COALESCE((SELECT json_agg(row_to_json(inf)) FROM incoming_friendships inf), '[]'::json),
+    'incoming_friend_profiles',COALESCE((SELECT json_agg(row_to_json(ifp)) FROM incoming_friend_profiles ifp), '[]'::json),
+    'availability',            COALESCE((SELECT json_agg(row_to_json(av)) FROM avail_data av), '[]'::json),
+    'profile',                 (SELECT row_to_json(cp) FROM caller_profile cp)
+  ) INTO v_result;
+  RETURN v_result;
+END;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.get_display_names_for_users(p_user_ids uuid[])
  RETURNS TABLE(user_id uuid, display_name text, avatar_url text, first_name text, last_name text)
  LANGUAGE sql
@@ -2006,7 +2043,8 @@ CREATE OR REPLACE FUNCTION public.get_display_names_for_users(p_user_ids uuid[])
 AS $function$
   SELECT p.user_id, p.display_name, p.avatar_url, p.first_name, p.last_name
   FROM profiles p
-  WHERE p.user_id = ANY(p_user_ids);
+  WHERE p.user_id = ANY(p_user_ids)
+    AND ((SELECT auth.uid()) IS NOT NULL OR coalesce(current_setting('request.jwt.claims', true)::json ->> 'role', '') = 'service_role');
 $function$
 ;
 
@@ -2019,6 +2057,10 @@ AS $function$
 DECLARE
   result json;
 BEGIN
+  IF p_user_id IS DISTINCT FROM (SELECT auth.uid())
+     AND coalesce(current_setting('request.jwt.claims', true)::json ->> 'role', '') <> 'service_role' THEN
+    RAISE EXCEPTION 'forbidden: callers may only access their own data' USING ERRCODE = '42501';
+  END IF;
   WITH connected_friends AS (
     SELECT friend_user_id
     FROM friendships
@@ -2369,6 +2411,10 @@ CREATE OR REPLACE FUNCTION public.merge_overlapping_trips(p_user_id uuid)
  SET search_path TO 'public'
 AS $function$
 BEGIN
+  IF p_user_id IS DISTINCT FROM (SELECT auth.uid())
+     AND coalesce(current_setting('request.jwt.claims', true)::json ->> 'role', '') <> 'service_role' THEN
+    RAISE EXCEPTION 'forbidden: callers may only access their own data' USING ERRCODE = '42501';
+  END IF;
   -- Auto-merge disabled: deletions must go through the conflict dialog so the
   -- user can choose which trip to keep. See get_conflicting_trips().
   RETURN 0;
@@ -2904,7 +2950,7 @@ CREATE OR REPLACE FUNCTION public.user_conversation_ids(p_user_id uuid)
  STABLE SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-  SELECT conversation_id FROM public.conversation_participants WHERE user_id = p_user_id;
+  SELECT conversation_id FROM public.conversation_participants WHERE user_id = p_user_id AND p_user_id = (SELECT auth.uid());
 $function$
 ;
 
@@ -2914,7 +2960,7 @@ CREATE OR REPLACE FUNCTION public.user_participated_plan_ids(p_user_id uuid)
  STABLE SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-  SELECT plan_id FROM public.plan_participants WHERE friend_id = p_user_id;
+  SELECT plan_id FROM public.plan_participants WHERE friend_id = p_user_id AND p_user_id = (SELECT auth.uid());
 $function$
 ;
 
@@ -2988,6 +3034,7 @@ ALTER TABLE public.hang_request_emails ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.hang_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.last_hung_out_cache ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.message_reactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.open_invite_responses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.open_invites ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.plan_change_requests ENABLE ROW LEVEL SECURITY;
@@ -3075,6 +3122,12 @@ CREATE POLICY "Users can remove their own reactions" ON public.message_reactions
 CREATE POLICY "Users can view reactions in their conversations" ON public.message_reactions FOR SELECT TO public USING ((EXISTS ( SELECT 1
    FROM chat_messages cm
   WHERE ((cm.id = message_reactions.message_id) AND (cm.conversation_id IN ( SELECT user_conversation_ids(( SELECT auth.uid() AS uid)) AS user_conversation_ids))))));
+CREATE POLICY "Connected friends can insert notifications" ON public.notifications FOR INSERT TO public WITH CHECK (((( SELECT auth.uid() AS uid) = actor_id) AND (EXISTS ( SELECT 1
+   FROM friendships f
+  WHERE ((f.status = 'connected'::text) AND (((f.user_id = ( SELECT auth.uid() AS uid)) AND (f.friend_user_id = notifications.user_id)) OR ((f.user_id = notifications.user_id) AND (f.friend_user_id = ( SELECT auth.uid() AS uid)))))))));
+CREATE POLICY "Users can delete own notifications" ON public.notifications FOR DELETE TO public USING ((( SELECT auth.uid() AS uid) = user_id));
+CREATE POLICY "Users can update own notifications" ON public.notifications FOR UPDATE TO public USING ((( SELECT auth.uid() AS uid) = user_id));
+CREATE POLICY "Users can view own notifications" ON public.notifications FOR SELECT TO public USING ((( SELECT auth.uid() AS uid) = user_id));
 CREATE POLICY "Invite owners can view all responses" ON public.open_invite_responses FOR SELECT TO authenticated USING ((EXISTS ( SELECT 1
    FROM open_invites
   WHERE ((open_invites.id = open_invite_responses.open_invite_id) AND (open_invites.user_id = ( SELECT auth.uid() AS uid))))));
@@ -3337,3 +3390,105 @@ CREATE POLICY "Users can create their own intentions" ON public.weekly_intention
 CREATE POLICY "Users can delete their own intentions" ON public.weekly_intentions FOR DELETE TO public USING ((( SELECT auth.uid() AS uid) = user_id));
 CREATE POLICY "Users can update their own intentions" ON public.weekly_intentions FOR UPDATE TO public USING ((( SELECT auth.uid() AS uid) = user_id));
 CREATE POLICY "Users can view their own intentions" ON public.weekly_intentions FOR SELECT TO public USING ((( SELECT auth.uid() AS uid) = user_id));
+
+-- ============================================================
+-- Function EXECUTE grants (anon / authenticated — the client attack surface)
+GRANT EXECUTE ON FUNCTION public.accept_friend_request(p_friendship_id uuid, p_requester_user_id uuid) TO anon;
+GRANT EXECUTE ON FUNCTION public.accept_friend_request(p_friendship_id uuid, p_requester_user_id uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.accept_plan_invite(p_token text) TO anon;
+GRANT EXECUTE ON FUNCTION public.accept_plan_invite(p_token text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.accept_trip_invite(p_token text) TO anon;
+GRANT EXECUTE ON FUNCTION public.accept_trip_invite(p_token text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.approve_participant_request(p_request_id uuid) TO anon;
+GRANT EXECUTE ON FUNCTION public.approve_participant_request(p_request_id uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.auto_create_trip_from_availability() TO anon;
+GRANT EXECUTE ON FUNCTION public.auto_create_trip_from_availability() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.backfill_availability_for_all_users(_days_ahead integer) TO anon;
+GRANT EXECUTE ON FUNCTION public.backfill_availability_for_all_users(_days_ahead integer) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.backfill_availability_for_user(_user_id uuid, _days_ahead integer) TO anon;
+GRANT EXECUTE ON FUNCTION public.backfill_availability_for_user(_user_id uuid, _days_ahead integer) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.check_and_apply_plan_change() TO anon;
+GRANT EXECUTE ON FUNCTION public.check_and_apply_plan_change() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.check_phone_available(p_phone text) TO anon;
+GRANT EXECUTE ON FUNCTION public.check_phone_available(p_phone text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.check_username_available(p_username text) TO anon;
+GRANT EXECUTE ON FUNCTION public.check_username_available(p_username text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.check_vibe_recipient(p_vibe_send_id uuid) TO anon;
+GRANT EXECUTE ON FUNCTION public.check_vibe_recipient(p_vibe_send_id uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.check_vibe_sender(p_vibe_send_id uuid) TO anon;
+GRANT EXECUTE ON FUNCTION public.check_vibe_sender(p_vibe_send_id uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.convert_open_invite_to_plan() TO anon;
+GRANT EXECUTE ON FUNCTION public.convert_open_invite_to_plan() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.create_plans_on_hang_accepted() TO anon;
+GRANT EXECUTE ON FUNCTION public.create_plans_on_hang_accepted() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.decrypt_calendar_token(encrypted_token bytea, p_key_id uuid) TO anon;
+GRANT EXECUTE ON FUNCTION public.decrypt_calendar_token(encrypted_token bytea, p_key_id uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.encrypt_calendar_token(token text, p_key_id uuid) TO anon;
+GRANT EXECUTE ON FUNCTION public.encrypt_calendar_token(token text, p_key_id uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.enforce_plan_participant_update() TO anon;
+GRANT EXECUTE ON FUNCTION public.enforce_plan_participant_update() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.generate_share_code(length integer) TO anon;
+GRANT EXECUTE ON FUNCTION public.generate_share_code(length integer) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_availability_by_share_code(p_share_code text, p_start_date date, p_end_date date) TO anon;
+GRANT EXECUTE ON FUNCTION public.get_availability_by_share_code(p_share_code text, p_start_date date, p_end_date date) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_conflicting_trips(p_user_id uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_dashboard_data(p_user_id uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_dashboard_data(p_user_id uuid, p_plan_cursor timestamp with time zone) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_display_names_for_users(p_user_ids uuid[]) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_feed_plans(p_user_id uuid, p_limit integer) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_plan_invite_details(p_token text) TO anon;
+GRANT EXECUTE ON FUNCTION public.get_plan_invite_details(p_token text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_plans_by_share_code(p_share_code text, p_start_date timestamp with time zone, p_end_date timestamp with time zone) TO anon;
+GRANT EXECUTE ON FUNCTION public.get_plans_by_share_code(p_share_code text, p_start_date timestamp with time zone, p_end_date timestamp with time zone) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_profile_by_share_code(p_share_code text) TO anon;
+GRANT EXECUTE ON FUNCTION public.get_profile_by_share_code(p_share_code text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_trip_invite_details(p_token text) TO anon;
+GRANT EXECUTE ON FUNCTION public.get_trip_invite_details(p_token text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_vibe_recipient_names(p_vibe_send_id uuid) TO anon;
+GRANT EXECUTE ON FUNCTION public.get_vibe_recipient_names(p_vibe_send_id uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.handle_new_user() TO anon;
+GRANT EXECUTE ON FUNCTION public.handle_new_user() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_trip_proposal_participant(p_proposal_id uuid) TO anon;
+GRANT EXECUTE ON FUNCTION public.is_trip_proposal_participant(p_proposal_id uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.link_invited_friends_on_signup() TO anon;
+GRANT EXECUTE ON FUNCTION public.link_invited_friends_on_signup() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.link_plan_invites_on_signup() TO anon;
+GRANT EXECUTE ON FUNCTION public.link_plan_invites_on_signup() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.merge_overlapping_trips(p_user_id uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.normalize_phone(p_phone text) TO anon;
+GRANT EXECUTE ON FUNCTION public.normalize_phone(p_phone text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.normalize_plan_title_for_dedup(title text) TO anon;
+GRANT EXECUTE ON FUNCTION public.normalize_plan_title_for_dedup(title text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.normalize_trip_city(loc text) TO anon;
+GRANT EXECUTE ON FUNCTION public.normalize_trip_city(loc text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.notify_plan_invite() TO anon;
+GRANT EXECUTE ON FUNCTION public.notify_plan_invite() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.owns_share_code(p_share_code text) TO anon;
+GRANT EXECUTE ON FUNCTION public.owns_share_code(p_share_code text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.remove_friendship(p_friendship_id uuid) TO anon;
+GRANT EXECUTE ON FUNCTION public.remove_friendship(p_friendship_id uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.rsvp_plan_invite_as_guest(p_token text, p_name text) TO anon;
+GRANT EXECUTE ON FUNCTION public.rsvp_plan_invite_as_guest(p_token text, p_name text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.search_profiles(p_query text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.search_users_by_email_prefix(p_query text) TO anon;
+GRANT EXECUTE ON FUNCTION public.search_users_by_email_prefix(p_query text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.search_users_by_phone_prefix(p_query text) TO anon;
+GRANT EXECUTE ON FUNCTION public.search_users_by_phone_prefix(p_query text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.seed_availability_on_profile_create() TO anon;
+GRANT EXECUTE ON FUNCTION public.seed_availability_on_profile_create() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.set_push_tokens_updated_at() TO anon;
+GRANT EXECUTE ON FUNCTION public.set_push_tokens_updated_at() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.sync_availability_location_to_profile() TO anon;
+GRANT EXECUTE ON FUNCTION public.sync_availability_location_to_profile() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.sync_friend_name_on_profile_update() TO anon;
+GRANT EXECUTE ON FUNCTION public.sync_friend_name_on_profile_update() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.update_conversation_on_message() TO anon;
+GRANT EXECUTE ON FUNCTION public.update_conversation_on_message() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.update_updated_at_column() TO anon;
+GRANT EXECUTE ON FUNCTION public.update_updated_at_column() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.user_conversation_ids(p_user_id uuid) TO anon;
+GRANT EXECUTE ON FUNCTION public.user_conversation_ids(p_user_id uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.user_participated_plan_ids(p_user_id uuid) TO anon;
+GRANT EXECUTE ON FUNCTION public.user_participated_plan_ids(p_user_id uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.validate_open_invite_anchor() TO anon;
+GRANT EXECUTE ON FUNCTION public.validate_open_invite_anchor() TO authenticated;
