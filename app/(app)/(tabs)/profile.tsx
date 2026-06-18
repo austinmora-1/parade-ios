@@ -114,44 +114,43 @@ export default function ProfileTab() {
           />
         }
       >
-        {/* ── Top-right action icons ───────────────────────────────────── */}
-        <View className="flex-row items-center justify-end gap-1 px-3 pt-2 pb-1">
-          <Pressable
-            onPress={() => setSchemeOverride(scheme === 'dark' ? 'light' : 'dark')}
-            hitSlop={6}
-            className="w-9 h-9 items-center justify-center rounded-full active:opacity-70"
-          >
-            {scheme === 'dark' ? (
-              <Sun size={20} color={TC.icon} strokeWidth={1.75} />
-            ) : (
-              <Moon size={20} color={TC.icon} strokeWidth={1.75} />
-            )}
-          </Pressable>
-          <Pressable
-            onPress={() => router.push('/(app)/notifications')}
-            hitSlop={6}
-            className="w-9 h-9 items-center justify-center rounded-full active:opacity-70"
-          >
-            <Bell size={20} color={TC.icon} strokeWidth={1.75} />
-          </Pressable>
-          <Pressable
-            onPress={() => router.push('/(app)/settings')}
-            hitSlop={6}
-            className="w-9 h-9 items-center justify-center rounded-full active:opacity-70"
-          >
-            <Settings size={20} color={TC.icon} strokeWidth={1.75} />
-          </Pressable>
-        </View>
-
         {/* ── Hero card ────────────────────────────────────────────────── */}
-        <View className="mx-5 bg-card rounded-2xl border border-border/30 overflow-hidden shadow-sm">
-          {/* Cover banner — gradient-style muted primary */}
+        <View className="mx-5 mt-2 bg-card rounded-2xl border border-border/30 overflow-hidden shadow-sm">
+          {/* Cover banner — gradient-style muted primary, with overlaid actions */}
           <View
             style={{
               height: 96,
               backgroundColor: TINT.primarySubtle,
             }}
-          />
+          >
+            <View className="absolute top-2 right-2 flex-row items-center gap-1.5">
+              <Pressable
+                onPress={() => setSchemeOverride(scheme === 'dark' ? 'light' : 'dark')}
+                hitSlop={6}
+                className="w-9 h-9 items-center justify-center rounded-full bg-card/70 active:opacity-70"
+              >
+                {scheme === 'dark' ? (
+                  <Sun size={18} color={TC.icon} strokeWidth={1.75} />
+                ) : (
+                  <Moon size={18} color={TC.icon} strokeWidth={1.75} />
+                )}
+              </Pressable>
+              <Pressable
+                onPress={() => router.push('/(app)/notifications')}
+                hitSlop={6}
+                className="w-9 h-9 items-center justify-center rounded-full bg-card/70 active:opacity-70"
+              >
+                <Bell size={18} color={TC.icon} strokeWidth={1.75} />
+              </Pressable>
+              <Pressable
+                onPress={() => router.push('/(app)/settings')}
+                hitSlop={6}
+                className="w-9 h-9 items-center justify-center rounded-full bg-card/70 active:opacity-70"
+              >
+                <Settings size={18} color={TC.icon} strokeWidth={1.75} />
+              </Pressable>
+            </View>
+          </View>
 
           {/* Content */}
           <View className="px-4 pb-4">

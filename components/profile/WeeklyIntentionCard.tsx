@@ -49,7 +49,9 @@ export function WeeklyIntentionCard({
   return (
     <Pressable
       onPress={() => router.push('/(app)/edit-intention')}
-      className="bg-card rounded-2xl border border-border/30 px-4 py-3.5 gap-2 shadow-sm active:opacity-80"
+      className={`rounded-2xl border px-4 py-4 gap-2.5 shadow-sm active:opacity-80 ${
+        hasIntention ? 'bg-card border-border/30' : 'bg-primary/5 border-primary/30'
+      }`}
     >
       <View className="flex-row items-center gap-1.5">
         <Sparkles size={12} color="#DFA53A" strokeWidth={2} />
@@ -133,13 +135,17 @@ export function WeeklyIntentionCard({
           )}
         </>
       ) : (
-        <View className="py-2">
-          <Text className="font-display text-base text-foreground">
-            Set an intention for the week
+        <View className="py-1 gap-2">
+          <Text className="font-display text-lg text-foreground">
+            Set your intention
           </Text>
-          <Text className="font-sans text-xs text-muted-foreground mt-1 leading-relaxed">
+          <Text className="font-sans text-[13px] text-muted-foreground leading-relaxed">
             Social energy · target hangouts · vibes. We'll help you track it.
           </Text>
+          <View className="flex-row items-center gap-1.5 self-start bg-primary rounded-full px-3.5 py-2 mt-1">
+            <Sparkles size={13} color="#FFFFFF" strokeWidth={2.5} />
+            <Text className="font-sans text-sm font-semibold text-white">Set intention</Text>
+          </View>
         </View>
       )}
     </Pressable>
