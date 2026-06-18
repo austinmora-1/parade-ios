@@ -31,6 +31,7 @@ import { BungeeShade_400Regular } from '@expo-google-fonts/bungee-shade/400Regul
 import * as Sentry from '@sentry/react-native';
 import { initTelemetry } from '@/integrations/telemetry';
 import { AuthProvider } from '@/hooks/useAuth';
+import { AppErrorBoundary } from '@/components/AppErrorBoundary';
 
 initTelemetry();
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -88,16 +89,18 @@ export default Sentry.wrap(function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <QueryClientProvider client={queryClient}>
-          <AuthProvider>
-            <ActionSheetProvider>
-              <BottomSheetModalProvider>
-                <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-                <Stack screenOptions={{ headerShown: false }} />
-              </BottomSheetModalProvider>
-            </ActionSheetProvider>
-          </AuthProvider>
-        </QueryClientProvider>
+        <AppErrorBoundary>
+          <QueryClientProvider client={queryClient}>
+            <AuthProvider>
+              <ActionSheetProvider>
+                <BottomSheetModalProvider>
+                  <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+                  <Stack screenOptions={{ headerShown: false }} />
+                </BottomSheetModalProvider>
+              </ActionSheetProvider>
+            </AuthProvider>
+          </QueryClientProvider>
+        </AppErrorBoundary>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

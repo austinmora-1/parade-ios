@@ -14,6 +14,7 @@ import type { User, Session } from '@supabase/supabase-js';
 import * as Linking from 'expo-linking';
 import { supabase } from '@/integrations/supabase/client';
 import { syncSessionToAppGroup } from '@/lib/sessionBridge';
+import { captureError, setTelemetryUser, clearTelemetryUser } from '@/integrations/telemetry';
 
 const AUTH_INIT_TIMEOUT_MS = 5_000;
 
@@ -34,6 +35,10 @@ export interface AuthContextValue {
   retryAuth: () => void;
   signIn: (email: string, password: string) => ReturnType<typeof supabase.auth.signInWithPassword>;
   signUp: (email: string, password: string, displayName?: string) => ReturnType<typeof supabase.auth.signUp>;
+  /** Phone-first signup/signin: send an SMS one-time code to an E.164 number. */
+  signInWithPhone: (phone: string) => ReturnType<typeof supabase.auth.signInWithOtp>;
+  /** Verify the SMS code; on success creates/loads the account and session. */
+  verifyPhoneOtp: (phone: string, token: string) => ReturnType<typeof supabase.auth.verifyOtp>;
   signOut: () => Promise<{ error: Error | null }>;
   resetPassword: (email: string) => ReturnType<typeof supabase.auth.resetPasswordForEmail>;
   updatePassword: (newPassword: string) => ReturnType<typeof supabase.auth.updateUser>;
@@ -62,6 +67,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(newSession?.user ?? null);
       setAuthError(null);
       setLoading(false);
+      // Tie crashes/replays to the signed-in user (cleared on sign-out).
+      if (newSession?.user) setTelemetryUser(newSession.user.id);
+      else clearTelemetryUser();
       // Phase B: mirror identity into the App Group for the iMessage extension
       // (fires on INITIAL_SESSION / SIGNED_IN / TOKEN_REFRESHED / SIGNED_OUT).
       void syncSessionToAppGroup(newSession);
@@ -74,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAuthError(null);
       })
       .catch((err) => {
-        console.error('[Auth] init failed:', err);
+        captureError(err, { source: 'auth-init' });
         setAuthError(err?.message || 'Sign-in service took too long to respond.');
       })
       .finally(() => setLoading(false));
@@ -98,6 +106,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           data: displayName ? { display_name: displayName } : undefined,
         },
       }),
+    []
+  );
+
+  /**
+   * Phone-first auth. signInWithOtp({ phone }) both signs up and signs in:
+   * a never-seen number creates the auth.users row on first successful verify
+   * (firing handle_new_user → profiles row), an existing number just logs in.
+   * Supabase enforces auth.users.phone uniqueness, so no pre-check is needed.
+   */
+  const signInWithPhone = useCallback(
+    (phone: string) => supabase.auth.signInWithOtp({ phone }),
+    []
+  );
+
+  const verifyPhoneOtp = useCallback(
+    (phone: string, token: string) =>
+      supabase.auth.verifyOtp({ phone, token, type: 'sms' }),
     []
   );
 
@@ -138,6 +163,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         retryAuth,
         signIn,
         signUp,
+        signInWithPhone,
+        verifyPhoneOtp,
         signOut,
         resetPassword,
         updatePassword,
