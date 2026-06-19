@@ -22,6 +22,7 @@ import { Skeleton } from '@/components/primitives/Skeleton';
 import { formatDisplayName } from '@/lib/utils';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { useFriendDashboardData } from '@/hooks/useFriendDashboardData';
+import { VibeCard } from '@/components/dashboard/VibeCard';
 import { FriendVibeStrip } from '@/components/dashboard/FriendVibeStrip';
 // TEST: "Recommended" section removed from Home — restore this import + <FreeWindowCard /> below to bring it back
 // import { FreeWindowCard } from '@/components/dashboard/FreeWindowCard';
@@ -418,7 +419,9 @@ export default function HomeTab() {
 
         {/* ── Dashboard widgets ────────────────────────────────────────────── */}
         <View className="px-5 gap-8">
-          {/* Today's plans + action-required first */}
+          {/* Your vibe first — sets the tone for the day */}
+          <VibeCard />
+          {/* Today's plans + action-required next */}
           <SmartPrimaryCTA />
           <HangRequestsWidget />
           <OpenInvitesWidget />

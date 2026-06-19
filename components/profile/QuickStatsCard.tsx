@@ -21,30 +21,30 @@ const VIBE_EMOJI: Record<string, string> = {
 };
 
 interface StatTileProps {
-  value:    string;
+  /** Top line — a numeric value or an emoji. */
+  top:      string;
   label:    string;
-  /** Optional emoji shown above the value (for the Vibe tile) */
-  emoji?:   string;
+  /** True when `top` is an emoji (skips the display font). */
+  isEmoji?: boolean;
 }
 
-function StatTile({ value, label, emoji }: StatTileProps) {
+function StatTile({ top, label, isEmoji }: StatTileProps) {
   return (
-    <View className="flex-1 bg-chalk rounded-xl px-3 py-3 items-center">
-      {emoji ? (
-        <Text style={{ fontSize: 22 }}>{emoji}</Text>
-      ) : (
-        <Text
-          className="font-display text-foreground"
-          style={{ fontSize: 22, lineHeight: 26 }}
-        >
-          {value}
-        </Text>
-      )}
+    <View className="flex-1 min-w-0 bg-chalk rounded-xl px-1.5 py-3 items-center">
       <Text
-        className="font-sans text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mt-1 text-center"
+        className={isEmoji ? '' : 'font-display text-foreground'}
+        style={{ fontSize: 22, lineHeight: 26 }}
         numberOfLines={1}
+        adjustsFontSizeToFit
       >
-        {emoji ? value : label}
+        {top}
+      </Text>
+      <Text
+        className="font-sans text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mt-1 text-center"
+        numberOfLines={1}
+        adjustsFontSizeToFit
+      >
+        {label}
       </Text>
     </View>
   );
@@ -92,7 +92,6 @@ export function QuickStatsCard({ currentVibe }: { currentVibe?: string | null })
   const vibeEmoji = currentVibe
     ? VIBE_EMOJI[currentVibe.toLowerCase()] ?? '✨'
     : '—';
-  const vibeLabel = currentVibe ?? 'No vibe set';
 
   return (
     <View className="bg-card rounded-2xl border border-border/30 p-3 gap-2 shadow-sm">
@@ -100,10 +99,10 @@ export function QuickStatsCard({ currentVibe }: { currentVibe?: string | null })
         This week
       </Text>
       <View className="flex-row gap-2">
-        <StatTile value={String(stats.planCount)}  label="Plans" />
-        <StatTile value={formatHours(stats.hours)} label="Hours" />
-        <StatTile value={String(stats.freeSlots)}  label="Free slots" />
-        <StatTile value={vibeLabel}                label="Vibe" emoji={currentVibe ? vibeEmoji : undefined} />
+        <StatTile top={String(stats.planCount)}  label="Plans" />
+        <StatTile top={formatHours(stats.hours)} label="Hours" />
+        <StatTile top={String(stats.freeSlots)}  label="Free" />
+        <StatTile top={vibeEmoji}                label="Vibe" isEmoji />
       </View>
     </View>
   );

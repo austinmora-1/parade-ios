@@ -108,16 +108,16 @@ export function UpcomingPlansWidget() {
                 <View style={{ width: 4, backgroundColor: accentColor }} />
 
                 {/* Card content */}
-                <View className="flex-1 px-4 py-3 gap-1">
+                <View className="flex-1 px-3.5 py-2.5 gap-0.5">
                   {/* Title row + date badge */}
-                  <View className="flex-row items-start justify-between gap-2">
+                  <View className="flex-row items-center justify-between gap-2">
                     <Text
-                      className="font-display text-[17px] text-evergreen flex-1"
+                      className="font-display text-[15px] text-evergreen flex-1"
                       numberOfLines={1}
                     >
                       {plan.title || 'Untitled plan'}
                     </Text>
-                    <Text className="font-sans text-xs text-muted-foreground whitespace-nowrap">
+                    <Text className="font-sans text-[11px] text-muted-foreground whitespace-nowrap">
                       {planDayLabel(planDate)}
                     </Text>
                   </View>
@@ -127,17 +127,17 @@ export function UpcomingPlansWidget() {
                     <View className="flex-row items-center gap-3">
                       {slotLabel ? (
                         <View className="flex-row items-center gap-1">
-                          <Clock size={11} color="#929298" strokeWidth={1.75} />
-                          <Text className="font-sans text-xs text-muted-foreground">
+                          <Clock size={10} color="#929298" strokeWidth={1.75} />
+                          <Text className="font-sans text-[11px] text-muted-foreground">
                             {slotLabel}
                           </Text>
                         </View>
                       ) : null}
                       {locationStr ? (
                         <View className="flex-row items-center gap-1 flex-1">
-                          <MapPin size={11} color="#929298" strokeWidth={1.75} />
+                          <MapPin size={10} color="#929298" strokeWidth={1.75} />
                           <Text
-                            className="font-sans text-xs text-muted-foreground"
+                            className="font-sans text-[11px] text-muted-foreground"
                             numberOfLines={1}
                           >
                             {locationStr}

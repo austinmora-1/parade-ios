@@ -11,39 +11,20 @@
 import { ScrollView, View, Text, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import { useMemo } from 'react';
-import { format, addDays, isToday, isTomorrow } from 'date-fns';
+import { addDays, isToday, isTomorrow, format } from 'date-fns';
 import { Sparkles, Users } from 'lucide-react-native';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { useFriendDashboardData } from '@/hooks/useFriendDashboardData';
 import { Avatar } from '@/components/primitives/Avatar';
 import { Skeleton } from '@/components/primitives/Skeleton';
-import { isSocialSlot, slotRangeLabel, SLOT_START_HOUR } from '@/lib/socialSlots';
-import type { TimeSlot } from '@/types/planner';
+import { computeRecommendedWindows } from '@/lib/recommendedWindows';
 
 const MAX_WINDOWS = 8;
-
-// ─── Time slot helpers ────────────────────────────────────────────────────────
-
-const SLOT_ORDER: TimeSlot[] = [
-  'early-morning', 'late-morning', 'early-afternoon',
-  'late-afternoon', 'evening', 'late-night',
-];
 
 function dayLabel(date: Date): string {
   if (isToday(date))   return 'Today';
   if (isTomorrow(date)) return 'Tomorrow';
   return format(date, 'EEEE');
-}
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface FreeWindow {
-  date: Date;
-  dateStr: string;
-  slot: TimeSlot;
-  label: string;
-  timeRange: string;            // 2-hour window, e.g. "6–8pm"
-  overlappingFriendIds: string[];
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -53,55 +34,10 @@ export function FreeWindowCard() {
   const isLoading    = usePlannerStore((s) => s.isLoading);
   const { data: friendData } = useFriendDashboardData();
 
-  const windows = useMemo<FreeWindow[]>(() => {
+  const windows = useMemo(() => {
     const today = new Date();
-    const results: FreeWindow[] = [];
-
-    for (let i = 0; i < 7; i++) {
-      const d       = addDays(today, i);
-      const dateStr = format(d, 'yyyy-MM-dd');
-
-      const dayAvail = availability.find(
-        (a) => format(a.date, 'yyyy-MM-dd') === dateStr,
-      );
-      if (!dayAvail) continue;
-
-      // One window per available SOCIAL slot (evenings + weekends),
-      // each shown as a single ≤2-hour window rather than a merged span.
-      const freeSlots = (Object.entries(dayAvail.slots) as [TimeSlot, boolean][])
-        .filter(([slot, isFree]) => isFree && isSocialSlot(d, slot))
-        .map(([slot]) => slot)
-        .sort((a, b) => SLOT_ORDER.indexOf(a) - SLOT_ORDER.indexOf(b));
-
-      if (freeSlots.length === 0) continue;
-
-      for (const slot of freeSlots) {
-        // Slot-level overlap so the avatars reflect this exact window
-        const overlappingIds = (friendData ?? [])
-          .filter((f) => f.overlapSlots.some(
-            (o) => o.date === dateStr && o.slot === slot,
-          ))
-          .map((f) => f.userId);
-
-        results.push({
-          date:    d,
-          dateStr,
-          slot,
-          label:   dayLabel(d),
-          timeRange: slotRangeLabel(slot),
-          overlappingFriendIds: overlappingIds,
-        });
-      }
-    }
-
-    // Sort: most friend overlap first, then soonest date, then earliest slot.
-    results.sort(
-      (a, b) =>
-        b.overlappingFriendIds.length - a.overlappingFriendIds.length ||
-        a.date.getTime() - b.date.getTime() ||
-        SLOT_START_HOUR[a.slot] - SLOT_START_HOUR[b.slot],
-    );
-    return results.slice(0, MAX_WINDOWS);
+    const days = Array.from({ length: 7 }, (_, i) => addDays(today, i));
+    return computeRecommendedWindows(days, availability, friendData, MAX_WINDOWS);
   }, [availability, friendData]);
 
   return (
@@ -167,7 +103,7 @@ export function FreeWindowCard() {
               >
                 {/* Day eyebrow */}
                 <Text className="font-sans text-xs uppercase tracking-wide text-muted-foreground">
-                  {w.label}
+                  {dayLabel(w.date)}
                 </Text>
 
                 {/* Time range — Fraunces headline */}

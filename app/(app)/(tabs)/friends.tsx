@@ -1,16 +1,16 @@
 /**
- * Friends tab — matches PWA Friends page layout.
+ * Friends tab.
  *
  * Structure:
- *  1. Header: "Friends" (Fraunces) + labeled "Invite" button (native Share)
- *  2. Search bar (mobile-only; PWA omits but we keep for usability)
- *  3. Pending section (if any) — amber numeric badge
- *  4. Connected (N) — Users icon + count
- *  5. Invited section (if any) — muted numeric badge
- *  6. Empty state card with Invite CTA
- *
- * Friend row: avatar (vibe ring + green dot if free today) + name +
- *             subtitle (vibe label or "Tap to connect") + ChevronRight
+ *  1. Header: "Friends" (Fraunces) + labeled "Invite" button
+ *  2. Search bar
+ *  3. Pending — collapsed single line: overlapping avatars + count, taps
+ *     through to the full pending-requests page
+ *  4. Pods — collapsed single line: overlapping member avatars + count, taps
+ *     through to the pods management page
+ *  5. Connected — expanded 3-per-row avatar grid
+ *  6. Invited section (if any)
+ *  7. Empty state card with Invite CTA
  */
 import {
   ScrollView,
@@ -19,14 +19,12 @@ import {
   Pressable,
   RefreshControl,
   TextInput,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useCallback, useState, useEffect, useMemo } from 'react';
 import { format } from 'date-fns';
-import { Search, UserPlus, Users, ChevronRight, Check, X, Flame } from 'lucide-react-native';
-import * as Haptics from 'expo-haptics';
+import { Search, UserPlus, Users, ChevronRight, Flame } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { useFloatingTabBarHeight } from '@/components/navigation/FloatingTabBar';
 import { usePlannerStore } from '@/stores/plannerStore';
@@ -39,6 +37,7 @@ import {
 } from '@/hooks/useLastHungOut';
 import { usePods } from '@/hooks/usePods';
 import { Avatar } from '@/components/primitives/Avatar';
+import { AvatarStack } from '@/components/primitives/AvatarStack';
 import { Skeleton } from '@/components/primitives/Skeleton';
 import { TINT } from '@/lib/colors';
 
@@ -52,6 +51,19 @@ const VIBE_EMOJI: Record<string, string> = {
   custom: '✨',
 };
 
+/** Subtitle precedence: vibe label > Free today > last-hung-out > Tap to connect */
+function friendSubtitle(
+  vibe: string | null | undefined,
+  freeToday: boolean | undefined,
+  lastHungOut: Date | undefined,
+): string {
+  const stage = streakStage(lastHungOut);
+  if (vibe) return `${VIBE_EMOJI[vibe] ?? '✨'} ${vibe}`;
+  if (freeToday) return 'Free today';
+  if (lastHungOut && stage !== 'none') return shortAgo(lastHungOut);
+  return 'Tap to connect';
+}
+
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
 /** Numeric badge bubble (matches PWA section header bubbles) */
@@ -63,8 +75,8 @@ function NumericBubble({
   tone: 'green' | 'amber' | 'muted';
 }) {
   const colors = {
-    green: { bg: TINT.primarySubtle,  fg: '#23744D' },
-    amber: { bg: TINT.amberSubtle,   fg: '#92400E' },
+    green: { bg: TINT.primarySubtle, fg: '#23744D' },
+    amber: { bg: TINT.amberSubtle, fg: '#92400E' },
     muted: { bg: TINT.grayBorder, fg: '#929298' },
   }[tone];
 
@@ -72,8 +84,11 @@ function NumericBubble({
     <View
       style={{
         backgroundColor: colors.bg,
-        width: 20, height: 20, borderRadius: 999,
-        alignItems: 'center', justifyContent: 'center',
+        width: 20,
+        height: 20,
+        borderRadius: 999,
+        alignItems: 'center',
+        justifyContent: 'center',
       }}
     >
       <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 10, color: colors.fg }}>
@@ -83,159 +98,118 @@ function NumericBubble({
   );
 }
 
-/** Friend row — avatar with vibe ring + name + subtitle + chevron OR
- *  Accept/Decline buttons for incoming pending requests. */
-function FriendRow({
+/** Collapsed summary row — title + count bubble + overlapping avatars + chevron. */
+function CollapsedRow({
+  title,
+  count,
+  tone,
+  subtitle,
+  people,
+  onPress,
+}: {
+  title: string;
+  count: number;
+  tone: 'green' | 'amber' | 'muted';
+  subtitle: string;
+  people: { avatar?: string | null; name?: string | null }[];
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      className="flex-row items-center bg-card rounded-xl px-4 py-3 border border-border/20 gap-3 active:opacity-80 shadow-sm"
+    >
+      <View style={{ minWidth: 0 }}>
+        <View className="flex-row items-center gap-1.5">
+          <Text className="font-sans text-sm font-semibold text-foreground">{title}</Text>
+          <NumericBubble count={count} tone={tone} />
+        </View>
+        <Text className="font-sans text-xs text-muted-foreground" numberOfLines={1}>
+          {subtitle}
+        </Text>
+      </View>
+      <View className="flex-1 flex-row justify-end">
+        {people.length > 0 && <AvatarStack people={people} size="sm" max={4} />}
+      </View>
+      <ChevronRight size={18} color={TINT.grayStrong} strokeWidth={2} />
+    </Pressable>
+  );
+}
+
+/** Connected grid cell — avatar (vibe ring / free dot) + name + subtitle. */
+function GridCell({
   friend,
   vibe,
   freeToday,
   lastHungOut,
   onPress,
-  onAccept,
-  onDecline,
 }: {
   friend: any;
   vibe?: string | null;
   freeToday?: boolean;
   lastHungOut?: Date | undefined;
   onPress: () => void;
-  onAccept?: () => void;
-  onDecline?: () => void;
 }) {
-  const isIncoming = friend.isIncoming === true && friend.status === 'pending';
   const stage = streakStage(lastHungOut);
-
-  // Subtitle precedence: vibe label > Free today > last-hung-out > Tap to connect
-  let subtitle: string;
-  if (vibe) {
-    subtitle = `${VIBE_EMOJI[vibe] ?? '✨'} ${vibe}`;
-  } else if (freeToday) {
-    subtitle = 'Free today';
-  } else if (lastHungOut && stage !== 'none') {
-    subtitle = shortAgo(lastHungOut);
-  } else {
-    subtitle = 'Tap to connect';
-  }
+  const subtitle = friendSubtitle(vibe, freeToday, lastHungOut);
 
   return (
-    <Pressable
-      onPress={onPress}
-      className="flex-row items-center bg-card rounded-xl px-3 py-2.5 border border-border/20 gap-3 active:opacity-80 shadow-sm"
-    >
-      {/* Avatar with vibe ring + free-today dot */}
-      <View style={{ position: 'relative' }}>
-        <View
-          style={
-            vibe
-              ? {
-                  borderWidth: 2,
-                  borderColor: '#23744D',
-                  borderRadius: 999,
-                  padding: 1,
-                }
-              : freeToday
-              ? {
-                  borderWidth: 2,
-                  borderColor: 'rgba(61,140,100,0.5)',
-                  borderRadius: 999,
-                  padding: 1,
-                }
-              : { padding: 3 }
-          }
-        >
-          <Avatar
-            url={friend.avatar}
-            displayName={friend.name}
-            size="md"
-          />
+    <View style={{ width: '33.333%', paddingHorizontal: 6, marginBottom: 18 }}>
+      <Pressable onPress={onPress} className="items-center gap-1.5 active:opacity-80">
+        <View style={{ position: 'relative' }}>
+          <View
+            style={
+              vibe
+                ? { borderWidth: 2, borderColor: '#23744D', borderRadius: 999, padding: 2 }
+                : freeToday
+                ? { borderWidth: 2, borderColor: 'rgba(61,140,100,0.5)', borderRadius: 999, padding: 2 }
+                : { padding: 4 }
+            }
+          >
+            <Avatar url={friend.avatar} displayName={friend.name} size="lg" />
+          </View>
+
+          {freeToday && (
+            <View
+              style={{
+                position: 'absolute',
+                bottom: 2,
+                right: 2,
+                width: 16,
+                height: 16,
+                borderRadius: 999,
+                backgroundColor: '#3D8C64',
+                borderWidth: 2,
+                borderColor: '#FFFFFF',
+              }}
+            />
+          )}
         </View>
 
-        {/* Green pulsing dot if free today */}
-        {freeToday && (
-          <View
-            style={{
-              position: 'absolute',
-              bottom: -2, right: -2,
-              width: 14, height: 14,
-              borderRadius: 999,
-              backgroundColor: '#3D8C64',
-              borderWidth: 2,
-              borderColor: '#FFFFFF',
-            }}
-          />
-        )}
-      </View>
-
-      {/* Name + subtitle */}
-      <View className="flex-1 min-w-0">
-        <View className="flex-row items-center gap-1">
+        <View className="flex-row items-center gap-1" style={{ maxWidth: '100%' }}>
           <Text
-            className="font-sans font-medium text-foreground text-sm"
+            className="font-sans font-medium text-foreground text-[13px]"
             numberOfLines={1}
             style={{ flexShrink: 1 }}
           >
             {friend.name}
           </Text>
-          {/* Streak flame — color-graded by recency */}
           {stage !== 'none' && stage !== 'cold' && (
             <Flame
-              size={12}
+              size={11}
               color={STREAK_COLORS[stage]}
               strokeWidth={2.2}
               fill={stage === 'hot' ? STREAK_COLORS[stage] : 'transparent'}
             />
           )}
         </View>
-        <Text className="font-sans text-xs text-muted-foreground" numberOfLines={1}>
+        <Text
+          className="font-sans text-[11px] text-muted-foreground text-center"
+          numberOfLines={1}
+        >
           {subtitle}
         </Text>
-      </View>
-
-      {isIncoming && onAccept && onDecline ? (
-        <View className="flex-row items-center gap-1.5">
-          <Pressable
-            onPress={onDecline}
-            hitSlop={6}
-            className="w-8 h-8 rounded-full items-center justify-center active:opacity-70"
-            style={{ backgroundColor: TINT.secondarySubtle }}
-          >
-            <X size={16} color="#D46549" strokeWidth={2.5} />
-          </Pressable>
-          <Pressable
-            onPress={onAccept}
-            hitSlop={6}
-            className="w-8 h-8 rounded-full items-center justify-center active:opacity-80 bg-primary"
-          >
-            <Check size={16} color="#FFFFFF" strokeWidth={2.5} />
-          </Pressable>
-        </View>
-      ) : friend.status === 'pending' ? (
-        <View className="px-2.5 py-1 rounded-full bg-muted">
-          <Text className="font-sans text-[11px] font-semibold text-muted-foreground">
-            Sent
-          </Text>
-        </View>
-      ) : (
-        <ChevronRight size={16} color={TINT.grayStrong} strokeWidth={2} />
-      )}
-    </Pressable>
-  );
-}
-
-/** Section header — icon/bubble + label */
-function SectionHeader({
-  label,
-  bubble,
-  icon,
-}: {
-  label: string;
-  bubble?: React.ReactNode;
-  icon?: React.ReactNode;
-}) {
-  return (
-    <View className="flex-row items-center gap-1.5 px-1 mb-2">
-      {bubble ?? icon}
-      <Text className="font-sans text-sm font-semibold text-foreground">{label}</Text>
+      </Pressable>
     </View>
   );
 }
@@ -270,15 +244,15 @@ function EmptyState({ onInvite }: { onInvite: () => void }) {
 export default function FriendsTab() {
   const tabBarHeight = useFloatingTabBarHeight();
   const { user } = useAuth();
-  const setUserId   = usePlannerStore((s) => s.setUserId);
+  const setUserId = usePlannerStore((s) => s.setUserId);
   const loadAllData = usePlannerStore((s) => s.loadAllData);
-  const friends     = usePlannerStore((s) => s.friends);
-  const isLoading   = usePlannerStore((s) => s.isLoading);
+  const friends = usePlannerStore((s) => s.friends);
+  const isLoading = usePlannerStore((s) => s.isLoading);
   const { data: friendData } = useFriendDashboardData();
   const { data: lastHungOutMap } = useLastHungOut();
   const { data: pods } = usePods();
 
-  const [search, setSearch]         = useState('');
+  const [search, setSearch] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
@@ -297,50 +271,6 @@ export default function FriendsTab() {
   const onInvite = useCallback(() => {
     router.push('/(app)/add-friend');
   }, []);
-
-  const acceptFriendRequest = usePlannerStore((s) => s.acceptFriendRequest);
-  const removeFriend         = usePlannerStore((s) => s.removeFriend);
-
-  const handleAccept = useCallback(
-    async (friend: any) => {
-      if (!friend.friendUserId) return;
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      try {
-        await acceptFriendRequest(friend.id, friend.friendUserId);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      } catch (err) {
-        console.error('Accept failed', err);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      }
-    },
-    [acceptFriendRequest],
-  );
-
-  const handleDecline = useCallback(
-    (friend: any) => {
-      Alert.alert(
-        'Decline request?',
-        `${friend.name} won't be notified.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Decline',
-            style: 'destructive',
-            onPress: async () => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              try {
-                await removeFriend(friend.id);
-              } catch (err) {
-                console.error('Decline failed', err);
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-              }
-            },
-          },
-        ],
-      );
-    },
-    [removeFriend],
-  );
 
   // ── Filter + group ─────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -362,8 +292,49 @@ export default function FriendsTab() {
   }
 
   const connected = filtered.filter((f) => f.status === 'connected');
-  const pending   = filtered.filter((f) => f.status === 'pending');
-  const invited   = filtered.filter((f) => f.status === 'invited');
+  const pending = filtered.filter((f) => f.status === 'pending');
+  const invited = filtered.filter((f) => f.status === 'invited');
+
+  // Pending summary: split incoming vs outgoing for the subtitle
+  const pendingIncoming = pending.filter((f) => (f as any).isIncoming === true).length;
+  const pendingOutgoing = pending.length - pendingIncoming;
+  const pendingSubtitle = (() => {
+    const parts: string[] = [];
+    if (pendingIncoming > 0) parts.push(`${pendingIncoming} received`);
+    if (pendingOutgoing > 0) parts.push(`${pendingOutgoing} sent`);
+    return parts.length ? parts.join(' · ') : 'Tap to review';
+  })();
+
+  // Pods summary: unique connected friends who belong to any pod
+  const friendsById = useMemo(() => {
+    const m = new Map<string, { name: string; avatar?: string | null }>();
+    for (const f of friends) {
+      if (f.friendUserId) m.set(f.friendUserId, { name: f.name, avatar: f.avatar });
+    }
+    return m;
+  }, [friends]);
+
+  const podMemberPeople = useMemo(() => {
+    const seen = new Set<string>();
+    const people: { name: string; avatar?: string | null }[] = [];
+    for (const pod of pods ?? []) {
+      for (const id of pod.memberIds) {
+        if (seen.has(id)) continue;
+        const f = friendsById.get(id);
+        if (f) {
+          seen.add(id);
+          people.push(f);
+        }
+      }
+    }
+    return people;
+  }, [pods, friendsById]);
+
+  const podCount = pods?.length ?? 0;
+  const podsSubtitle =
+    podCount === 0
+      ? 'Group friends to plan faster'
+      : `${podMemberPeople.length} friend${podMemberPeople.length === 1 ? '' : 's'} grouped`;
 
   const showEmpty = !isLoading && friends.length === 0;
 
@@ -447,85 +418,45 @@ export default function FriendsTab() {
         {/* ── Sections ────────────────────────────────────────────────── */}
         {!showEmpty && filtered.length > 0 && (
           <View className="px-5 gap-5">
-            {/* Pending */}
+            {/* Pending — collapsed summary row */}
             {pending.length > 0 && (
-              <View className="gap-2">
-                <SectionHeader
-                  label="Pending"
-                  bubble={<NumericBubble count={pending.length} tone="amber" />}
-                />
-                {pending.map((friend) => {
-                  const { vibe, freeToday } = enrich(friend.friendUserId);
-                  const isIncoming = (friend as any).isIncoming === true;
-                  const lastHungOut = friend.friendUserId
-                    ? lastHungOutMap?.get(friend.friendUserId)
-                    : undefined;
-                  return (
-                    <FriendRow
-                      key={friend.id}
-                      friend={friend}
-                      vibe={vibe}
-                      freeToday={freeToday}
-                      lastHungOut={lastHungOut}
-                      onPress={() =>
-                        router.push(
-                          `/(app)/friend/${friend.friendUserId ?? friend.id}`,
-                        )
-                      }
-                      onAccept={isIncoming ? () => handleAccept(friend) : undefined}
-                      onDecline={isIncoming ? () => handleDecline(friend) : undefined}
-                    />
-                  );
-                })}
-              </View>
+              <CollapsedRow
+                title="Pending"
+                count={pending.length}
+                tone="amber"
+                subtitle={pendingSubtitle}
+                people={pending.map((f) => ({ avatar: f.avatar, name: f.name }))}
+                onPress={() => router.push('/(app)/pending-requests')}
+              />
             )}
 
-            {/* Pods — horizontal scroll of pod chips + create button */}
-            {connected.length > 0 && (
-              <View className="gap-2">
-                <View className="flex-row items-center justify-between px-1">
-                  <Text className="font-sans text-sm font-semibold text-foreground">
-                    Pods
-                  </Text>
-                  <Pressable
-                    onPress={() => router.push('/(app)/new-pod')}
-                    hitSlop={6}
-                    className="active:opacity-60"
-                  >
-                    <Text className="font-sans text-xs font-semibold text-primary">
-                      + New pod
+            {/* Pods — collapsed summary row (only when there are friends) */}
+            {connected.length > 0 &&
+              (podCount > 0 ? (
+                <CollapsedRow
+                  title="Pods"
+                  count={podCount}
+                  tone="green"
+                  subtitle={podsSubtitle}
+                  people={podMemberPeople}
+                  onPress={() => router.push('/(app)/pods')}
+                />
+              ) : (
+                <View className="gap-2">
+                  <View className="flex-row items-center justify-between px-1">
+                    <Text className="font-sans text-sm font-semibold text-foreground">
+                      Pods
                     </Text>
-                  </Pressable>
-                </View>
-
-                {(pods?.length ?? 0) > 0 ? (
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerClassName="gap-2 px-0.5 pb-1"
-                  >
-                    {pods!.map((pod) => (
-                      <Pressable
-                        key={pod.id}
-                        onPress={() => router.push(`/(app)/new-pod?podId=${pod.id}`)}
-                        className="flex-row items-center bg-card border border-border/30 rounded-xl px-3 py-2 gap-2 shadow-sm active:opacity-80"
-                      >
-                        <Text style={{ fontSize: 16 }}>{pod.emoji ?? '💜'}</Text>
-                        <View>
-                          <Text
-                            className="font-sans text-sm font-semibold text-foreground"
-                            numberOfLines={1}
-                          >
-                            {pod.name}
-                          </Text>
-                          <Text className="font-sans text-[11px] text-muted-foreground">
-                            {pod.memberIds.length} member{pod.memberIds.length === 1 ? '' : 's'}
-                          </Text>
-                        </View>
-                      </Pressable>
-                    ))}
-                  </ScrollView>
-                ) : (
+                    <Pressable
+                      onPress={() => router.push('/(app)/new-pod')}
+                      hitSlop={6}
+                      className="active:opacity-60"
+                    >
+                      <Text className="font-sans text-xs font-semibold text-primary">
+                        + New pod
+                      </Text>
+                    </Pressable>
+                  </View>
                   <Pressable
                     onPress={() => router.push('/(app)/new-pod')}
                     className="bg-card rounded-xl border border-dashed border-border/40 px-4 py-3 active:opacity-70"
@@ -535,14 +466,13 @@ export default function FriendsTab() {
                       "close friends" or "brunch crew".
                     </Text>
                   </Pressable>
-                )}
-              </View>
-            )}
+                </View>
+              ))}
 
-            {/* Connected */}
+            {/* Connected — 3-per-row avatar grid */}
             {connected.length > 0 && (
               <View className="gap-2">
-                <View className="flex-row items-center justify-between mb-2 px-1">
+                <View className="flex-row items-center justify-between mb-1 px-1">
                   <View className="flex-row items-center gap-1.5">
                     <Users size={14} color="#23744D" strokeWidth={2.2} />
                     <Text className="font-sans text-sm font-semibold text-foreground">
@@ -559,42 +489,59 @@ export default function FriendsTab() {
                     </Text>
                   </Pressable>
                 </View>
-                {connected.map((friend) => {
-                  const { vibe, freeToday } = enrich(friend.friendUserId);
-                  const lastHungOut = friend.friendUserId
-                    ? lastHungOutMap?.get(friend.friendUserId)
-                    : undefined;
-                  return (
-                    <FriendRow
-                      key={friend.id}
-                      friend={friend}
-                      vibe={vibe}
-                      freeToday={freeToday}
-                      lastHungOut={lastHungOut}
-                      onPress={() =>
-                        router.push(`/(app)/friend/${friend.friendUserId}`)
-                      }
-                    />
-                  );
-                })}
+
+                <View className="flex-row flex-wrap" style={{ marginHorizontal: -6 }}>
+                  {connected.map((friend) => {
+                    const { vibe, freeToday } = enrich(friend.friendUserId);
+                    const lastHungOut = friend.friendUserId
+                      ? lastHungOutMap?.get(friend.friendUserId)
+                      : undefined;
+                    return (
+                      <GridCell
+                        key={friend.id}
+                        friend={friend}
+                        vibe={vibe}
+                        freeToday={freeToday}
+                        lastHungOut={lastHungOut}
+                        onPress={() =>
+                          router.push(`/(app)/friend/${friend.friendUserId}`)
+                        }
+                      />
+                    );
+                  })}
+                </View>
               </View>
             )}
 
             {/* Invited */}
             {invited.length > 0 && (
               <View className="gap-2">
-                <SectionHeader
-                  label={`Invited (${invited.length})`}
-                  bubble={<NumericBubble count={invited.length} tone="muted" />}
-                />
+                <View className="flex-row items-center gap-1.5 px-1 mb-1">
+                  <NumericBubble count={invited.length} tone="muted" />
+                  <Text className="font-sans text-sm font-semibold text-foreground">
+                    Invited
+                  </Text>
+                </View>
                 {invited.map((friend) => (
-                  <FriendRow
+                  <Pressable
                     key={friend.id}
-                    friend={friend}
-                    onPress={() =>
-                      router.push(`/(app)/friend/${friend.id}`)
-                    }
-                  />
+                    onPress={() => router.push(`/(app)/friend/${friend.id}`)}
+                    className="flex-row items-center bg-card rounded-xl px-3 py-2.5 border border-border/20 gap-3 active:opacity-80 shadow-sm"
+                  >
+                    <Avatar url={friend.avatar} displayName={friend.name} size="md" />
+                    <View className="flex-1 min-w-0">
+                      <Text
+                        className="font-sans font-medium text-foreground text-sm"
+                        numberOfLines={1}
+                      >
+                        {friend.name}
+                      </Text>
+                      <Text className="font-sans text-xs text-muted-foreground">
+                        Invited
+                      </Text>
+                    </View>
+                    <ChevronRight size={16} color={TINT.grayStrong} strokeWidth={2} />
+                  </Pressable>
                 ))}
               </View>
             )}

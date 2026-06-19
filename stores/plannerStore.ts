@@ -77,6 +77,7 @@ interface PlannerState {
   addFriend: (friend: Omit<Friend, 'id'>) => Promise<void>;
   updateFriend: (id: string, updates: Partial<Friend>) => Promise<void>;
   acceptFriendRequest: (friendshipId: string, requesterUserId: string) => Promise<void>;
+  resendFriendRequest: (friend: Friend) => Promise<void>;
   removeFriend: (id: string) => Promise<void>;
   
   setAvailability: (date: Date, slot: TimeSlot, available: boolean) => Promise<void>;
@@ -277,6 +278,12 @@ export const usePlannerStore = create<PlannerState>((set, get) => {
       const { userId } = get();
       if (!userId) return;
       await useFriendsStore.getState().acceptFriendRequest(friendshipId, requesterUserId, userId);
+    },
+
+    resendFriendRequest: async (friend) => {
+      const { userId } = get();
+      if (!userId) return;
+      await useFriendsStore.getState().resendFriendRequest(friend, userId);
     },
 
     removeFriend: async (id) => {

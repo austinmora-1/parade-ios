@@ -12,6 +12,7 @@ export interface FriendsActions {
   addFriend: (friend: Omit<Friend, 'id'>, userId: string) => Promise<void>;
   updateFriend: (id: string, updates: Partial<Friend>, userId: string) => Promise<void>;
   acceptFriendRequest: (friendshipId: string, requesterUserId: string, userId: string) => Promise<void>;
+  resendFriendRequest: (friend: Friend, userId: string) => Promise<void>;
   removeFriend: (id: string) => Promise<void>;
   loadFriends: (userId: string) => Promise<void>;
 }
@@ -158,6 +159,35 @@ export const useFriendsStore = create<FriendsState & FriendsActions>((set, get) 
         f.id === friendshipId ? { ...f, status: 'connected' as const } : f
       ),
     }));
+  },
+
+  resendFriendRequest: async (friend, userId) => {
+    if (!userId || !friend.friendUserId || friend.status !== 'pending') return;
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      const projectId = process.env.EXPO_PUBLIC_SUPABASE_PROJECT_ID;
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('display_name')
+        .eq('user_id', userId)
+        .single();
+      const senderName = profile?.display_name || 'Someone';
+
+      await fetch(`https://${projectId}.supabase.co/functions/v1/send-push-notification`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: friend.friendUserId,
+          title: 'Friend Request Reminder 👋',
+          body: `${senderName} still wants to connect with you`,
+          url: '/notifications',
+        }),
+      });
+    } catch (err) {
+      console.error('Resend friend request error:', err);
+      throw err;
+    }
   },
 
   removeFriend: async (id) => {
