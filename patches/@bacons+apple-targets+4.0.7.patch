@@ -1,0 +1,18 @@
+diff --git a/node_modules/@bacons/apple-targets/build/with-xcode-changes.js b/node_modules/@bacons/apple-targets/build/with-xcode-changes.js
+index 343bcb9..204c1b9 100644
+--- a/node_modules/@bacons/apple-targets/build/with-xcode-changes.js
++++ b/node_modules/@bacons/apple-targets/build/with-xcode-changes.js
+@@ -258,7 +258,12 @@ async function applyXcodeChanges(config, project, props) {
+             productName,
+             // @ts-expect-error
+             productReference: appExtensionBuildFile.props.fileRef /* alphaExtension.appex */,
+-            productType: productType,
++            // PARADE PATCH: emit the Messages-specific product type for iMessage
++            // targets so actool ships the iMessage App Icon (loose icons + store
++            // icon + MSMessagesExtensionStoreIconName), fixing TestFlight
++            // ITMS-90642 / ITMS-90649. Only the emitted productType changes; all
++            // embedding logic above still uses the generic app-extension path.
++            productType: props.type === "imessage" ? "com.apple.product-type.app-extension.messages" : productType,
+         });
+         // For watchOS extensions (like watch-widget), embed in the watchOS app target
+         // instead of the main iOS app target.
