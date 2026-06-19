@@ -92,6 +92,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     'expo-splash-screen',
     // Adds native Apple targets (the iMessage extension under targets/imessage)
     // during prebuild. See targets/imessage/expo-target.config.js.
+    // NOTE: this MUST stay in sync with credentials.json — the plugin generates
+    // the `ParadeMessages` Xcode target, and credentials.json keys that target
+    // for local signing. Removing the plugin while credentials.json still keys
+    // `ParadeMessages` makes EAS fail the "Configure Xcode project" phase
+    // (it can't assign the extension profile to a target prebuild didn't create).
     '@bacons/apple-targets',
   ],
   extra: {

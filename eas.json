@@ -27,13 +27,18 @@
     },
     "production": {
       "channel": "production",
-      "autoIncrement": true
+      "autoIncrement": true,
+      "credentialsSource": "local"
     }
   },
   "submit": {
     "production": {
       "ios": {
-        "appleTeamId": "9THMCL38AJ"
+        "appleTeamId": "9THMCL38AJ",
+        "ascAppId": "6781098991",
+        "ascApiKeyPath": "./build/credentials/AuthKey_9FP2H368R5.p8",
+        "ascApiKeyId": "9FP2H368R5",
+        "ascApiKeyIssuerId": "ceabeb89-e514-4dd5-bdc7-d5faed6c618b"
       }
     }
   }

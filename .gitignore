@@ -10,6 +10,9 @@ web-build/
 expo-env.d.ts
 
 # Native
+# EAS local credentials (distribution cert, profiles, ASC API key, credentials.json)
+/build/
+credentials.json
 .kotlin/
 *.orig.*
 *.jks
