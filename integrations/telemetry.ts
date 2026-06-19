@@ -22,7 +22,9 @@ export function initTelemetry() {
       enableSessionReplay: true,
       sessionReplayConfig: {
         maskAllTextInputs: true,
-        maskAllImages: false,
+        // Mask images: replays would otherwise capture friends' faces, plan
+        // photos, and avatars — PII we should not be ingesting.
+        maskAllImages: true,
       },
     });
   }
