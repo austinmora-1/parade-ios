@@ -12,16 +12,19 @@ import {
   ActivityIndicator,
   RefreshControl,
   Image,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useCallback, useMemo } from 'react';
-import { CalendarDays, MapPin, Flame, Clock } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
+import { CalendarDays, MapPin, Flame, Clock, Send } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
 import { format, isToday, parseISO, isTomorrow, isThisYear } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlannerStore } from '@/stores/plannerStore';
+import { useSendHangRequest } from '@/hooks/useHangRequests';
 import {
   useLastHungOut,
   streakStage,
@@ -46,15 +49,12 @@ const SLOTS = [
   'early_morning', 'late_morning', 'early_afternoon',
   'late_afternoon', 'evening', 'late_night',
 ] as const;
-const SLOT_SHORT: Record<string, string> = {
-  early_morning:    'AM',
-  late_morning:     'Mid',
-  early_afternoon:  '12pm',
-  late_afternoon:   '3pm',
-  evening:          '6pm',
-  late_night:       'Late',
+/** availability column (underscore) → canonical TimeSlot (hyphen) */
+const SLOT_TO_TS: Record<string, TimeSlot> = {
+  early_morning: 'early-morning', late_morning: 'late-morning',
+  early_afternoon: 'early-afternoon', late_afternoon: 'late-afternoon',
+  evening: 'evening', late_night: 'late-night',
 };
-
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
 function useFriendProfile(userId: string) {
@@ -257,6 +257,60 @@ export default function FriendProfileScreen() {
   );
   const mutualCount = freeDays.filter((r: any) => myFreeDateSet.has(r.date)).length;
 
+  // ── Slot selection → suggest a hang at the picked times ───────────────────
+  const sendRequest = useSendHangRequest();
+  const { data: myName } = useQuery({
+    enabled: !!user?.id,
+    queryKey: ['my-display-name', user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('display_name, first_name')
+        .eq('user_id', user!.id)
+        .maybeSingle();
+      const m = data as any;
+      return (m?.first_name || m?.display_name || 'A friend') as string;
+    },
+  });
+  // Selected free slots, keyed `${yyyy-MM-dd}|${underscore_slot}`.
+  const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set());
+  const toggleSlot = useCallback((key: string) => {
+    Haptics.selectionAsync();
+    setSelectedSlots((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }, []);
+
+  const handleSuggest = useCallback(async () => {
+    if (selectedSlots.size === 0 || sendRequest.isPending) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      await Promise.all(
+        [...selectedSlots].map((key) => {
+          const [date, col] = key.split('|');
+          return sendRequest.mutateAsync({
+            recipientUserId: userId,
+            requesterName: myName ?? 'A friend',
+            selectedDay: date,
+            selectedSlot: SLOT_TO_TS[col],
+          });
+        }),
+      );
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      const n = selectedSlots.size;
+      setSelectedSlots(new Set());
+      Alert.alert(
+        'Times suggested',
+        `Sent ${n} time${n === 1 ? '' : 's'} to ${name.split(' ')[0] || 'your friend'}. They can accept any of them.`,
+      );
+    } catch (err: any) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert('Could not send', err?.message ?? 'Please try again.');
+    }
+  }, [selectedSlots, sendRequest, userId, myName, name]);
+
   const vibe = p?.current_vibe as string | null;
   const showAvail = p?.show_availability !== false;
 
@@ -412,10 +466,12 @@ export default function FriendProfileScreen() {
                 Free {freeDays.length} day{freeDays.length === 1 ? '' : 's'} in the next 2 weeks
                 {mutualCount > 0 ? ` · ${mutualCount} you're both free` : ''}
               </Text>
+              <Text className="font-sans text-[12px] text-muted-foreground/70 px-0.5 -mt-1.5">
+                Tap the times that work to suggest a hang.
+              </Text>
 
               {freeDays.map((row: any) => {
                 const day = new Date(row.date + 'T00:00:00');
-                const freeSlots = SLOTS.filter((s) => row[s] === true);
                 const today = isToday(day);
                 const mutual = myFreeDateSet.has(row.date);
                 return (
@@ -462,18 +518,40 @@ export default function FriendProfileScreen() {
                       </Text>
                     </View>
 
-                    {/* Free slot chips */}
+                    {/* All 6 slots — free ones are selectable, busy ones dimmed */}
                     <View className="flex-1 flex-row flex-wrap gap-1.5">
-                      {freeSlots.map((s) => (
-                        <View
-                          key={s}
-                          className="bg-primary/10 rounded-lg px-2 py-1"
-                        >
-                          <Text className="font-sans text-xs font-medium text-primary">
-                            {SLOT_SHORT[s]}
-                          </Text>
-                        </View>
-                      ))}
+                      {SLOTS.map((s) => {
+                        const free = row[s] === true;
+                        const label = TIME_SLOT_LABELS[SLOT_TO_TS[s]].label;
+                        if (!free) {
+                          return (
+                            <View key={s} className="rounded-lg px-2 py-1 bg-muted/40">
+                              <Text className="font-sans text-[11px] font-medium text-muted-foreground/50">
+                                {label}
+                              </Text>
+                            </View>
+                          );
+                        }
+                        const key = `${row.date}|${s}`;
+                        const sel = selectedSlots.has(key);
+                        return (
+                          <Pressable
+                            key={s}
+                            onPress={() => toggleSlot(key)}
+                            className={`rounded-lg px-2 py-1 border active:opacity-70 ${
+                              sel ? 'bg-primary border-primary' : 'bg-primary/10 border-primary/20'
+                            }`}
+                          >
+                            <Text
+                              className={`font-sans text-[11px] font-medium ${
+                                sel ? 'text-white' : 'text-primary'
+                              }`}
+                            >
+                              {label}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
                     </View>
                   </View>
                 );
@@ -527,6 +605,30 @@ export default function FriendProfileScreen() {
             </View>
           )}
         </ScrollView>
+      )}
+
+      {/* Sticky CTA — suggest the selected times as a hang */}
+      {selectedSlots.size > 0 && (
+        <View className="px-5 pb-4 pt-2 border-t border-border/20 bg-chalk">
+          <Pressable
+            onPress={handleSuggest}
+            disabled={sendRequest.isPending}
+            className={`flex-row items-center justify-center gap-2 rounded-2xl py-3.5 ${
+              sendRequest.isPending ? 'bg-muted' : 'bg-primary active:opacity-90'
+            }`}
+          >
+            {sendRequest.isPending ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Send size={15} color="#FFFFFF" strokeWidth={2} />
+            )}
+            <Text className="font-sans text-base font-semibold text-white">
+              {sendRequest.isPending
+                ? 'Sending…'
+                : `Suggest ${selectedSlots.size} time${selectedSlots.size === 1 ? '' : 's'} to ${name.split(' ')[0] || 'them'}`}
+            </Text>
+          </Pressable>
+        </View>
       )}
     </SafeAreaView>
   );
