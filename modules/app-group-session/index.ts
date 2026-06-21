@@ -19,10 +19,21 @@ export interface AppGroupSession {
   displayName?: string;
 }
 
+/** One upcoming day of free social slots, mirrored for the iMessage extension. */
+export interface AppGroupAvailabilityDay {
+  /** yyyy-MM-dd */
+  d: string;
+  /** free social TimeSlot ids, chronological */
+  slots: string[];
+}
+
 interface AppGroupSessionNativeModule {
   setSession(userId: string, shareCode: string | null, displayName: string | null): void;
   clearSession(): void;
   getSession(): AppGroupSession | null;
+  setAvailability(json: string): void;
+  clearAvailability(): void;
+  getAvailability(): string | null;
 }
 
 // `requireNativeModule` throws if the native module isn't linked (e.g. running
@@ -47,4 +58,13 @@ export function clearAppGroupSession(): void {
 
 export function getAppGroupSession(): AppGroupSession | null {
   return native?.getSession() ?? null;
+}
+
+/** Mirror upcoming free social slots so the extension can pre-fill availability. */
+export function setAppGroupAvailability(days: AppGroupAvailabilityDay[]): void {
+  native?.setAvailability(JSON.stringify(days));
+}
+
+export function clearAppGroupAvailability(): void {
+  native?.clearAvailability();
 }

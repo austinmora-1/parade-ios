@@ -26,6 +26,7 @@ struct AppGroupSession {
 
   private static let appGroupId = "group.app.parade.ios"
   private static let sessionKey = "parade.session.v1"
+  private static let availabilityKey = "parade.availability.v1"
 
   /// The currently signed-in identity, or nil when signed out / never written.
   static var current: AppGroupSession? {
@@ -42,4 +43,29 @@ struct AppGroupSession {
       displayName: payload["displayName"]
     )
   }
+
+  /// The user's upcoming free social slots, mirrored from the app (see
+  /// lib/availabilityBridge.ts). Empty when signed out / not yet synced — the
+  /// "Share availability" composer falls back to a manual picker in that case.
+  static var availability: [AvailabilityDay] {
+    guard let defaults = UserDefaults(suiteName: appGroupId),
+          let json = defaults.string(forKey: availabilityKey),
+          let data = json.data(using: .utf8),
+          let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+    else { return [] }
+
+    return arr.compactMap { item in
+      guard let date = item["d"] as? String,
+            let slots = item["slots"] as? [String]
+      else { return nil }
+      return AvailabilityDay(date: date, slots: slots)
+    }
+  }
+}
+
+/// One upcoming day of free social slots (date is yyyy-MM-dd, slots are
+/// TimeSlot ids like "evening").
+struct AvailabilityDay {
+  let date: String
+  let slots: [String]
 }

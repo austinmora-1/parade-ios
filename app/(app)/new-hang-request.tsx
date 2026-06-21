@@ -68,7 +68,19 @@ function useMyDisplayName(userId: string | undefined) {
 }
 
 export default function NewHangRequestScreen() {
-  const { friendId: friendIdParam } = useLocalSearchParams<{ friendId?: string }>();
+  // friendId/day/slot/message can be prefilled (e.g. from the iMessage
+  // extension via /imsg — see app/(app)/imsg.tsx).
+  const {
+    friendId: friendIdParam,
+    day: dayParam,
+    slot: slotParam,
+    message: messageParam,
+  } = useLocalSearchParams<{
+    friendId?: string;
+    day?: string;
+    slot?: string;
+    message?: string;
+  }>();
   const { user } = useAuth();
   const friends = usePlannerStore((s) => s.friends);
   const sendRequest = useSendHangRequest();
@@ -81,9 +93,18 @@ export default function NewHangRequestScreen() {
   const [recipientId, setRecipientId] = useState<string | null>(
     friendIdParam ?? null,
   );
-  const [day,     setDay]     = useState<Date>(addDays(new Date(), 1)); // default tomorrow
-  const [slot,    setSlot]    = useState<TimeSlot>('evening');
-  const [message, setMessage] = useState('');
+  const [day,     setDay]     = useState<Date>(() => {
+    // Prefill day from a yyyy-MM-dd param if valid, else default to tomorrow.
+    if (dayParam) {
+      const parsed = new Date(`${dayParam}T00:00:00`);
+      if (!Number.isNaN(parsed.getTime())) return parsed;
+    }
+    return addDays(new Date(), 1);
+  });
+  const [slot,    setSlot]    = useState<TimeSlot>(
+    (SLOT_OPTIONS.some((s) => s.id === slotParam) ? slotParam : 'evening') as TimeSlot,
+  );
+  const [message, setMessage] = useState(messageParam ?? '');
   const [friendQuery, setFriendQuery] = useState('');
 
   const filteredFriends = useMemo(() => {
@@ -97,8 +118,10 @@ export default function NewHangRequestScreen() {
     if (friendIdParam && !recipientId) setRecipientId(friendIdParam);
   }, [friendIdParam, recipientId]);
 
+  // 14 days so a date prefilled from a shared-availability pick (horizon 14d)
+  // is always present in the chip row.
   const dayOptions = useMemo(
-    () => Array.from({ length: 7 }, (_, i) => addDays(new Date(), i)),
+    () => Array.from({ length: 14 }, (_, i) => addDays(new Date(), i)),
     [],
   );
 

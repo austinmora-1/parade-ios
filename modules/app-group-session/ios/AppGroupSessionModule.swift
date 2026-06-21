@@ -19,6 +19,12 @@ import Foundation
 
 private let appGroupId = "group.app.parade.ios"
 private let sessionKey = "parade.session.v1"
+// Availability is bridged under a SEPARATE key from identity so the two
+// writers (auth-time identity sync vs availability-store sync) never race on a
+// shared payload. The extension reads both. Value is a JSON array string:
+// [{"d":"2026-06-21","slots":["evening","late-night"]}, ...] — next ~14 days,
+// free social slots only. Still non-secret (the same data a share link exposes).
+private let availabilityKey = "parade.availability.v1"
 
 public class AppGroupSessionModule: Module {
   public func definition() -> ModuleDefinition {
@@ -45,6 +51,22 @@ public class AppGroupSessionModule: Module {
     // signed-out state (generic links).
     Function("clearSession") { () -> Void in
       UserDefaults(suiteName: appGroupId)?.removeObject(forKey: sessionKey)
+    }
+
+    // Mirror the user's upcoming free social slots so the extension's "Share
+    // availability" composer can pre-fill real availability. `json` is the
+    // already-serialized array (see availabilityKey above); we store it
+    // verbatim so the extension can JSON-decode it directly.
+    Function("setAvailability") { (json: String) -> Void in
+      UserDefaults(suiteName: appGroupId)?.set(json, forKey: availabilityKey)
+    }
+
+    Function("clearAvailability") { () -> Void in
+      UserDefaults(suiteName: appGroupId)?.removeObject(forKey: availabilityKey)
+    }
+
+    Function("getAvailability") { () -> String? in
+      UserDefaults(suiteName: appGroupId)?.string(forKey: availabilityKey)
     }
 
     // Read-back, mainly for parity/debugging from JS. The extension uses its

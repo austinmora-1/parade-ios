@@ -4,6 +4,7 @@ import { addDays, startOfWeek, format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import type { DefaultAvailabilitySettings } from './helpers/types';
 import { createDefaultAvailability, mapAvailabilityRow, buildAvailabilityMap } from './helpers/mapAvailability';
+import { syncAvailabilityToAppGroup } from '@/lib/availabilityBridge';
 
 export interface AvailabilityState {
   availability: DayAvailability[];
@@ -54,20 +55,25 @@ export const useAvailabilityStore = create<AvailabilityState & AvailabilityActio
     }
 
     const existing = availabilityMap[dateStr];
+    let nextMap: Record<string, DayAvailability>;
     if (existing) {
       // A real row exists now — the day is no longer schedule-derived
       const updatedEntry = { ...existing, slots: { ...existing.slots, [slot]: available }, isDefault: false };
       const updated = availability.map(a => format(a.date, 'yyyy-MM-dd') === dateStr ? updatedEntry : a);
-      set({ availability: updated, availabilityMap: { ...availabilityMap, [dateStr]: updatedEntry } });
+      nextMap = { ...availabilityMap, [dateStr]: updatedEntry };
+      set({ availability: updated, availabilityMap: nextMap });
     } else {
       const newAvailability = createDefaultAvailability(date, defaultSettings);
       newAvailability.slots[slot] = available;
       newAvailability.isDefault = false;
+      nextMap = { ...availabilityMap, [dateStr]: newAvailability };
       set({
         availability: [...availability, newAvailability],
-        availabilityMap: { ...availabilityMap, [dateStr]: newAvailability },
+        availabilityMap: nextMap,
       });
     }
+    // Keep the iMessage extension's availability in sync as the user edits.
+    syncAvailabilityToAppGroup(nextMap);
   },
 
   setLocationStatus: async (status, userId, date) => {
@@ -283,5 +289,8 @@ export const useAvailabilityStore = create<AvailabilityState & AvailabilityActio
       defaultSettings,
       homeAddress: homeAddr,
     });
+
+    // Push the freshly-loaded availability to the App Group for the extension.
+    syncAvailabilityToAppGroup(availabilityMap);
   },
 }));

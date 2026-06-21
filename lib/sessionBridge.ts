@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import {
   setAppGroupSession,
   clearAppGroupSession,
+  clearAppGroupAvailability,
 } from '@/modules/app-group-session';
 
 /**
@@ -25,6 +26,7 @@ export async function syncSessionToAppGroup(session: Session | null): Promise<vo
     const userId = session?.user?.id;
     if (!userId) {
       clearAppGroupSession();
+      clearAppGroupAvailability();
       return;
     }
 
