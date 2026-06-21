@@ -41,12 +41,13 @@ import { usePods } from '@/hooks/usePods';
 import { FieldLabel, OpenInviteBanner, TitleField, NotesField } from '@/components/new-plan/FormBits';
 import { ActivityPicker } from '@/components/new-plan/ActivityPicker';
 import { DateGrid } from '@/components/new-plan/DateGrid';
-import { TimeSlotPicker } from '@/components/new-plan/TimeSlotPicker';
+import { StartEndTimePicker, defaultTimesForSlot } from '@/components/new-plan/StartEndTimePicker';
 import { ExtraOptionsSection } from '@/components/new-plan/ExtraOptionsSection';
 import { VisibilityPicker } from '@/components/new-plan/VisibilityPicker';
 import { FrequencyPicker } from '@/components/new-plan/FrequencyPicker';
 import { FriendSelector } from '@/components/new-plan/FriendSelector';
 import type { TimeSlot } from '@/types/planner';
+import { slotForHour, hourToTimeString, parseTimeToHour } from '@/lib/planSlotCoverage';
 import { TC } from '@/lib/theme';
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
@@ -100,11 +101,15 @@ export default function NewPlanScreen() {
   // ── Form state ─────────────────────────────────────────────────────────────
   const initialDate = dateParam ? parseISO(dateParam) : new Date();
   const initialSlot = (slotParam as TimeSlot) || 'evening';
+  const initialTimes = defaultTimesForSlot(initialSlot);
 
   const [title,    setTitle]    = useState('');
   const [activity, setActivity] = useState<string>('drinks');
   const [date,     setDate]     = useState<Date>(initialDate);
-  const [timeSlot, setTimeSlot] = useState<TimeSlot>(initialSlot);
+  // Clock-time selection (fractional hours). The chosen start determines the
+  // plan's time slot; the start→end span determines which slots show busy.
+  const [startHour, setStartHour] = useState<number>(initialTimes.start);
+  const [endHour,   setEndHour]   = useState<number>(initialTimes.end);
   const [location, setLocation] = useState('');
   const [notes,    setNotes]    = useState('');
   /** 'private' | 'friends' | `pod:<id>` */
@@ -123,6 +128,14 @@ export default function NewPlanScreen() {
     return new Set();
   });
 
+  // Derived from the clock-time selection
+  const timeSlot: TimeSlot = slotForHour(startHour);
+  const startTimeStr = hourToTimeString(startHour);
+  const endTimeStr = hourToTimeString(endHour);
+  const durationMin = Math.round(
+    ((endHour <= startHour ? endHour + 24 : endHour) - startHour) * 60,
+  );
+
   // Hydrate form state when editing existing plan
   useEffect(() => {
     if (!existingPlan?.plan) return;
@@ -130,7 +143,17 @@ export default function NewPlanScreen() {
     setTitle(p.title ?? '');
     setActivity(p.activity ?? 'drinks');
     if (p.date) setDate(new Date(p.date));
-    if (p.time_slot) setTimeSlot(p.time_slot as TimeSlot);
+    // Prefer explicit clock times; fall back to the slot's default window.
+    const startH = parseTimeToHour(p.start_time);
+    const endH = parseTimeToHour(p.end_time);
+    if (startH != null && endH != null) {
+      setStartHour(startH);
+      setEndHour(endH);
+    } else if (p.time_slot) {
+      const t = defaultTimesForSlot(p.time_slot as TimeSlot);
+      setStartHour(t.start);
+      setEndHour(t.end);
+    }
     setLocation(typeof p.location === 'string' ? p.location : p.location?.name ?? '');
     setNotes(p.notes ?? '');
     const friendIds = new Set(
@@ -207,7 +230,9 @@ export default function NewPlanScreen() {
         activity: activity as any,
         date,
         timeSlot,
-        duration: 60,
+        startTime: startTimeStr,
+        endTime:   endTimeStr,
+        duration:  durationMin > 0 ? durationMin : 60,
         location: location.trim()
           ? { id: '', name: location.trim(), address: '' }
           : undefined,
@@ -274,7 +299,9 @@ export default function NewPlanScreen() {
                 day_of_week:     date.getDay(),
                 starts_on:       format(date, 'yyyy-MM-dd'),
                 time_slot:       timeSlot,
-                duration:        60,
+                start_time:      startTimeStr,
+                end_time:        endTimeStr,
+                duration:        durationMin > 0 ? durationMin : 60,
                 location:        location.trim() || null,
                 notes:           notes.trim() || null,
                 feed_visibility: isOpenInvite ? 'friends' : visibility,
@@ -315,7 +342,8 @@ export default function NewPlanScreen() {
       setSaving(false);
     }
   }, [
-    title, activity, date, timeSlot, location, notes, invitedIds,
+    title, activity, date, timeSlot, startHour, endHour, startTimeStr, endTimeStr,
+    durationMin, location, notes, invitedIds,
     connectedFriends, addPlan, updatePlan, isEditMode, planIdParam,
     isOpenInvite, visibility, frequency, extraOptions, user?.id,
   ]);
@@ -386,8 +414,12 @@ export default function NewPlanScreen() {
           {/* ── Date ──────────────────────────────────────────────────── */}
           <DateGrid dateOptions={dateOptions} date={date} onSelect={setDate} />
 
-          {/* ── Time slot ─────────────────────────────────────────────── */}
-          <TimeSlotPicker timeSlot={timeSlot} onSelect={setTimeSlot} />
+          {/* ── Time (start → end) ────────────────────────────────────── */}
+          <StartEndTimePicker
+            startHour={startHour}
+            endHour={endHour}
+            onChange={(s, e) => { setStartHour(s); setEndHour(e); }}
+          />
 
           {/* ── Location ─────────────────────────────────────────────── */}
           <View>

@@ -998,7 +998,7 @@ export default function PlansTab() {
       // Only plans that actually take a slot count against the wheel
       dayPlans: dayPlans
         .filter(planBlocksAvailability)
-        .map((p) => ({ timeSlot: p.timeSlot as string })),
+        .map((p) => ({ timeSlot: p.timeSlot as string, startTime: p.startTime, endTime: p.endTime })),
       onTrip: !!dayTrip,
     });
     return { day, dateStr, dayPlans, dayTrip, wheel };

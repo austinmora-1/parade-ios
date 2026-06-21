@@ -328,7 +328,7 @@ export default function DayDetailScreen() {
     settings: defaultSettings,
     dayPlans: plans
       .filter(planBlocksAvailability)
-      .map((p) => ({ timeSlot: normalizeSlot(p.time_slot) })),
+      .map((p) => ({ timeSlot: normalizeSlot(p.time_slot), startTime: p.start_time, endTime: p.end_time })),
     onTrip: !!dayTrip,
   });
 

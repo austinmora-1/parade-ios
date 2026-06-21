@@ -6,8 +6,11 @@ import { TimeSlot } from '@/types/planner';
  * still have free sub-windows that we can recommend at lower priority.
  */
 
+// Slot boundaries in 24h hours (late-night spills to 26 = 2am next day).
+// Kept in sync with TIME_SLOT_HOURS (mapAvailability) and SLOT_START/END_HOUR
+// (socialSlots) — early-morning starts at 7 across all three.
 export const SLOT_BOUNDS: Record<TimeSlot, { startHr: number; endHr: number }> = {
-  'early-morning':   { startHr: 6,  endHr: 9 },
+  'early-morning':   { startHr: 7,  endHr: 9 },
   'late-morning':    { startHr: 9,  endHr: 12 },
   'early-afternoon': { startHr: 12, endHr: 15 },
   'late-afternoon':  { startHr: 15, endHr: 18 },
@@ -46,6 +49,42 @@ function parseHourMinute(s: string | null | undefined): number | null {
   const m = Number(parts[1] || '0');
   if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
   return h + m / 60;
+}
+
+/** Public alias of the parser — "HH:mm[:ss]" → decimal hours (or null). */
+export const parseTimeToHour = parseHourMinute;
+
+/** Decimal hours → "HH:mm" (24h, zero-padded). 25.5 → "01:30" (next day). */
+export function hourToTimeString(hour: number): string {
+  const norm = ((hour % 24) + 24) % 24;
+  const hh = Math.floor(norm);
+  const mm = Math.round((norm - hh) * 60);
+  // Guard against 60 from rounding (e.g. 8.999 → 9:00)
+  const h = mm === 60 ? (hh + 1) % 24 : hh;
+  const m = mm === 60 ? 0 : mm;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+/**
+ * Bucket a clock hour into the time slot it belongs to. After-midnight
+ * hours (0–2am) map into late-night (its 22–26 range). The 2–7am gap and
+ * anything unmatched fall back to the nearest sensible slot so a derived
+ * `time_slot` is always produced.
+ */
+export function slotForHour(hourRaw: number): TimeSlot {
+  let h = ((hourRaw % 24) + 24) % 24;
+  if (h < 2) h += 24; // 0–2am belongs to late-night (24–26)
+  for (const slot of SLOT_ORDER) {
+    const { startHr, endHr } = SLOT_BOUNDS[slot];
+    if (h >= startHr && h < endHr) return slot;
+  }
+  return h < SLOT_BOUNDS['early-morning'].startHr ? 'early-morning' : 'late-night';
+}
+
+/** Bucket a "HH:mm[:ss]" clock time into its time slot. */
+export function slotForTime(time: string | null | undefined): TimeSlot {
+  const h = parseHourMinute(time);
+  return h == null ? 'evening' : slotForHour(h);
 }
 
 /** Subtract a busy interval [bs, be] from a free slot [ss, se]. */

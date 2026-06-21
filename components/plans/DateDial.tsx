@@ -10,6 +10,7 @@ import Svg, { Circle } from 'react-native-svg';
 import { PARADE_GREEN, MINT, EMBER, MARIGOLD, ELEPHANT, tint, TINT } from '@/lib/colors';
 import { TC } from '@/lib/theme';
 import { TIME_SLOT_HOURS } from '@/stores/helpers/mapAvailability';
+import { getPlanSlotCoverage } from '@/lib/planSlotCoverage';
 import type { DefaultAvailabilitySettings } from '@/stores/helpers/types';
 import type { DayAvailability, TimeSlot } from '@/types/planner';
 
@@ -104,8 +105,9 @@ export interface DayWheelInput {
   date: Date;
   dayAvail?: DayAvailability;
   settings?: DefaultAvailabilitySettings | null;
-  /** Plans on this date, with kebab-case timeSlot */
-  dayPlans: Array<{ timeSlot?: string | null }>;
+  /** Plans on this date. timeSlot is kebab-case; startTime/endTime are
+   *  optional "HH:mm" clock times that expand the busy span across slots. */
+  dayPlans: Array<{ timeSlot?: string | null; startTime?: string | null; endTime?: string | null }>;
   /** @deprecated Trips no longer block availability; ignored. */
   onTrip?: boolean;
 }
@@ -170,9 +172,16 @@ export function getDaySlotAvailability({
     return { notAvailable: true, socialSlots, freeSlots: [] };
   }
 
-  const planBusy = new Set(
-    dayPlans.map((p) => (p.timeSlot ?? '').replace(/_/g, '-')),
-  );
+  // A plan blocks every slot its start→end span covers (falling back to its
+  // stored time_slot when it has no explicit clock times) — same coverage the
+  // store uses to mark availability busy, so the wheel can't disagree.
+  const planBusy = new Set<string>();
+  for (const p of dayPlans) {
+    const slot = (p.timeSlot ?? '').replace(/_/g, '-') as TimeSlot;
+    for (const c of getPlanSlotCoverage({ timeSlot: slot, startTime: p.startTime, endTime: p.endTime })) {
+      planBusy.add(c.slot);
+    }
+  }
   const slotFree = (s: TimeSlot): boolean => {
     if (planBusy.has(s)) return false;
     return dayAvail ? !!dayAvail.slots[s] : true;
