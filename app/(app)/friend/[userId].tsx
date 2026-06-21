@@ -427,7 +427,7 @@ export default function FriendProfileScreen() {
                 </View>
               )}
 
-              {/* Action row: Send a ping + Plan with X */}
+              {/* Action row: Vibe check + Plan with X */}
               <View className="flex-row gap-2 mt-4">
                 <Pressable
                   onPress={() => router.push(`/(app)/new-plan?preInvite=${userId}`)}
@@ -444,7 +444,7 @@ export default function FriendProfileScreen() {
                 >
                   <Text style={{ fontSize: 14 }}>👋</Text>
                   <Text className="font-sans text-sm font-semibold text-primary">
-                    Ping
+                    Vibe check
                   </Text>
                 </Pressable>
               </View>

@@ -24,7 +24,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { format, addDays, isToday, isTomorrow, isSameDay } from 'date-fns';
 import * as Haptics from 'expo-haptics';
-import { X, Check, Search } from 'lucide-react-native';
+import { X, Check, Search, Clock } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -35,10 +35,12 @@ import { formatDisplayName } from '@/lib/utils';
 import type { TimeSlot } from '@/types/planner';
 import { TC } from '@/lib/theme';
 
-import { TINT } from '@/lib/colors';
+import { TINT, PARADE_GREEN } from '@/lib/colors';
 import { Chip } from '@/components/primitives/Chip';
 import { FieldLabel } from '@/components/primitives/FieldLabel';
 import { SLOT_OPTIONS } from '@/lib/socialSlots';
+import { StartEndTimePicker, defaultTimesForSlot } from '@/components/new-plan/StartEndTimePicker';
+import { hourToTimeString, slotForHour } from '@/lib/planSlotCoverage';
 
 function dateLabel(d: Date): string {
   if (isToday(d))    return 'Today';
@@ -107,6 +109,18 @@ export default function NewHangRequestScreen() {
   const [message, setMessage] = useState(messageParam ?? '');
   const [friendQuery, setFriendQuery] = useState('');
 
+  // Optional specific start/end time (fractional hours). Off by default —
+  // the coarse slot is enough for most pings.
+  const [specificTime, setSpecificTime] = useState(false);
+  const [startHour, setStartHour] = useState(0);
+  const [endHour, setEndHour] = useState(0);
+  const enableSpecificTime = useCallback(() => {
+    const t = defaultTimesForSlot(slot);
+    setStartHour(t.start);
+    setEndHour(t.end);
+    setSpecificTime(true);
+  }, [slot]);
+
   const filteredFriends = useMemo(() => {
     const q = friendQuery.trim().toLowerCase();
     if (!q) return connectedFriends;
@@ -136,7 +150,10 @@ export default function NewHangRequestScreen() {
         recipientUserId: recipientId,
         requesterName:   myName ?? 'A friend',
         selectedDay:     format(day, 'yyyy-MM-dd'),
-        selectedSlot:    slot,
+        // When a specific time is set, file it into the slot its start lands in.
+        selectedSlot:    specificTime ? slotForHour(startHour) : slot,
+        startTime:       specificTime ? hourToTimeString(startHour) : null,
+        endTime:         specificTime ? hourToTimeString(endHour) : null,
         message:         message.trim() || undefined,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -146,7 +163,7 @@ export default function NewHangRequestScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert('Could not send', err?.message ?? 'Please try again.');
     }
-  }, [recipientId, day, slot, message, myName, sendRequest]);
+  }, [recipientId, day, slot, message, myName, sendRequest, specificTime, startHour, endHour]);
 
   const saving = sendRequest.isPending;
   const canSubmit = !!recipientId && !saving;
@@ -162,7 +179,7 @@ export default function NewHangRequestScreen() {
         >
           <X size={20} color={TC.icon} strokeWidth={2} />
         </Pressable>
-        <Text className="font-display text-base text-foreground">Send a ping</Text>
+        <Text className="font-display text-base text-foreground">Vibe check</Text>
         <Pressable
           onPress={handleSend}
           disabled={!canSubmit}
@@ -190,8 +207,9 @@ export default function NewHangRequestScreen() {
           {/* Intro */}
           <View className="bg-primary/8 rounded-2xl px-4 py-3">
             <Text className="font-sans text-xs text-primary leading-relaxed">
-              A ping is a lightweight "Hey, free then?" message. They can
-              accept (turns into a plan) or pass — no pressure either way.
+              A vibe check is a lightweight "Hey, free then?" message. They
+              pick a vibe (and maybe an activity) when they accept — or pass,
+              no pressure either way.
             </Text>
           </View>
 
@@ -340,7 +358,7 @@ export default function NewHangRequestScreen() {
 
           {/* Time slot */}
           <View>
-            <FieldLabel>Time</FieldLabel>
+            <FieldLabel>Time slot</FieldLabel>
             <View className="flex-row flex-wrap gap-2">
               {SLOT_OPTIONS.map((s) => {
                 const selected = slot === s.id;
@@ -348,7 +366,15 @@ export default function NewHangRequestScreen() {
                   <Chip
                     key={s.id}
                     selected={selected}
-                    onPress={() => { Haptics.selectionAsync(); setSlot(s.id); }}
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      setSlot(s.id);
+                      if (specificTime) {
+                        const t = defaultTimesForSlot(s.id);
+                        setStartHour(t.start);
+                        setEndHour(t.end);
+                      }
+                    }}
                   >
                     <View>
                       <Text className={`font-sans text-xs font-semibold ${
@@ -367,6 +393,32 @@ export default function NewHangRequestScreen() {
               })}
             </View>
           </View>
+
+          {/* Optional specific start/end time */}
+          {!specificTime ? (
+            <Pressable
+              onPress={() => { Haptics.selectionAsync(); enableSpecificTime(); }}
+              className="flex-row items-center gap-2 self-start rounded-xl border border-border/40 bg-card px-3.5 py-2.5 active:opacity-70"
+            >
+              <Clock size={15} color={PARADE_GREEN} strokeWidth={2} />
+              <Text className="font-sans text-[13px] font-semibold text-primary">
+                Set a specific time
+              </Text>
+            </Pressable>
+          ) : (
+            <View className="gap-2">
+              <StartEndTimePicker
+                startHour={startHour}
+                endHour={endHour}
+                onChange={(s, e) => { setStartHour(s); setEndHour(e); }}
+              />
+              <Pressable onPress={() => setSpecificTime(false)} hitSlop={6} className="self-start active:opacity-60">
+                <Text className="font-sans text-xs font-medium text-muted-foreground">
+                  Use the time slot instead
+                </Text>
+              </Pressable>
+            </View>
+          )}
 
           {/* Message */}
           <View>

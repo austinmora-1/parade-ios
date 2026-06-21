@@ -134,7 +134,7 @@ export default function WhatPlanningScreen() {
           <GroupLabel>Reach out</GroupLabel>
           <PathButton
             icon={<Hand size={18} color={MARIGOLD} strokeWidth={2} />}
-            title="Quick ping"
+            title="Vibe check"
             onPress={() => go('/(app)/new-hang-request')}
           />
           <PathButton

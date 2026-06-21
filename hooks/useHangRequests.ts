@@ -17,8 +17,12 @@ export interface HangRequest {
   requesterName:  string;
   selectedDay:    string;      // yyyy-MM-dd
   selectedSlot:   TimeSlot;
+  startTime:      string | null; // optional "HH:mm" proposed by sender
+  endTime:        string | null;
   message:        string | null;
   status:         'pending' | 'accepted' | 'declined';
+  responseVibe:     string | null; // recipient's chosen vibe on accept
+  responseActivity: string | null; // recipient's suggested activity
   createdAt:      Date;
 }
 
@@ -30,8 +34,12 @@ function mapRow(r: any): HangRequest {
     requesterName:  r.requester_name,
     selectedDay:    r.selected_day,
     selectedSlot:   r.selected_slot,
+    startTime:      r.start_time ?? null,
+    endTime:        r.end_time ?? null,
     message:        r.message,
     status:         r.status,
+    responseVibe:     r.response_vibe ?? null,
+    responseActivity: r.response_activity ?? null,
     createdAt:      new Date(r.created_at),
   };
 }
@@ -87,6 +95,8 @@ export function useSendHangRequest() {
       requesterName:   string;
       selectedDay:     string;
       selectedSlot:    TimeSlot;
+      startTime?:      string | null; // "HH:mm"
+      endTime?:        string | null;
       message?:        string;
     }) => {
       if (!user?.id) throw new Error('Not signed in');
@@ -109,6 +119,8 @@ export function useSendHangRequest() {
           requester_name: input.requesterName,
           selected_day:   input.selectedDay,
           selected_slot:  input.selectedSlot,
+          start_time:     input.startTime ?? null,
+          end_time:       input.endTime ?? null,
           message:        input.message ?? null,
           share_code:     shareCode,
           status:         'pending',
@@ -138,17 +150,26 @@ export function useDeclineHangRequest() {
 }
 
 /**
- * Accept a hang request → flip status='accepted'. Plan creation happens
- * in the screen layer so the user can edit details before saving.
+ * Accept a hang request → flip status='accepted' and record the recipient's
+ * response (the vibe they want + an optional suggested activity). Plan
+ * creation happens in the screen layer so the plan can carry the activity.
  */
 export function useAcceptHangRequest() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async (input: {
+      id: string;
+      responseVibe?: string | null;
+      responseActivity?: string | null;
+    }) => {
       const { error } = await (supabase as any)
         .from('hang_requests')
-        .update({ status: 'accepted' })
-        .eq('id', id);
+        .update({
+          status: 'accepted',
+          response_vibe: input.responseVibe ?? null,
+          response_activity: input.responseActivity ?? null,
+        })
+        .eq('id', input.id);
       if (error) throw error;
     },
     onSuccess: () => {

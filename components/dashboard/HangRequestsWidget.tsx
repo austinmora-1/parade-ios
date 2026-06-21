@@ -17,14 +17,40 @@ import {
 } from '@/hooks/useHangRequests';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { useAuth } from '@/hooks/useAuth';
-import { TIME_SLOT_LABELS } from '@/types/planner';
-import type { TimeSlot } from '@/types/planner';
+import { TIME_SLOT_LABELS, ACTIVITY_CONFIG } from '@/types/planner';
+import type { TimeSlot, ActivityType } from '@/types/planner';
 
 function dayLabel(dateStr: string): string {
   const d = parseISO(dateStr);
   if (isToday(d))    return 'Today';
   if (isTomorrow(d)) return 'Tomorrow';
   return format(d, 'EEE, MMM d');
+}
+
+/** Vibes the recipient can respond with when accepting. */
+const VIBES: { id: string; emoji: string; label: string }[] = [
+  { id: 'social', emoji: '🎉', label: 'Social' },
+  { id: 'chill', emoji: '🛋️', label: 'Chill' },
+  { id: 'athletic', emoji: '🏃', label: 'Active' },
+  { id: 'productive', emoji: '💼', label: 'Productive' },
+];
+
+/** Optional activity suggestions (subset of ACTIVITY_CONFIG). */
+const ACTIVITIES: ActivityType[] = [
+  'coffee', 'drinks', 'get-food', 'hanging-out', 'movies', 'gym', 'park',
+];
+
+/** A pretty time range from optional start/end "HH:mm" strings. */
+function timeRangeLabel(start: string | null, end: string | null): string | null {
+  const fmt = (t: string) => {
+    const [h, m] = t.split(':').map(Number);
+    const period = h < 12 || h === 24 ? 'am' : 'pm';
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return m === 0 ? `${h12}${period}` : `${h12}:${m.toString().padStart(2, '0')}${period}`;
+  };
+  if (start && end) return `${fmt(start)}–${fmt(end)}`;
+  if (start) return fmt(start);
+  return null;
 }
 
 export function HangRequestsWidget() {
@@ -35,6 +61,10 @@ export function HangRequestsWidget() {
   const addPlan   = usePlannerStore((s) => s.addPlan);
   const friends   = usePlannerStore((s) => s.friends);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Which request is in "respond" mode + the recipient's picks for it.
+  const [respondingId, setRespondingId] = useState<string | null>(null);
+  const [respVibe, setRespVibe] = useState<string | null>(null);
+  const [respActivity, setRespActivity] = useState<ActivityType | null>(null);
 
   const friendsByUserId = useMemo(() => {
     const m = new Map<string, any>();
@@ -44,7 +74,15 @@ export function HangRequestsWidget() {
     return m;
   }, [friends]);
 
-  const handleAccept = useCallback(async (r: any) => {
+  // "Let's do it" opens the response section instead of accepting outright.
+  const openRespond = useCallback((r: any) => {
+    Haptics.selectionAsync();
+    setRespondingId(r.id);
+    setRespVibe(null);
+    setRespActivity(null);
+  }, []);
+
+  const confirmAccept = useCallback(async (r: any) => {
     setBusyId(r.id);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
@@ -61,12 +99,15 @@ export function HangRequestsWidget() {
           }]
         : [];
 
-      // Create the plan (status=confirmed since both parties have already aligned)
+      // Create the plan (confirmed — both parties have aligned). Use the
+      // recipient's suggested activity + the sender's optional specific time.
       await addPlan({
         title:    r.message?.trim() || `Hangout with ${r.requesterName}`,
-        activity: 'meetup' as any,
+        activity: (respActivity ?? 'meetup') as any,
         date:     parseISO(r.selectedDay),
         timeSlot: r.selectedSlot,
+        startTime: r.startTime ?? undefined,
+        endTime:   r.endTime ?? undefined,
         duration: 60,
         participants: participants as any,
         status:   'confirmed',
@@ -74,9 +115,14 @@ export function HangRequestsWidget() {
         blocksAvailability: true,
       } as any);
 
-      // Mark the request accepted
-      await acceptMut.mutateAsync(r.id);
+      // Mark the request accepted + record the recipient's response.
+      await acceptMut.mutateAsync({
+        id: r.id,
+        responseVibe: respVibe,
+        responseActivity: respActivity,
+      });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setRespondingId(null);
     } catch (err: any) {
       console.error('Accept hang request failed', err);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -84,7 +130,7 @@ export function HangRequestsWidget() {
     } finally {
       setBusyId(null);
     }
-  }, [addPlan, acceptMut, friendsByUserId]);
+  }, [addPlan, acceptMut, friendsByUserId, respVibe, respActivity]);
 
   const handleDecline = useCallback((r: any) => {
     Alert.alert(
@@ -119,7 +165,7 @@ export function HangRequestsWidget() {
       <View className="flex-row items-center gap-1.5 px-0.5">
         <MessageCircle size={12} color="#D46549" strokeWidth={2} />
         <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-          Pings for you
+          Vibe checks
         </Text>
         <View className="ml-auto bg-secondary/15 rounded-full px-2 py-0.5">
           <Text className="font-sans text-xs text-secondary font-semibold">
@@ -130,8 +176,10 @@ export function HangRequestsWidget() {
 
       <View className="gap-2">
         {requests.map((r) => {
-          const slotLabel = TIME_SLOT_LABELS[r.selectedSlot as TimeSlot]?.time ?? '';
+          const slotLabel = TIME_SLOT_LABELS[r.selectedSlot as TimeSlot]?.label ?? '';
+          const timeRange = timeRangeLabel(r.startTime, r.endTime);
           const busy = busyId === r.id;
+          const responding = respondingId === r.id;
           return (
             <View
               key={r.id}
@@ -142,7 +190,7 @@ export function HangRequestsWidget() {
                   {r.requesterName}
                 </Text>
                 <Text className="font-sans text-xs text-muted-foreground">
-                  {dayLabel(r.selectedDay)} · {slotLabel}
+                  {dayLabel(r.selectedDay)} · {timeRange ? `${timeRange}` : slotLabel}
                 </Text>
                 {r.message && (
                   <Text className="font-sans text-xs text-foreground/80 leading-relaxed mt-1">
@@ -151,42 +199,118 @@ export function HangRequestsWidget() {
                 )}
               </View>
 
-              {/* Action row */}
-              <View className="flex-row border-t border-border/20">
-                <Pressable
-                  onPress={() => handleDecline(r)}
-                  disabled={busy}
-                  className="flex-1 flex-row items-center justify-center gap-1.5 py-3 active:bg-muted/20"
-                >
-                  {busy && declineMut.isPending ? (
-                    <ActivityIndicator size="small" color="#D46549" />
-                  ) : (
-                    <>
-                      <X size={14} color="#D46549" strokeWidth={2.2} />
-                      <Text className="font-sans text-[13px] font-semibold text-secondary">
-                        Pass
+              {responding ? (
+                /* Response section — pick a vibe + optional activity */
+                <View className="px-4 pb-3 pt-1 gap-3 border-t border-border/20">
+                  <View className="gap-1.5">
+                    <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                      Your vibe?
+                    </Text>
+                    <View className="flex-row flex-wrap gap-1.5">
+                      {VIBES.map((v) => {
+                        const sel = respVibe === v.id;
+                        return (
+                          <Pressable
+                            key={v.id}
+                            onPress={() => { Haptics.selectionAsync(); setRespVibe(sel ? null : v.id); }}
+                            className={`flex-row items-center gap-1 rounded-full border px-2.5 py-1.5 active:opacity-70 ${
+                              sel ? 'bg-primary border-primary' : 'bg-card border-border/40'
+                            }`}
+                          >
+                            <Text style={{ fontSize: 12 }}>{v.emoji}</Text>
+                            <Text className={`font-sans text-xs font-semibold ${sel ? 'text-white' : 'text-foreground'}`}>
+                              {v.label}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+
+                  <View className="gap-1.5">
+                    <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                      Suggest an activity (optional)
+                    </Text>
+                    <View className="flex-row flex-wrap gap-1.5">
+                      {ACTIVITIES.map((a) => {
+                        const cfg = ACTIVITY_CONFIG[a];
+                        if (!cfg) return null;
+                        const sel = respActivity === a;
+                        return (
+                          <Pressable
+                            key={a}
+                            onPress={() => { Haptics.selectionAsync(); setRespActivity(sel ? null : a); }}
+                            className={`rounded-full border px-2.5 py-1.5 active:opacity-70 ${
+                              sel ? 'bg-primary/10 border-primary/50' : 'bg-card border-border/40'
+                            }`}
+                          >
+                            <Text className="font-sans text-xs font-medium text-foreground">
+                              {cfg.icon} {cfg.label}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+
+                  <View className="flex-row gap-2 pt-0.5">
+                    <Pressable
+                      onPress={() => setRespondingId(null)}
+                      disabled={busy}
+                      className="rounded-xl border border-border/40 px-4 py-2.5 active:opacity-70"
+                    >
+                      <Text className="font-sans text-[13px] font-semibold text-muted-foreground">Cancel</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => confirmAccept(r)}
+                      disabled={busy}
+                      className={`flex-1 flex-row items-center justify-center gap-1.5 rounded-xl py-2.5 ${
+                        busy ? 'bg-muted' : 'bg-primary active:opacity-90'
+                      }`}
+                    >
+                      {busy ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      ) : (
+                        <Check size={14} color="#FFFFFF" strokeWidth={2.5} />
+                      )}
+                      <Text className="font-sans text-[13px] font-semibold text-white">
+                        {busy ? 'Confirming…' : 'Confirm'}
                       </Text>
-                    </>
-                  )}
-                </Pressable>
-                <View className="w-px bg-border/30" />
-                <Pressable
-                  onPress={() => handleAccept(r)}
-                  disabled={busy}
-                  className="flex-1 flex-row items-center justify-center gap-1.5 py-3 active:bg-primary/5"
-                >
-                  {busy && acceptMut.isPending ? (
-                    <ActivityIndicator size="small" color="#23744D" />
-                  ) : (
-                    <>
-                      <Check size={14} color="#23744D" strokeWidth={2.5} />
-                      <Text className="font-sans text-[13px] font-semibold text-primary">
-                        Let's do it
-                      </Text>
-                    </>
-                  )}
-                </Pressable>
-              </View>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : (
+                /* Action row */
+                <View className="flex-row border-t border-border/20">
+                  <Pressable
+                    onPress={() => handleDecline(r)}
+                    disabled={busy}
+                    className="flex-1 flex-row items-center justify-center gap-1.5 py-3 active:bg-muted/20"
+                  >
+                    {busy && declineMut.isPending ? (
+                      <ActivityIndicator size="small" color="#D46549" />
+                    ) : (
+                      <>
+                        <X size={14} color="#D46549" strokeWidth={2.2} />
+                        <Text className="font-sans text-[13px] font-semibold text-secondary">
+                          Pass
+                        </Text>
+                      </>
+                    )}
+                  </Pressable>
+                  <View className="w-px bg-border/30" />
+                  <Pressable
+                    onPress={() => openRespond(r)}
+                    disabled={busy}
+                    className="flex-1 flex-row items-center justify-center gap-1.5 py-3 active:bg-primary/5"
+                  >
+                    <Check size={14} color="#23744D" strokeWidth={2.5} />
+                    <Text className="font-sans text-[13px] font-semibold text-primary">
+                      Let's do it
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
             </View>
           );
         })}
