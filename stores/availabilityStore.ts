@@ -55,25 +55,20 @@ export const useAvailabilityStore = create<AvailabilityState & AvailabilityActio
     }
 
     const existing = availabilityMap[dateStr];
-    let nextMap: Record<string, DayAvailability>;
     if (existing) {
       // A real row exists now — the day is no longer schedule-derived
       const updatedEntry = { ...existing, slots: { ...existing.slots, [slot]: available }, isDefault: false };
       const updated = availability.map(a => format(a.date, 'yyyy-MM-dd') === dateStr ? updatedEntry : a);
-      nextMap = { ...availabilityMap, [dateStr]: updatedEntry };
-      set({ availability: updated, availabilityMap: nextMap });
+      set({ availability: updated, availabilityMap: { ...availabilityMap, [dateStr]: updatedEntry } });
     } else {
       const newAvailability = createDefaultAvailability(date, defaultSettings);
       newAvailability.slots[slot] = available;
       newAvailability.isDefault = false;
-      nextMap = { ...availabilityMap, [dateStr]: newAvailability };
       set({
         availability: [...availability, newAvailability],
-        availabilityMap: nextMap,
+        availabilityMap: { ...availabilityMap, [dateStr]: newAvailability },
       });
     }
-    // Keep the iMessage extension's availability in sync as the user edits.
-    syncAvailabilityToAppGroup(nextMap);
   },
 
   setLocationStatus: async (status, userId, date) => {
@@ -289,8 +284,15 @@ export const useAvailabilityStore = create<AvailabilityState & AvailabilityActio
       defaultSettings,
       homeAddress: homeAddr,
     });
-
-    // Push the freshly-loaded availability to the App Group for the extension.
-    syncAvailabilityToAppGroup(availabilityMap);
   },
 }));
+
+// Mirror availability into the App Group whenever it changes — by ANY path,
+// including plannerStore writing it via setState (the real load path) — so the
+// iMessage extension's "Share availability" sees the user's actual free slots.
+// iOS-only in effect (the native module no-ops elsewhere).
+useAvailabilityStore.subscribe((state, prev) => {
+  if (state.availabilityMap !== prev.availabilityMap) {
+    syncAvailabilityToAppGroup(state.availabilityMap);
+  }
+});

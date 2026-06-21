@@ -25,7 +25,9 @@ const SLOTS: TimeSlot[] = [
   'late-night',
 ];
 
-const HORIZON_DAYS = 14;
+// Covers the extension's longest share range (2 months ≈ 60 days), plus a
+// little slack so the calendar's trailing week is fully populated.
+const HORIZON_DAYS = 63;
 
 /**
  * Derive the next `HORIZON_DAYS` of free social slots from the availability map

@@ -193,6 +193,9 @@ private final class DrawerModel: ObservableObject {
   @Published var mode: Mode = .compose
   @Published var screen: ComposeScreen = .menu
   @Published var payload: Payload?
+  /// Whether a Parade identity is bridged from the app (App Group). When false,
+  /// the compose side shows the one-time "Connect" sign-in step.
+  @Published var isSignedIn = false
 
   var senderName: String?
   var availability: [AvailabilityDay] = []
@@ -203,6 +206,7 @@ private final class DrawerModel: ObservableObject {
   var onAcceptPing: ((Payload) -> Void)?
   var onPickSlot: ((Payload, String, String) -> Void)? // payload, day, slot
   var onPass: ((Payload) -> Void)?
+  var onConnect: (() -> Void)?
   var requestExpand: (() -> Void)?
 }
 
@@ -238,6 +242,7 @@ class MessagesViewController: MSMessagesAppViewController {
     model.onAcceptPing = { [weak self] p in self?.respondAcceptPing(p) }
     model.onPickSlot = { [weak self] p, day, slot in self?.respondPickSlot(p, day: day, slot: slot) }
     model.onPass = { [weak self] p in self?.respondPass(p) }
+    model.onConnect = { [weak self] in self?.openConnect() }
   }
 
   private func embedHost() {
@@ -259,6 +264,7 @@ class MessagesViewController: MSMessagesAppViewController {
   /// Decide compose vs. respond based on whether the user tapped one of our
   /// proposal bubbles. Refreshes the bridged availability + sender name too.
   private func refresh(for conversation: MSConversation) {
+    model.isSignedIn = AppGroupSession.current != nil
     model.senderName = AppGroupSession.current?.displayName
     model.availability = AppGroupSession.availability
 
@@ -395,6 +401,21 @@ class MessagesViewController: MSMessagesAppViewController {
       if !ok { NSLog("[Parade] failed to open app for \(action)") }
     }
   }
+
+  /// One-time connect: open the Parade app to sign in, which writes the user's
+  /// identity + availability into the App Group (creating the shared container)
+  /// so the extension can show real data. Handled by app/(app)/imsg-connect.tsx.
+  private func openConnect() {
+    var c = URLComponents()
+    c.scheme = "https"
+    c.host = "helloparade.app"
+    c.path = "/imsg-connect"
+    c.queryItems = [URLQueryItem(name: "src", value: "imessage")]
+    guard let url = c.url else { return }
+    extensionContext?.open(url) { ok in
+      if !ok { NSLog("[Parade] failed to open app to connect") }
+    }
+  }
 }
 
 // MARK: - Root view (switches compose vs. received)
@@ -424,6 +445,14 @@ private struct ComposeRoot: View {
   @ObservedObject var model: DrawerModel
 
   var body: some View {
+    if model.isSignedIn {
+      composers
+    } else {
+      ConnectView(onConnect: { model.onConnect?() })
+    }
+  }
+
+  @ViewBuilder private var composers: some View {
     switch model.screen {
     case .menu:
       DrawerMenu(
@@ -442,6 +471,32 @@ private struct ComposeRoot: View {
         onShare: { model.onShareAvail?($0); model.screen = .menu }
       )
     }
+  }
+}
+
+/// One-time sign-in step shown when no Parade identity is bridged yet. The
+/// extension can't authenticate itself (no network by design), so it hands off
+/// to the app, which signs in and writes identity + availability to the App
+/// Group. See app/(app)/imsg-connect.tsx.
+private struct ConnectView: View {
+  let onConnect: () -> Void
+  var body: some View {
+    VStack(spacing: 12) {
+      Text("Parade")
+        .font(.system(size: 22, weight: .bold, design: .serif))
+        .foregroundColor(Brand.marigold)
+      Text("Connect your account")
+        .font(.system(size: 17, weight: .bold)).foregroundColor(.white)
+      Text("Sign in once to send pings and share your real availability from Messages.")
+        .font(.system(size: 12)).foregroundColor(Brand.label)
+        .multilineTextAlignment(.center)
+        .fixedSize(horizontal: false, vertical: true)
+      PrimaryButton(title: "Open Parade to sign in", action: onConnect)
+        .padding(.top, 4)
+    }
+    .padding(20)
+    .frame(maxWidth: 360)
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 }
 
@@ -546,61 +601,171 @@ private struct QuickPingComposer: View {
   }
 }
 
+/// "Share availability" — mirrors the in-app "Find time → When works?" step:
+/// a Mon-aligned calendar whose day cells are tinted by how free the user is
+/// (green = lots free, marigold = some). A range toggle (1 week / 4 weeks /
+/// 2 months) zooms the calendar out. In the 1-week view tapping a day fine-tunes
+/// individual slots; the longer views toggle whole days in/out. Pre-loaded: the
+/// user's free social slots (real bridged availability, or a social-slot
+/// fallback before the first sync) are all pre-selected.
+private enum ShareRange: CaseIterable {
+  case week, fourWeeks, twoMonths
+  var days: Int { switch self { case .week: return 7; case .fourWeeks: return 28; case .twoMonths: return 60 } }
+  var label: String { switch self { case .week: return "1 week"; case .fourWeeks: return "4 weeks"; case .twoMonths: return "2 months" } }
+  /// Per-slot fine-tuning is only offered in the 1-week view.
+  var slotLevel: Bool { self == .week }
+  var cellHeight: CGFloat { switch self { case .week: return 40; case .fourWeeks: return 34; case .twoMonths: return 28 } }
+}
+
 private struct ShareAvailabilityComposer: View {
   let availability: [AvailabilityDay]
   let onBack: () -> Void
   let onShare: ([AvailabilityDay]) -> Void
 
-  /// Candidate days/slots: real bridged availability if present, else the next
-  /// 7 days' social slots so the composer still works before the first sync.
-  private var candidates: [AvailabilityDay] {
-    if !availability.isEmpty { return availability }
-    return (0..<7).compactMap { Calendar.current.date(byAdding: .day, value: $0, to: Date()) }
-      .map { AvailabilityDay(date: DateFmt.key($0), slots: socialSlotIds(for: $0)) }
-  }
-
-  // Selected slot ids keyed by date.
+  @State private var range: ShareRange = .week
   @State private var selected: [String: Set<String>] = [:]
+  @State private var activeDate: String = ""
+  @State private var collapsedMonths: Set<String> = []
   @State private var seeded = false
 
-  private var hasReal: Bool { !availability.isEmpty }
+  /// Every free day we know about (out to the longest range), real or fallback.
+  private var allCandidates: [AvailabilityDay] {
+    let base = availability.isEmpty
+      ? (0..<63).compactMap { Calendar.current.date(byAdding: .day, value: $0, to: Date()) }
+          .map { AvailabilityDay(date: DateFmt.key($0), slots: socialSlotIds(for: $0)) }
+      : availability
+    return base.filter { !$0.slots.isEmpty }
+  }
+
+  /// Free days within the currently-selected range.
+  private var candidates: [AvailabilityDay] {
+    let cal = Calendar.current
+    let cutoff = cal.date(byAdding: .day, value: range.days, to: cal.startOfDay(for: Date()))!
+    return allCandidates.filter { (DateFmt.parse($0.date) ?? .distantFuture) < cutoff }
+  }
+
+  private var byDate: [String: [String]] {
+    Dictionary(candidates.map { ($0.date, $0.slots) }, uniquingKeysWith: { a, _ in a })
+  }
 
   var body: some View {
     ScrollView {
-      VStack(alignment: .leading, spacing: 18) {
-        ComposerHeader(
-          title: "Share availability",
-          subtitle: hasReal ? "Your open slots — tap to include." : "Pick the slots you want to offer.",
-          onBack: onBack
-        )
+      VStack(alignment: .leading, spacing: 14) {
+        ComposerHeader(title: "Share availability",
+                       subtitle: range.slotLevel
+                         ? "Tap a day to fine-tune your free times."
+                         : "Tap days to toggle what you share.",
+                       onBack: onBack)
 
-        ForEach(candidates, id: \.date) { day in
-          VStack(alignment: .leading, spacing: 8) {
-            SectionLabel(DateFmt.friendly(day.date).uppercased())
-            FlowChips(items: day.slots, selected: selected[day.date] ?? [],
-                      label: { slotLabel($0) }) { slot in toggle(day.date, slot) }
+        RangeSelector(range: $range)
+        AvailLegend()
+
+        if range.slotLevel {
+          WeekdayHeader()
+          CalendarGrid(weeks: weeks, byDate: byDate, selected: selected,
+                       activeDate: activeDate, cellHeight: range.cellHeight) { onTapDay($0) }
+
+          if let slots = byDate[activeDate] {
+            DayDetail(dateKey: activeDate, slots: slots, selected: selected[activeDate] ?? []) {
+              toggle(activeDate, $0)
+            }
+          }
+        } else {
+          // Longer ranges: month-grouped, collapsible, day-level toggling.
+          ForEach(monthBuckets, id: \.id) { bucket in
+            MonthSection(
+              title: bucket.title,
+              weeks: bucket.weeks,
+              byDate: byDate,
+              selected: selected,
+              expanded: !collapsedMonths.contains(bucket.id),
+              cellHeight: range.cellHeight,
+              onToggleExpand: { toggleMonth(bucket.id) },
+              onTapDay: { toggleWholeDay($0) }
+            )
           }
         }
 
-        PrimaryButton(title: "Share \(totalSelected) slot\(totalSelected == 1 ? "" : "s")",
-                      disabled: totalSelected == 0) {
+        PrimaryButton(title: "Share availability", disabled: !hasSelection) {
           onShare(buildSelection())
         }
       }
       .padding(20)
     }
-    .onAppear(perform: seedSelection)
+    .onAppear(perform: seed)
   }
 
-  private var totalSelected: Int { selected.values.reduce(0) { $0 + $1.count } }
+  private var hasSelection: Bool {
+    candidates.contains { !(selected[$0.date] ?? []).isEmpty }
+  }
 
-  private func seedSelection() {
+  /// Mon-aligned weeks spanning today → the end of the range (1-week view).
+  private var weeks: [[Date]] {
+    let cal = Calendar.current
+    let today = cal.startOfDay(for: Date())
+    let last = cal.date(byAdding: .day, value: range.days - 1, to: today)!
+    func mondayOffset(_ d: Date) -> Int { (cal.component(.weekday, from: d) + 5) % 7 }
+    let start = cal.date(byAdding: .day, value: -mondayOffset(today), to: today)!
+    var out: [[Date]] = []
+    var cursor = start
+    repeat {
+      let week = (0..<7).compactMap { cal.date(byAdding: .day, value: $0, to: cursor) }
+      out.append(week)
+      cursor = cal.date(byAdding: .day, value: 7, to: cursor)!
+    } while cursor <= last && out.count < 10
+    return out
+  }
+
+  /// One MonthBucket per calendar month the range touches (4-week / 2-month).
+  private var monthBuckets: [MonthBucket] {
+    let cal = Calendar.current
+    let today = cal.startOfDay(for: Date())
+    let cutoff = cal.date(byAdding: .day, value: range.days - 1, to: today)!
+    let fmt = DateFormatter()
+    fmt.dateFormat = "LLLL yyyy"
+    var out: [MonthBucket] = []
+    var cursor = cal.date(from: cal.dateComponents([.year, .month], from: today))!
+    while cursor <= cutoff && out.count < 4 {
+      let comps = cal.dateComponents([.year, .month], from: cursor)
+      let id = String(format: "%04d-%02d", comps.year ?? 0, comps.month ?? 0)
+      out.append(MonthBucket(id: id, title: fmt.string(from: cursor), weeks: monthWeeks(of: cursor)))
+      cursor = cal.date(byAdding: .month, value: 1, to: cursor)!
+    }
+    return out
+  }
+
+  /// Mon-aligned weeks for a month; non-month cells are nil padding.
+  private func monthWeeks(of monthDate: Date) -> [[Date?]] {
+    let cal = Calendar.current
+    let first = cal.date(from: cal.dateComponents([.year, .month], from: monthDate))!
+    let daysInMonth = cal.range(of: .day, in: .month, for: first)?.count ?? 30
+    let lead = (cal.component(.weekday, from: first) + 5) % 7   // Mon=0
+    var cells: [Date?] = Array(repeating: nil, count: lead)
+    for d in 0..<daysInMonth { cells.append(cal.date(byAdding: .day, value: d, to: first)) }
+    while cells.count % 7 != 0 { cells.append(nil) }
+    return stride(from: 0, to: cells.count, by: 7).map { Array(cells[$0..<($0 + 7)]) }
+  }
+
+  private func onTapDay(_ key: String) {
+    guard byDate[key] != nil else { return }
+    if range.slotLevel {
+      activeDate = key            // open the slot detail
+    } else {
+      toggleWholeDay(key)         // include / exclude the whole day
+    }
+  }
+
+  private func toggleMonth(_ id: String) {
+    if collapsedMonths.contains(id) { collapsedMonths.remove(id) } else { collapsedMonths.insert(id) }
+  }
+
+  private func seed() {
     guard !seeded else { return }
     seeded = true
-    // Pre-select everything (the user is offering their real free time).
     var s: [String: Set<String>] = [:]
-    for day in candidates { s[day.date] = Set(day.slots) }
+    for c in allCandidates { s[c.date] = Set(c.slots) }   // pre-select all free slots
     selected = s
+    activeDate = allCandidates.first?.date ?? DateFmt.key(Date())
   }
 
   private func toggle(_ date: String, _ slot: String) {
@@ -609,11 +774,255 @@ private struct ShareAvailabilityComposer: View {
     selected[date] = set
   }
 
-  private func buildSelection() -> [AvailabilityDay] {
-    candidates.compactMap { day in
-      let picked = (day.slots).filter { (selected[day.date] ?? []).contains($0) }
-      return picked.isEmpty ? nil : AvailabilityDay(date: day.date, slots: picked)
+  private func toggleWholeDay(_ date: String) {
+    if (selected[date] ?? []).isEmpty {
+      selected[date] = Set(byDate[date] ?? [])
+    } else {
+      selected[date] = []
     }
+  }
+
+  private func buildSelection() -> [AvailabilityDay] {
+    candidates.compactMap { c in
+      let picked = c.slots.filter { (selected[c.date] ?? []).contains($0) }
+      return picked.isEmpty ? nil : AvailabilityDay(date: c.date, slots: picked)
+    }
+  }
+}
+
+private struct RangeSelector: View {
+  @Binding var range: ShareRange
+  var body: some View {
+    HStack(spacing: 6) {
+      ForEach(ShareRange.allCases, id: \.self) { r in
+        Button { range = r } label: {
+          Text(r.label)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundColor(range == r ? Brand.ink : .white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(range == r ? Brand.marigold : Brand.tile)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .buttonStyle(.plain)
+      }
+    }
+  }
+}
+
+/// Heat legend: explains the availability colors + that tapping toggles sharing.
+private struct AvailLegend: View {
+  var body: some View {
+    HStack(spacing: 12) {
+      swatch(Brand.green, "Lots free")
+      swatch(Brand.marigold, "Some")
+      Spacer()
+      Text("Tap to toggle").font(.system(size: 10)).foregroundColor(Brand.label)
+    }
+  }
+  @ViewBuilder private func swatch(_ color: Color, _ text: String) -> some View {
+    HStack(spacing: 4) {
+      RoundedRectangle(cornerRadius: 3).fill(color).frame(width: 10, height: 10)
+      Text(text).font(.system(size: 10)).foregroundColor(Brand.label)
+    }
+  }
+}
+
+private struct WeekdayHeader: View {
+  private let labels = ["M", "T", "W", "T", "F", "S", "S"]
+  var body: some View {
+    HStack(spacing: 6) {
+      ForEach(0..<7, id: \.self) { i in
+        Text(labels[i])
+          .font(.system(size: 11, weight: .semibold))
+          .foregroundColor(Brand.label)
+          .frame(maxWidth: .infinity)
+      }
+    }
+  }
+}
+
+private struct CalendarGrid: View {
+  let weeks: [[Date]]
+  let byDate: [String: [String]]
+  let selected: [String: Set<String>]
+  let activeDate: String
+  let cellHeight: CGFloat
+  let onTap: (String) -> Void
+
+  var body: some View {
+    VStack(spacing: 6) {
+      ForEach(0..<weeks.count, id: \.self) { wi in
+        HStack(spacing: 6) {
+          ForEach(weeks[wi], id: \.self) { date in
+            let key = DateFmt.key(date)
+            let tappable = byDate[key] != nil
+            DayCell(
+              date: date,
+              freeCount: byDate[key]?.count ?? 0,
+              isSelected: tappable && !(selected[key] ?? []).isEmpty,
+              tappable: tappable,
+              isActive: key == activeDate,
+              height: cellHeight
+            )
+            .frame(maxWidth: .infinity)
+            .onTapGesture { if tappable { onTap(key) } }
+          }
+        }
+      }
+    }
+  }
+}
+
+/// A day cell encoding TWO dimensions:
+///   • availability heat (your real free time): green = lots free (3+ slots),
+///     marigold = some (1–2), faint = busy/none.
+///   • sharing toggle: full-strength heat = sharing this day, faded heat =
+///     free but toggled off. Tapping toggles between the two.
+private struct DayCell: View {
+  let date: Date
+  let freeCount: Int     // availability heat
+  let isSelected: Bool   // sharing this day
+  let tappable: Bool     // has free slots in range → can be toggled
+  let isActive: Bool     // 1-week view: this day's slot detail is open
+  let height: CGFloat
+
+  private var fontSize: CGFloat { height >= 38 ? 14 : (height >= 32 ? 13 : 11) }
+  private var isMarigold: Bool { freeCount >= 1 && freeCount < 3 }
+  private var heat: Color { freeCount >= 3 ? Brand.green : (freeCount >= 1 ? Brand.marigold : Color.white) }
+  private var fill: Color {
+    guard tappable else { return Color.white.opacity(0.04) }   // busy / no availability
+    return isSelected ? heat : heat.opacity(0.22)              // sharing = full, off = faded
+  }
+  private var fg: Color {
+    guard tappable else { return Color.white.opacity(0.25) }
+    if !isSelected { return Color.white.opacity(0.75) }
+    return isMarigold ? Brand.ink : .white
+  }
+
+  var body: some View {
+    Text("\(Calendar.current.component(.day, from: date))")
+      .font(.system(size: fontSize, weight: .semibold))
+      .foregroundColor(fg)
+      .frame(height: height)
+      .frame(maxWidth: .infinity)
+      .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(fill))
+      .overlay(
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+          .stroke(isActive ? Color.white : Color.clear, lineWidth: 2)
+      )
+  }
+}
+
+/// One calendar month's worth of Mon-aligned weeks (nil = padding cell).
+private struct MonthBucket {
+  let id: String
+  let title: String
+  let weeks: [[Date?]]
+}
+
+/// A collapsible month section (4-week / 2-month ranges): a "June 2026" header
+/// with a sharing/total day count and a chevron, over that month's calendar.
+/// Days are day-level toggles (color = sharing).
+private struct MonthSection: View {
+  let title: String
+  let weeks: [[Date?]]
+  let byDate: [String: [String]]
+  let selected: [String: Set<String>]
+  let expanded: Bool
+  let cellHeight: CGFloat
+  let onToggleExpand: () -> Void
+  let onTapDay: (String) -> Void
+
+  private var dates: [Date] { weeks.flatMap { $0 }.compactMap { $0 } }
+  private var availDays: Int { dates.filter { byDate[DateFmt.key($0)] != nil }.count }
+  private var sharingDays: Int {
+    dates.filter { byDate[DateFmt.key($0)] != nil && !(selected[DateFmt.key($0)] ?? []).isEmpty }.count
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Button(action: onToggleExpand) {
+        HStack(spacing: 8) {
+          Text(title).font(.system(size: 15, weight: .bold)).foregroundColor(.white)
+          Spacer()
+          if availDays > 0 {
+            Text("\(sharingDays)/\(availDays) days")
+              .font(.system(size: 12)).foregroundColor(Brand.label)
+          }
+          Image(systemName: expanded ? "chevron.up" : "chevron.down")
+            .font(.system(size: 12, weight: .semibold)).foregroundColor(Brand.label)
+        }
+        .padding(.vertical, 6)
+        .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+
+      if expanded {
+        WeekdayHeader()
+        VStack(spacing: 6) {
+          ForEach(0..<weeks.count, id: \.self) { wi in
+            HStack(spacing: 6) {
+              ForEach(0..<7, id: \.self) { di in
+                if let date = weeks[wi][di] {
+                  let key = DateFmt.key(date)
+                  let tappable = byDate[key] != nil
+                  DayCell(date: date,
+                          freeCount: byDate[key]?.count ?? 0,
+                          isSelected: tappable && !(selected[key] ?? []).isEmpty,
+                          tappable: tappable,
+                          isActive: false,
+                          height: cellHeight)
+                    .frame(maxWidth: .infinity)
+                    .onTapGesture { if tappable { onTapDay(key) } }
+                } else {
+                  Color.clear.frame(height: cellHeight).frame(maxWidth: .infinity)
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    .padding(.bottom, 2)
+  }
+}
+
+private struct DayDetail: View {
+  let dateKey: String
+  let slots: [String]
+  let selected: Set<String>
+  let toggle: (String) -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text(DateFmt.friendly(dateKey))
+        .font(.system(size: 15, weight: .bold))
+        .foregroundColor(.white)
+      ForEach(slots, id: \.self) { slot in
+        let on = selected.contains(slot)
+        Button { toggle(slot) } label: {
+          HStack {
+            VStack(alignment: .leading, spacing: 2) {
+              Text(slotLabel(slot)).font(.system(size: 14, weight: .semibold)).foregroundColor(.white)
+              Text(slotRange(slot)).font(.system(size: 12)).foregroundColor(Brand.label)
+            }
+            Spacer()
+            Image(systemName: on ? "checkmark.circle.fill" : "circle")
+              .font(.system(size: 20))
+              .foregroundColor(on ? Brand.greenBright : Brand.label)
+          }
+          .padding(12)
+          .background(on ? Brand.green.opacity(0.18) : Brand.tile)
+          .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
+      }
+    }
+    .padding(12)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(Color.white.opacity(0.04))
+    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
   }
 }
 
