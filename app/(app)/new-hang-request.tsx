@@ -48,6 +48,14 @@ function dateLabel(d: Date): string {
   return format(d, 'EEE');
 }
 
+/** Parse a "HH:mm" string into a fractional hour (e.g. "18:30" → 18.5). */
+function parseHmToHour(s?: string): number | null {
+  if (!s) return null;
+  const m = /^(\d{1,2}):(\d{2})$/.exec(s);
+  if (!m) return null;
+  return Number(m[1]) + Number(m[2]) / 60;
+}
+
 /** Quick query to look up the requester's own display name */
 function useMyDisplayName(userId: string | undefined) {
   return useQuery({
@@ -77,11 +85,15 @@ export default function NewHangRequestScreen() {
     day: dayParam,
     slot: slotParam,
     message: messageParam,
+    startTime: startTimeParam,
+    endTime: endTimeParam,
   } = useLocalSearchParams<{
     friendId?: string;
     day?: string;
     slot?: string;
     message?: string;
+    startTime?: string;
+    endTime?: string;
   }>();
   const { user } = useAuth();
   const friends = usePlannerStore((s) => s.friends);
@@ -110,10 +122,11 @@ export default function NewHangRequestScreen() {
   const [friendQuery, setFriendQuery] = useState('');
 
   // Optional specific start/end time (fractional hours). Off by default —
-  // the coarse slot is enough for most pings.
-  const [specificTime, setSpecificTime] = useState(false);
-  const [startHour, setStartHour] = useState(0);
-  const [endHour, setEndHour] = useState(0);
+  // the coarse slot is enough for most pings. Prefilled when the iMessage
+  // extension passed a specific time (startTime/endTime as "HH:mm").
+  const [specificTime, setSpecificTime] = useState(!!startTimeParam);
+  const [startHour, setStartHour] = useState(() => parseHmToHour(startTimeParam) ?? 0);
+  const [endHour, setEndHour] = useState(() => parseHmToHour(endTimeParam) ?? 0);
   const enableSpecificTime = useCallback(() => {
     const t = defaultTimesForSlot(slot);
     setStartHour(t.start);

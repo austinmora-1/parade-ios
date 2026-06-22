@@ -23,12 +23,14 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator, View } from 'react-native';
 
 export default function ImsgActionScreen() {
-  const { do: action, from, day, slot, msg, src } = useLocalSearchParams<{
+  const { do: action, from, day, slot, msg, st, et, src } = useLocalSearchParams<{
     do?: string;
     from?: string;
     day?: string;
     slot?: string;
     msg?: string;
+    st?: string;
+    et?: string;
     src?: string;
   }>();
 
@@ -45,12 +47,14 @@ export default function ImsgActionScreen() {
       day && `day=${encodeURIComponent(day)}`,
       slot && `slot=${encodeURIComponent(slot)}`,
       msg && `message=${encodeURIComponent(msg)}`,
+      st && `startTime=${encodeURIComponent(st)}`,
+      et && `endTime=${encodeURIComponent(et)}`,
       src && `src=${encodeURIComponent(src)}`,
     ]
       .filter(Boolean)
       .join('&');
     router.replace(`/(app)/new-hang-request${query ? `?${query}` : ''}`);
-  }, [action, from, day, slot, msg, src]);
+  }, [action, from, day, slot, msg, st, et, src]);
 
   return (
     <View className="flex-1 items-center justify-center bg-chalk">

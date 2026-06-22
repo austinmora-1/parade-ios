@@ -69,6 +69,37 @@ private let paradeSlots: [ParadeSlot] = [
 private func slotLabel(_ id: String) -> String { paradeSlots.first { $0.id == id }?.label ?? id }
 private func slotRange(_ id: String) -> String { paradeSlots.first { $0.id == id }?.range ?? "" }
 
+/// Default (start, end) hours for a slot — used to seed the specific-time picker.
+private func slotHours(_ id: String) -> (Int, Int) {
+  switch id {
+  case "early-morning": return (7, 9)
+  case "late-morning": return (9, 12)
+  case "early-afternoon": return (12, 15)
+  case "late-afternoon": return (15, 18)
+  case "evening": return (18, 22)
+  default: return (22, 23) // late-night (capped for the time picker)
+  }
+}
+
+/// "18:30" → "6:30pm" for display.
+private func prettyTime(_ hhmm: String) -> String {
+  let inF = DateFormatter()
+  inF.locale = Locale(identifier: "en_US_POSIX")
+  inF.dateFormat = "HH:mm"
+  guard let d = inF.date(from: hhmm) else { return hhmm }
+  let outF = DateFormatter()
+  outF.locale = Locale(identifier: "en_US_POSIX")
+  outF.dateFormat = "h:mma"
+  return outF.string(from: d).lowercased()
+}
+
+/// The proposal's time text: a specific range when set, else the slot + range.
+private func pingTimeText(slot: String?, start: String?, end: String?) -> String {
+  if let s = start, let e = end { return "\(prettyTime(s))–\(prettyTime(e))" }
+  let id = slot ?? ""
+  return "\(slotLabel(id)) (\(slotRange(id)))"
+}
+
 /// Evenings any day, or any slot on weekends — matches lib/socialSlots.ts.
 private func socialSlotIds(for date: Date) -> [String] {
   let dow = Calendar.current.component(.weekday, from: date) // 1 = Sun, 7 = Sat
@@ -101,6 +132,25 @@ private enum DateFmt {
     f.dateFormat = "EEE, MMM d"
     return f.string(from: d)
   }
+
+  /// Uppercase weekday label for a day pill: "TODAY" / "TOMORROW" / "FRI".
+  static func dayAbbrev(_ s: String) -> String {
+    guard let d = parse(s) else { return s }
+    let cal = Calendar.current
+    if cal.isDateInToday(d) { return "TODAY" }
+    if cal.isDateInTomorrow(d) { return "TMRW" }
+    let f = DateFormatter()
+    f.dateFormat = "EEE"
+    return f.string(from: d).uppercased()
+  }
+
+  /// "Jun 21" for a day pill's serif date line.
+  static func monthDay(_ s: String) -> String {
+    guard let d = parse(s) else { return s }
+    let f = DateFormatter()
+    f.dateFormat = "MMM d"
+    return f.string(from: d)
+  }
 }
 
 // MARK: - Message payload (encoded in MSMessage.url)
@@ -120,6 +170,8 @@ private struct Payload {
   var day: String?            // yyyy-MM-dd (ping / availPick)
   var slot: String?           // slot id (ping / availPick)
   var message: String?
+  var startTime: String?      // "HH:mm" when a specific time was set (ping)
+  var endTime: String?
   var offered: [AvailabilityDay] = []   // avail proposals: offered free slots
 
   var isProposal: Bool { kind == .ping || kind == .avail }
@@ -138,6 +190,8 @@ private struct Payload {
     if let v = day { q.append(.init(name: "day", value: v)) }
     if let v = slot { q.append(.init(name: "slot", value: v)) }
     if let v = message, !v.isEmpty { q.append(.init(name: "msg", value: v)) }
+    if let v = startTime { q.append(.init(name: "st", value: v)) }
+    if let v = endTime { q.append(.init(name: "et", value: v)) }
     if !offered.isEmpty {
       // days=2026-06-21:evening,late-night;2026-06-22:evening
       let enc = offered.map { "\($0.date):\($0.slots.joined(separator: ","))" }.joined(separator: ";")
@@ -164,6 +218,8 @@ private struct Payload {
     day = q("day")
     slot = q("slot")
     message = q("msg")
+    startTime = q("st")
+    endTime = q("et")
     if let days = q("days") {
       offered = days.split(separator: ";").compactMap { part in
         let halves = part.split(separator: ":", maxSplits: 1)
@@ -182,6 +238,8 @@ private struct PingDraft {
   var day: String
   var slot: String
   var message: String
+  var startTime: String?   // "HH:mm" when a specific time was set
+  var endTime: String?
 }
 
 // MARK: - Shared view model
@@ -290,6 +348,8 @@ class MessagesViewController: MSMessagesAppViewController {
     p.name = name
     p.day = draft.day
     p.slot = draft.slot
+    p.startTime = draft.startTime
+    p.endTime = draft.endTime
     let note = draft.message.trimmingCharacters(in: .whitespacesAndNewlines)
     p.message = note.isEmpty ? nil : String(note.prefix(200))  // match app: nil when empty, 200 cap
 
@@ -297,7 +357,8 @@ class MessagesViewController: MSMessagesAppViewController {
     layout.image = BubbleImage.ping(name: name, day: draft.day, slot: draft.slot,
                                      message: p.message ?? "")
     layout.caption = "👋 \(name) wants to hang"
-    layout.subcaption = "\(DateFmt.friendly(draft.day)) · \(slotLabel(draft.slot)) (\(slotRange(draft.slot)))"
+    layout.subcaption = "\(DateFmt.friendly(draft.day)) · "
+      + pingTimeText(slot: draft.slot, start: draft.startTime, end: draft.endTime)
     insert(payload: p, layout: layout)
   }
 
@@ -336,16 +397,17 @@ class MessagesViewController: MSMessagesAppViewController {
     r.day = p.day
     r.slot = p.slot
 
+    let timeText = pingTimeText(slot: p.slot, start: p.startTime, end: p.endTime)
     let layout = MSMessageTemplateLayout()
     layout.image = BubbleImage.response(title: "\(me) is in! 🎉",
-                                        detail: "\(DateFmt.friendly(p.day ?? "")) · \(slotLabel(p.slot ?? ""))")
+                                        detail: "\(DateFmt.friendly(p.day ?? "")) · \(timeText)")
     layout.caption = "✅ \(me) accepted"
-    layout.subcaption = "\(DateFmt.friendly(p.day ?? "")) · \(slotLabel(p.slot ?? ""))"
+    layout.subcaption = "\(DateFmt.friendly(p.day ?? "")) · \(timeText)"
     insertResponse(layout: layout, payload: r)
 
     // Record in-app: the accepter confirms the hang with the original sender.
     openApp(do: "accept-ping", from: p.fromUserId, name: p.name, day: p.day, slot: p.slot,
-            message: p.message)
+            message: p.message, startTime: p.startTime, endTime: p.endTime)
   }
 
   private func respondPickSlot(_ p: Payload, day: String, slot: String) {
@@ -386,7 +448,8 @@ class MessagesViewController: MSMessagesAppViewController {
   /// Open the Parade app to actually record the hang request (the extension
   /// can't write to Supabase). Handled by app/(app)/imsg.tsx.
   private func openApp(do action: String, from: String?, name: String?, day: String?,
-                       slot: String?, message: String?) {
+                       slot: String?, message: String?,
+                       startTime: String? = nil, endTime: String? = nil) {
     var c = URLComponents()
     c.scheme = "https"
     c.host = "helloparade.app"
@@ -397,6 +460,8 @@ class MessagesViewController: MSMessagesAppViewController {
     if let v = day { q.append(.init(name: "day", value: v)) }
     if let v = slot { q.append(.init(name: "slot", value: v)) }
     if let v = message, !v.isEmpty { q.append(.init(name: "msg", value: v)) }
+    if let v = startTime { q.append(.init(name: "st", value: v)) }
+    if let v = endTime { q.append(.init(name: "et", value: v)) }
     c.queryItems = q
     guard let url = c.url else { return }
     extensionContext?.open(url) { ok in
@@ -557,14 +622,24 @@ private struct DrawerRow: View {
   }
 }
 
+/// Mirrors the in-app "Vibe check" (new-hang-request) screen: a horizontal row
+/// of two-line day pills (uppercase weekday + serif date), time-slot chips that
+/// show their hour range, an optional "Set a specific time" start/end picker, a
+/// message field with a visible example, and a "Send" button.
 private struct QuickPingComposer: View {
   let onBack: () -> Void
   let onSend: (PingDraft) -> Void
 
-  @State private var selectedDay: String = DateFmt.key(Date())
+  // Default to tomorrow, matching the app.
+  @State private var selectedDay: String =
+    DateFmt.key(Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date())
   @State private var selectedSlot: String = "evening"
   @State private var message: String = ""
+  @State private var specificTime = false
+  @State private var startTime = Date()
+  @State private var endTime = Date()
 
+  private let columns = [GridItem(.flexible()), GridItem(.flexible())]
   private var dayOptions: [String] {
     (0..<14).compactMap { Calendar.current.date(byAdding: .day, value: $0, to: Date()) }
       .map { DateFmt.key($0) }
@@ -576,29 +651,146 @@ private struct QuickPingComposer: View {
         ComposerHeader(title: "Vibe check", subtitle: "Suggest a time to hang.", onBack: onBack)
 
         SectionLabel("WHEN")
-        ChipRow(items: dayOptions, selected: selectedDay, label: { DateFmt.friendly($0) }) {
-          selectedDay = $0
+        ScrollView(.horizontal, showsIndicators: false) {
+          HStack(spacing: 8) {
+            ForEach(dayOptions, id: \.self) { key in
+              DayPill(dayKey: key, selected: key == selectedDay) { selectedDay = key }
+            }
+          }
+          .padding(.horizontal, 1).padding(.vertical, 2)
         }
 
-        SectionLabel("TIME")
-        FlowChips(items: paradeSlots.map { $0.id }, selected: [selectedSlot],
-                  label: { slotLabel($0) }) { selectedSlot = $0 }
+        SectionLabel("TIME SLOT")
+        LazyVGrid(columns: columns, spacing: 8) {
+          ForEach(paradeSlots, id: \.id) { s in
+            SlotChip(slot: s, selected: selectedSlot == s.id) {
+              selectedSlot = s.id
+              if specificTime { seedTimes(for: s.id) }
+            }
+          }
+        }
+
+        if specificTime {
+          VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+              DatePicker("", selection: $startTime, displayedComponents: .hourAndMinute).labelsHidden()
+              Text("to").font(.system(size: 13)).foregroundColor(Brand.label)
+              DatePicker("", selection: $endTime, displayedComponents: .hourAndMinute).labelsHidden()
+              Spacer()
+            }
+            .tint(Brand.marigold)
+            Button { specificTime = false } label: {
+              Text("Use the time slot instead")
+                .font(.system(size: 12, weight: .medium)).foregroundColor(Brand.label)
+            }
+            .buttonStyle(.plain)
+          }
+        } else {
+          Button {
+            seedTimes(for: selectedSlot)
+            specificTime = true
+          } label: {
+            HStack(spacing: 6) {
+              Image(systemName: "clock").font(.system(size: 13, weight: .semibold))
+              Text("Set a specific time").font(.system(size: 13, weight: .semibold))
+            }
+            .foregroundColor(Brand.greenBright)
+            .padding(.horizontal, 14).padding(.vertical, 10)
+            .background(Brand.tile)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+          }
+          .buttonStyle(.plain)
+        }
 
         SectionLabel("MESSAGE (OPTIONAL)")
-        TextField("Drinks at that new place? ☕", text: $message, axis: .vertical)
-          .font(.system(size: 14))
-          .foregroundColor(.white)
-          .padding(12)
-          .background(Brand.tile)
-          .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-          .lineLimit(1...3)
-
-        PrimaryButton(title: "Send ping") {
-          onSend(PingDraft(day: selectedDay, slot: selectedSlot, message: message))
+        ZStack(alignment: .topLeading) {
+          if message.isEmpty {
+            Text("Drinks at that new place? ☕")
+              .font(.system(size: 14)).foregroundColor(Brand.label)
+              .padding(12)
+          }
+          TextField("", text: $message, axis: .vertical)
+            .font(.system(size: 14)).foregroundColor(.white).tint(Brand.marigold)
+            .padding(12).lineLimit(1...3)
         }
+        .background(Brand.tile)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+        PrimaryButton(title: "Send") { onSend(buildDraft()) }
       }
       .padding(20)
     }
+  }
+
+  private func buildDraft() -> PingDraft {
+    PingDraft(
+      day: selectedDay, slot: selectedSlot, message: message,
+      startTime: specificTime ? hhmm(startTime) : nil,
+      endTime: specificTime ? hhmm(endTime) : nil
+    )
+  }
+
+  private func hhmm(_ d: Date) -> String {
+    let f = DateFormatter()
+    f.locale = Locale(identifier: "en_US_POSIX")
+    f.dateFormat = "HH:mm"
+    return f.string(from: d)
+  }
+
+  /// Seed start/end from a slot's default hours (start, start+2 capped), mirroring
+  /// defaultTimesForSlot in the app.
+  private func seedTimes(for slot: String) {
+    let (sh, eh) = slotHours(slot)
+    let cal = Calendar.current
+    let base = cal.startOfDay(for: Date())
+    startTime = cal.date(byAdding: .hour, value: sh, to: base) ?? Date()
+    endTime = cal.date(byAdding: .hour, value: min(sh + 2, eh), to: base) ?? Date()
+  }
+}
+
+/// Two-line day pill matching the app: uppercase weekday over a serif date.
+private struct DayPill: View {
+  let dayKey: String
+  let selected: Bool
+  let action: () -> Void
+  var body: some View {
+    Button(action: action) {
+      VStack(spacing: 2) {
+        Text(DateFmt.dayAbbrev(dayKey))
+          .font(.system(size: 10, weight: .semibold)).tracking(0.6)
+          .foregroundColor(selected ? Brand.ink.opacity(0.65) : Brand.label)
+        Text(DateFmt.monthDay(dayKey))
+          .font(.system(size: 16, weight: .semibold, design: .serif))
+          .foregroundColor(selected ? Brand.ink : .white)
+      }
+      .frame(minWidth: 54)
+      .padding(.horizontal, 12).padding(.vertical, 8)
+      .background(selected ? Brand.marigold : Brand.tile)
+      .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+    .buttonStyle(.plain)
+  }
+}
+
+/// Slot chip with the hour range as subtext, matching the app's slot picker.
+private struct SlotChip: View {
+  let slot: ParadeSlot
+  let selected: Bool
+  let action: () -> Void
+  var body: some View {
+    Button(action: action) {
+      VStack(alignment: .leading, spacing: 2) {
+        Text(slot.label).font(.system(size: 13, weight: .semibold))
+          .foregroundColor(selected ? Brand.ink : .white)
+        Text(slot.range).font(.system(size: 10))
+          .foregroundColor(selected ? Brand.ink.opacity(0.7) : Brand.label)
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(.horizontal, 12).padding(.vertical, 9)
+      .background(selected ? Brand.marigold : Brand.tile)
+      .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+    .buttonStyle(.plain)
   }
 }
 
@@ -1044,7 +1236,7 @@ private struct ReceivedPingView: View {
 
         ProposalCard {
           row("calendar", DateFmt.friendly(payload.day ?? ""))
-          row("clock", "\(slotLabel(payload.slot ?? "")) · \(slotRange(payload.slot ?? ""))")
+          row("clock", pingTimeText(slot: payload.slot, start: payload.startTime, end: payload.endTime))
           if let m = payload.message, !m.isEmpty { row("text.bubble", m) }
         }
 
