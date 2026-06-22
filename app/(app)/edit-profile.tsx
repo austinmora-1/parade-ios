@@ -34,7 +34,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar } from '@/components/primitives/Avatar';
 import { LocationAutocomplete } from '@/components/primitives/LocationAutocomplete';
-import { formatPhoneDisplay } from '@/lib/phone';
+import { formatPhoneDisplay, toE164 } from '@/lib/phone';
 import { TC } from '@/lib/theme';
 import { TINT } from '@/lib/colors';
 
@@ -117,6 +117,16 @@ export default function EditProfileScreen() {
   const [emailSaving, setEmailSaving] = useState(false);
   const [emailNotice, setEmailNotice] = useState<string | null>(null);
   const [emailError,  setEmailError]  = useState<string | null>(null);
+
+  // One-time phone capture — only offered when the account has no phone yet
+  // (e.g. Apple / email sign-ups). Once verified, phone becomes the locked
+  // sign-in identity and this flow is no longer shown.
+  const [phoneInput,  setPhoneInput]  = useState('');
+  const [phoneCode,   setPhoneCode]   = useState('');
+  const [phoneStage,  setPhoneStage]  = useState<'enter' | 'verify'>('enter');
+  const [phoneSentTo, setPhoneSentTo] = useState('');
+  const [phoneBusy,   setPhoneBusy]   = useState(false);
+  const [phoneErr,    setPhoneErr]    = useState<string | null>(null);
 
   // Keep the email field in sync with the (verified) auth email.
   useEffect(() => { setEmail(user?.email ?? ''); }, [user?.email]);
@@ -375,6 +385,52 @@ export default function EditProfileScreen() {
       setEmailSaving(false);
     }
   }, [email, user?.email]);
+
+  // ── One-time phone capture (verified via SMS OTP) ─────────────────────────
+  const handleSendPhoneCode = useCallback(async () => {
+    const e164 = toE164(phoneInput);
+    if (!e164) {
+      setPhoneErr('Enter a valid phone number, including country code.');
+      return;
+    }
+    setPhoneBusy(true);
+    setPhoneErr(null);
+    try {
+      // Sends an OTP to the new number (Supabase phone-change flow).
+      const { error: err } = await supabase.auth.updateUser({ phone: e164 });
+      if (err) { setPhoneErr(err.message); return; }
+      setPhoneSentTo(e164);
+      setPhoneCode('');
+      setPhoneStage('verify');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e: any) {
+      setPhoneErr(e?.message ?? 'Could not send code. Please try again.');
+    } finally {
+      setPhoneBusy(false);
+    }
+  }, [phoneInput]);
+
+  const handleVerifyPhone = useCallback(async () => {
+    const token = phoneCode.trim();
+    if (token.length < 6) return;
+    setPhoneBusy(true);
+    setPhoneErr(null);
+    try {
+      const { error: err } = await supabase.auth.verifyOtp({
+        phone: phoneSentTo,
+        token,
+        type: 'phone_change',
+      });
+      if (err) { setPhoneErr(err.message); return; }
+      // user.phone is now set → onAuthStateChange refreshes the context and the
+      // backfill effect mirrors it into profiles.phone_number.
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e: any) {
+      setPhoneErr(e?.message ?? 'Could not verify code. Please try again.');
+    } finally {
+      setPhoneBusy(false);
+    }
+  }, [phoneCode, phoneSentTo]);
 
   return (
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
@@ -689,23 +745,133 @@ export default function EditProfileScreen() {
                 </Text>
               </View>
 
-              {/* Phone — read-only sign-in identity */}
+              {/* Phone — locked once set; one-time verified capture if missing */}
               <View>
                 <FieldLabel>Phone number</FieldLabel>
-                <View className="flex-row items-center justify-between bg-muted/40 rounded-xl border border-border/40 px-4 py-3">
-                  <Text className="font-sans text-sm text-foreground">
-                    {phoneDisplay ?? 'Not set'}
-                  </Text>
-                  <View className="flex-row items-center gap-1">
-                    <Lock size={12} color={TC.icon} strokeWidth={2} />
-                    <Text className="font-sans text-[11px] text-muted-foreground">
-                      Can't change
+
+                {phoneE164 ? (
+                  /* Already has a phone → read-only, immutable */
+                  <>
+                    <View className="flex-row items-center justify-between bg-muted/40 rounded-xl border border-border/40 px-4 py-3">
+                      <Text className="font-sans text-sm text-foreground">
+                        {phoneDisplay}
+                      </Text>
+                      <View className="flex-row items-center gap-1">
+                        <Lock size={12} color={TC.icon} strokeWidth={2} />
+                        <Text className="font-sans text-[11px] text-muted-foreground">
+                          Can't change
+                        </Text>
+                      </View>
+                    </View>
+                    <Text className="font-sans text-[11px] text-muted-foreground mt-1.5 px-0.5">
+                      Used to sign in and to help friends find you.
                     </Text>
-                  </View>
-                </View>
-                <Text className="font-sans text-[11px] text-muted-foreground mt-1.5 px-0.5">
-                  Used to sign in and to help friends find you.
-                </Text>
+                  </>
+                ) : phoneStage === 'enter' ? (
+                  /* No phone yet → enter a number to verify (one-time) */
+                  <>
+                    <TextInput
+                      value={phoneInput}
+                      onChangeText={(t) => { setPhoneInput(t); setPhoneErr(null); }}
+                      placeholder="+1 (555) 123-4567"
+                      placeholderTextColor="#929298"
+                      keyboardType="phone-pad"
+                      autoComplete="tel"
+                      textContentType="telephoneNumber"
+                      className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
+                      maxLength={20}
+                    />
+                    {phoneErr ? (
+                      <Text className="font-sans text-xs text-destructive mt-1.5 px-0.5">
+                        {phoneErr}
+                      </Text>
+                    ) : null}
+                    <Pressable
+                      onPress={handleSendPhoneCode}
+                      disabled={phoneBusy || !phoneInput.trim()}
+                      hitSlop={4}
+                      className={`mt-2 self-start rounded-xl px-3 py-2 ${
+                        !phoneBusy && phoneInput.trim() ? 'bg-primary active:opacity-80' : 'bg-muted'
+                      }`}
+                    >
+                      <Text
+                        className={`font-sans text-xs font-semibold ${
+                          !phoneBusy && phoneInput.trim() ? 'text-white' : 'text-muted-foreground'
+                        }`}
+                      >
+                        {phoneBusy ? 'Sending…' : 'Send code'}
+                      </Text>
+                    </Pressable>
+                    <Text className="font-sans text-[11px] text-muted-foreground mt-2 px-0.5 leading-relaxed">
+                      Add your number once to help friends find you — you can't change it
+                      afterward. By tapping "Send code" you agree to receive a one-time SMS
+                      verification code; message and data rates may apply. See our{' '}
+                      <Text
+                        className="text-primary underline"
+                        onPress={() => Linking.openURL('https://helloparade.app/privacy')}
+                      >
+                        Privacy Policy
+                      </Text>{' '}
+                      and{' '}
+                      <Text
+                        className="text-primary underline"
+                        onPress={() => Linking.openURL('https://helloparade.app/sms-consent')}
+                      >
+                        SMS Terms
+                      </Text>
+                      .
+                    </Text>
+                  </>
+                ) : (
+                  /* Verify the code we texted */
+                  <>
+                    <TextInput
+                      value={phoneCode}
+                      onChangeText={(t) => { setPhoneCode(t.replace(/\D/g, '')); setPhoneErr(null); }}
+                      placeholder="123456"
+                      placeholderTextColor="#929298"
+                      keyboardType="number-pad"
+                      autoComplete="sms-otp"
+                      textContentType="oneTimeCode"
+                      maxLength={6}
+                      className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
+                    />
+                    <Text className="font-sans text-[11px] text-muted-foreground mt-1.5 px-0.5">
+                      Enter the 6-digit code we texted to {formatPhoneDisplay(phoneSentTo)}.
+                    </Text>
+                    {phoneErr ? (
+                      <Text className="font-sans text-xs text-destructive mt-1.5 px-0.5">
+                        {phoneErr}
+                      </Text>
+                    ) : null}
+                    <View className="flex-row items-center gap-4 mt-2">
+                      <Pressable
+                        onPress={handleVerifyPhone}
+                        disabled={phoneBusy || phoneCode.trim().length < 6}
+                        hitSlop={4}
+                        className={`rounded-xl px-3 py-2 ${
+                          !phoneBusy && phoneCode.trim().length >= 6 ? 'bg-primary active:opacity-80' : 'bg-muted'
+                        }`}
+                      >
+                        <Text
+                          className={`font-sans text-xs font-semibold ${
+                            !phoneBusy && phoneCode.trim().length >= 6 ? 'text-white' : 'text-muted-foreground'
+                          }`}
+                        >
+                          {phoneBusy ? 'Verifying…' : 'Verify & save'}
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => { setPhoneStage('enter'); setPhoneCode(''); setPhoneErr(null); }}
+                        hitSlop={6}
+                      >
+                        <Text className="font-sans text-xs text-primary font-medium">
+                          ← Change number
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </>
+                )}
               </View>
 
               {/* Email — attach / change (auth-level) */}
