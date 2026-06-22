@@ -3,11 +3,11 @@
 // Parade iMessage extension.
 //
 // Drawer (compose) mirrors the in-app FAB "What are you planning?" panel, but
-// limited to the two "Reach out" actions — Quick ping and Share availability —
+// limited to the two "Reach out" actions — Vibe check and Share availability —
 // and instead of opening a deep link, each composes an INTERACTIVE message
 // bubble the friend can act on inside Messages:
 //
-//   • Quick ping       → sender proposes a day + slot (+ optional note); the
+//   • Vibe check       → sender proposes a day + slot (+ optional note); the
 //                        recipient taps the bubble and Accepts / Passes.
 //   • Share availability → sender offers their real upcoming free slots (read
 //                        from the App Group, mirrored by the app — see
@@ -36,7 +36,7 @@ private enum Brand {
   static let custard = Color(red: 0xF8 / 255, green: 0xF0 / 255, blue: 0xE0 / 255)
   static let ink = Color(red: 0x1E / 255, green: 0x2F / 255, blue: 0x26 / 255)
   // The FAB panel: warm near-black, white hairline border, white tiles.
-  static let panel = Color(red: 28 / 255, green: 26 / 255, blue: 22 / 255).opacity(0.94)
+  static let panel = Color(red: 28 / 255, green: 26 / 255, blue: 22 / 255)
   static let panelBorder = Color.white.opacity(0.12)
   static let tile = Color.white.opacity(0.10)
   static let label = Color.white.opacity(0.5)
@@ -219,6 +219,9 @@ class MessagesViewController: MSMessagesAppViewController {
 
   override func viewDidLoad() {
     super.viewDidLoad()
+    // Opaque base matching RootView's panel so there's never a flash of the
+    // system background behind the SwiftUI content.
+    view.backgroundColor = UIColor(red: 28 / 255, green: 26 / 255, blue: 22 / 255, alpha: 1)
     wireModel()
     embedHost()
   }
@@ -247,16 +250,14 @@ class MessagesViewController: MSMessagesAppViewController {
 
   private func embedHost() {
     let h = UIHostingController(rootView: RootView(model: model))
-    h.view.backgroundColor = .clear
     addChild(h)
-    h.view.translatesAutoresizingMaskIntoConstraints = false
+    // Plain frame + autoresizing (not Auto Layout) — this reliably fills the
+    // MSMessagesAppViewController's view; constraint-based hosting can render
+    // blank in an iMessage extension on device.
+    h.view.frame = view.bounds
+    h.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    h.view.backgroundColor = .clear
     view.addSubview(h.view)
-    NSLayoutConstraint.activate([
-      h.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-      h.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-      h.view.topAnchor.constraint(equalTo: view.topAnchor),
-      h.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-    ])
     h.didMove(toParent: self)
     host = h
   }
@@ -435,7 +436,6 @@ private struct RootView: View {
         if let p = model.payload { ReceivedAvailabilityView(model: model, payload: p) }
       }
     }
-    .preferredColorScheme(.dark)
   }
 }
 
@@ -515,7 +515,7 @@ private struct DrawerMenu: View {
         .padding(.top, 8)
         .padding(.bottom, 2)
 
-      DrawerRow(symbol: "hand.wave.fill", title: "Quick ping", action: onQuickPing)
+      DrawerRow(symbol: "hand.wave.fill", title: "Vibe check", action: onQuickPing)
       DrawerRow(symbol: "calendar", title: "Share availability", action: onShareAvail)
     }
     .padding(8)
@@ -572,7 +572,7 @@ private struct QuickPingComposer: View {
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 18) {
-        ComposerHeader(title: "Quick ping", subtitle: "Suggest a time to hang.", onBack: onBack)
+        ComposerHeader(title: "Vibe check", subtitle: "Suggest a time to hang.", onBack: onBack)
 
         SectionLabel("WHEN")
         ChipRow(items: dayOptions, selected: selectedDay, label: { DateFmt.friendly($0) }) {
@@ -1252,7 +1252,7 @@ private enum BubbleImage {
 
   static func ping(name: String, day: String, slot: String, message: String) -> UIImage {
     render { ctx, rect in
-      drawHeader(rect, title: "QUICK PING")
+      drawHeader(rect, title: "VIBE CHECK")
       let bodyTop = rect.minY + 64
       draw("\(name) wants to hang", at: CGPoint(x: 20, y: bodyTop), size: 19, weight: .bold,
            color: Brand.uiInk)
