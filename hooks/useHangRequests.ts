@@ -8,7 +8,40 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { TIME_SLOT_LABELS } from '@/types/planner';
 import type { TimeSlot } from '@/types/planner';
+
+/** Best-effort notification: in-app row + device push. Never throws — a
+ *  delivery hiccup must not fail the underlying action. */
+export async function notify(input: {
+  recipientId: string;
+  actorId: string;
+  type: string;
+  title: string;
+  body: string;
+  url?: string;
+}) {
+  try {
+    await (supabase as any).from('notifications').insert({
+      user_id:  input.recipientId,
+      actor_id: input.actorId,
+      type:     input.type,
+      title:    input.title,
+      body:     input.body,
+      url:      input.url ?? '/notifications',
+    });
+  } catch { /* ignore */ }
+  supabase.functions
+    .invoke('send-push-notification', {
+      body: {
+        user_ids: [input.recipientId],
+        title: input.title,
+        body: input.body,
+        url: input.url ?? '/notifications',
+      },
+    })
+    .catch(() => {});
+}
 
 export interface HangRequest {
   id:             string;
@@ -126,6 +159,16 @@ export function useSendHangRequest() {
           status:         'pending',
         });
       if (insertErr) throw insertErr;
+
+      // Notify the recipient (push + in-app), matching the PWA send flow.
+      const slotLabel = TIME_SLOT_LABELS[input.selectedSlot]?.label ?? '';
+      await notify({
+        recipientId: input.recipientUserId,
+        actorId:     user.id,
+        type:        'vibe-check',
+        title:       `${input.requesterName} sent you a vibe check 👋`,
+        body:        input.message?.trim() || `Free ${slotLabel.toLowerCase()}? Tap to respond.`,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['hang-requests', 'outgoing'] });

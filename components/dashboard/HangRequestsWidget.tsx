@@ -10,11 +10,14 @@ import { useState, useCallback, useMemo } from 'react';
 import { format, parseISO, isToday, isTomorrow } from 'date-fns';
 import * as Haptics from 'expo-haptics';
 import { MessageCircle, Check, X } from 'lucide-react-native';
+import { useQuery } from '@tanstack/react-query';
 import {
   useIncomingHangRequests,
   useAcceptHangRequest,
   useDeclineHangRequest,
+  notify,
 } from '@/hooks/useHangRequests';
+import { supabase } from '@/integrations/supabase/client';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { useAuth } from '@/hooks/useAuth';
 import { TIME_SLOT_LABELS, ACTIVITY_CONFIG } from '@/types/planner';
@@ -65,6 +68,21 @@ export function HangRequestsWidget() {
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [respVibe, setRespVibe] = useState<string | null>(null);
   const [respActivity, setRespActivity] = useState<ActivityType | null>(null);
+
+  // My display name, so the sender's "accepted" notification can say who.
+  const { data: myName } = useQuery({
+    enabled: !!user?.id,
+    queryKey: ['my-display-name', user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('display_name, first_name')
+        .eq('user_id', user!.id)
+        .maybeSingle();
+      const m = data as any;
+      return (m?.first_name || m?.display_name || 'Your friend') as string;
+    },
+  });
 
   const friendsByUserId = useMemo(() => {
     const m = new Map<string, any>();
@@ -121,6 +139,21 @@ export function HangRequestsWidget() {
         responseVibe: respVibe,
         responseActivity: respActivity,
       });
+
+      // Close the loop — tell the sender it's on (with the chosen vibe/activity).
+      if (r.senderId && user?.id) {
+        const vibeLabel = respVibe ? VIBES.find((v) => v.id === respVibe)?.label : null;
+        const actLabel = respActivity ? ACTIVITY_CONFIG[respActivity]?.label : null;
+        const extra = [vibeLabel, actLabel].filter(Boolean).join(' · ');
+        await notify({
+          recipientId: r.senderId,
+          actorId: user.id,
+          type: 'vibe-check-accepted',
+          title: `${myName ?? 'Your friend'} is in! 🎉`,
+          body: extra ? `${dayLabel(r.selectedDay)} · ${extra}` : `You're on for ${dayLabel(r.selectedDay)}`,
+        });
+      }
+
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setRespondingId(null);
     } catch (err: any) {
@@ -130,7 +163,7 @@ export function HangRequestsWidget() {
     } finally {
       setBusyId(null);
     }
-  }, [addPlan, acceptMut, friendsByUserId, respVibe, respActivity]);
+  }, [addPlan, acceptMut, friendsByUserId, respVibe, respActivity, myName, user?.id]);
 
   const handleDecline = useCallback((r: any) => {
     Alert.alert(
