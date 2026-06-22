@@ -20,11 +20,9 @@ import { toE164, formatPhoneDisplay } from '@/lib/phone';
 /**
  * Auth entry screen.
  *
- * Email-first: the default mode is standard email/password sign-up (with a
- * username). Apple Sign-In is offered as a secondary option beneath it.
- * Phone / SMS one-time code remains reachable as a fallback ("Use phone
- * instead") but is no longer the entry point — the SMS sender number isn't
- * carrier-verified yet, so phone OTP can't be relied on for new signups.
+ * Phone-first: the default mode collects a phone number and verifies an SMS
+ * one-time code (Supabase phone auth, backed by Twilio Verify). Email/password
+ * and Apple Sign-In remain available as secondary "other ways to sign in".
  */
 type Mode = 'phone' | 'verify' | 'signin' | 'signup' | 'forgot';
 
@@ -37,7 +35,7 @@ export default function LoginScreen() {
     verifyPhoneOtp,
   } = useAuth();
 
-  const [mode, setMode] = useState<Mode>('signup');
+  const [mode, setMode] = useState<Mode>('phone');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
