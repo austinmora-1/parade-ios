@@ -290,7 +290,8 @@ class MessagesViewController: MSMessagesAppViewController {
     p.name = name
     p.day = draft.day
     p.slot = draft.slot
-    p.message = draft.message.trimmingCharacters(in: .whitespacesAndNewlines)
+    let note = draft.message.trimmingCharacters(in: .whitespacesAndNewlines)
+    p.message = note.isEmpty ? nil : String(note.prefix(200))  // match app: nil when empty, 200 cap
 
     let layout = MSMessageTemplateLayout()
     layout.image = BubbleImage.ping(name: name, day: draft.day, slot: draft.slot,
@@ -309,7 +310,7 @@ class MessagesViewController: MSMessagesAppViewController {
 
     let layout = MSMessageTemplateLayout()
     layout.image = BubbleImage.availability(name: name, days: days)
-    layout.caption = "🗓️ \(name) shared their free time"
+    layout.caption = "🗓️ \(name) shared their availability"
     let slotCount = days.reduce(0) { $0 + $1.slots.count }
     layout.subcaption = "Tap to pick one of \(slotCount) open slot\(slotCount == 1 ? "" : "s")"
     insert(payload: p, layout: layout)
@@ -515,7 +516,7 @@ private struct DrawerMenu: View {
         .padding(.top, 8)
         .padding(.bottom, 2)
 
-      DrawerRow(symbol: "hand.wave.fill", title: "Vibe check", action: onQuickPing)
+      DrawerRow(symbol: "hand.raised.fill", title: "Vibe check", action: onQuickPing)
       DrawerRow(symbol: "calendar", title: "Share availability", action: onShareAvail)
     }
     .padding(8)
@@ -565,7 +566,7 @@ private struct QuickPingComposer: View {
   @State private var message: String = ""
 
   private var dayOptions: [String] {
-    (0..<7).compactMap { Calendar.current.date(byAdding: .day, value: $0, to: Date()) }
+    (0..<14).compactMap { Calendar.current.date(byAdding: .day, value: $0, to: Date()) }
       .map { DateFmt.key($0) }
   }
 
@@ -583,7 +584,7 @@ private struct QuickPingComposer: View {
         FlowChips(items: paradeSlots.map { $0.id }, selected: [selectedSlot],
                   label: { slotLabel($0) }) { selectedSlot = $0 }
 
-        SectionLabel("NOTE (OPTIONAL)")
+        SectionLabel("MESSAGE (OPTIONAL)")
         TextField("Drinks at that new place? ☕", text: $message, axis: .vertical)
           .font(.system(size: 14))
           .foregroundColor(.white)
@@ -604,17 +605,18 @@ private struct QuickPingComposer: View {
 /// "Share availability" — mirrors the in-app "Find time → When works?" step:
 /// a Mon-aligned calendar whose day cells are tinted by how free the user is
 /// (green = lots free, marigold = some). A range toggle (1 week / 4 weeks /
-/// 2 months) zooms the calendar out. In the 1-week view tapping a day fine-tunes
+/// 3 months) zooms the calendar out. In the 1-week view tapping a day fine-tunes
 /// individual slots; the longer views toggle whole days in/out. Pre-loaded: the
 /// user's free social slots (real bridged availability, or a social-slot
 /// fallback before the first sync) are all pre-selected.
 private enum ShareRange: CaseIterable {
-  case week, fourWeeks, twoMonths
-  var days: Int { switch self { case .week: return 7; case .fourWeeks: return 28; case .twoMonths: return 60 } }
-  var label: String { switch self { case .week: return "1 week"; case .fourWeeks: return "4 weeks"; case .twoMonths: return "2 months" } }
+  // Ranges mirror the in-app share-availability screen (1w / 4w / 3m).
+  case week, fourWeeks, threeMonths
+  var days: Int { switch self { case .week: return 7; case .fourWeeks: return 28; case .threeMonths: return 91 } }
+  var label: String { switch self { case .week: return "1 week"; case .fourWeeks: return "4 weeks"; case .threeMonths: return "3 months" } }
   /// Per-slot fine-tuning is only offered in the 1-week view.
   var slotLevel: Bool { self == .week }
-  var cellHeight: CGFloat { switch self { case .week: return 40; case .fourWeeks: return 34; case .twoMonths: return 28 } }
+  var cellHeight: CGFloat { switch self { case .week: return 40; case .fourWeeks: return 34; case .threeMonths: return 28 } }
 }
 
 private struct ShareAvailabilityComposer: View {
@@ -725,7 +727,7 @@ private struct ShareAvailabilityComposer: View {
     fmt.dateFormat = "LLLL yyyy"
     var out: [MonthBucket] = []
     var cursor = cal.date(from: cal.dateComponents([.year, .month], from: today))!
-    while cursor <= cutoff && out.count < 4 {
+    while cursor <= cutoff && out.count < 5 {
       let comps = cal.dateComponents([.year, .month], from: cursor)
       let id = String(format: "%04d-%02d", comps.year ?? 0, comps.month ?? 0)
       out.append(MonthBucket(id: id, title: fmt.string(from: cursor), weeks: monthWeeks(of: cursor)))
@@ -814,7 +816,7 @@ private struct RangeSelector: View {
 private struct AvailLegend: View {
   var body: some View {
     HStack(spacing: 12) {
-      swatch(Brand.green, "Lots free")
+      swatch(Brand.greenBright, "Lots free")
       swatch(Brand.marigold, "Some")
       Spacer()
       Text("Tap to toggle").font(.system(size: 10)).foregroundColor(Brand.label)
@@ -889,7 +891,7 @@ private struct DayCell: View {
 
   private var fontSize: CGFloat { height >= 38 ? 14 : (height >= 32 ? 13 : 11) }
   private var isMarigold: Bool { freeCount >= 1 && freeCount < 3 }
-  private var heat: Color { freeCount >= 3 ? Brand.green : (freeCount >= 1 ? Brand.marigold : Color.white) }
+  private var heat: Color { freeCount >= 3 ? Brand.greenBright : (freeCount >= 1 ? Brand.marigold : Color.white) }
   private var fill: Color {
     guard tappable else { return Color.white.opacity(0.04) }   // busy / no availability
     return isSelected ? heat : heat.opacity(0.22)              // sharing = full, off = faded
@@ -1013,7 +1015,7 @@ private struct DayDetail: View {
               .foregroundColor(on ? Brand.greenBright : Brand.label)
           }
           .padding(12)
-          .background(on ? Brand.green.opacity(0.18) : Brand.tile)
+          .background(on ? Brand.greenBright.opacity(0.18) : Brand.tile)
           .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .buttonStyle(.plain)
@@ -1222,7 +1224,7 @@ private struct PrimaryButton: View {
         .foregroundColor(.white)
         .frame(maxWidth: .infinity)
         .padding(.vertical, 14)
-        .background(disabled ? Brand.green.opacity(0.4) : Brand.green)
+        .background(disabled ? Brand.greenBright.opacity(0.4) : Brand.greenBright)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
     .buttonStyle(.plain)
