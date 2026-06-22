@@ -28,11 +28,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as Haptics from 'expo-haptics';
-import { X, Camera, Check, AlertCircle } from 'lucide-react-native';
+import * as Linking from 'expo-linking';
+import { X, Camera, Check, AlertCircle, Lock } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar } from '@/components/primitives/Avatar';
 import { LocationAutocomplete } from '@/components/primitives/LocationAutocomplete';
+import { formatPhoneDisplay } from '@/lib/phone';
 import { TC } from '@/lib/theme';
 import { TINT } from '@/lib/colors';
 
@@ -44,6 +46,14 @@ const VIBES = [
   { id: 'athletic',   label: 'Athletic',   emoji: '🏃' },
   { id: 'productive', label: 'Productive', emoji: '💼' },
 ];
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Supabase returns auth.users.phone without the leading "+"; restore it. */
+function authPhoneToE164(phone: string | undefined): string | null {
+  if (!phone) return null;
+  return phone.startsWith('+') ? phone : `+${phone}`;
+}
 
 // ─── Profile query ────────────────────────────────────────────────────────────
 
@@ -95,6 +105,33 @@ export default function EditProfileScreen() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError]   = useState<string | null>(null);
+
+  // ── Account identity (separate from the profile Save flow) ────────────────
+  // Phone is the immutable sign-in identity (read-only). Email can be attached
+  // or changed; that's an auth-level action with its own confirmation flow.
+  const phoneE164    = authPhoneToE164(user?.phone);
+  const phoneDisplay = phoneE164 ? formatPhoneDisplay(phoneE164) : null;
+  const pendingEmail = (user as any)?.new_email as string | undefined;
+
+  const [email,       setEmail]       = useState('');
+  const [emailSaving, setEmailSaving] = useState(false);
+  const [emailNotice, setEmailNotice] = useState<string | null>(null);
+  const [emailError,  setEmailError]  = useState<string | null>(null);
+
+  // Keep the email field in sync with the (verified) auth email.
+  useEffect(() => { setEmail(user?.email ?? ''); }, [user?.email]);
+
+  // Self-heal: attach the verified sign-in phone to the profile row if it's
+  // missing (onboarding mirrors it, but accounts created before that won't
+  // have it). Phone is immutable, so only fill when null — never overwrite.
+  useEffect(() => {
+    if (!user?.id || !phoneE164) return;
+    void supabase
+      .from('profiles')
+      .update({ phone_number: phoneE164 })
+      .eq('user_id', user.id)
+      .is('phone_number', null);
+  }, [user?.id, phoneE164]);
 
   /** Tracks the result of the latest debounced username availability check */
   const [usernameState, setUsernameState] = useState<
@@ -305,6 +342,39 @@ export default function EditProfileScreen() {
     usernameState !== 'taken' &&
     usernameState !== 'invalid' &&
     usernameState !== 'checking';
+
+  // ── Attach / change email (auth-level, with confirmation link) ────────────
+  const trimmedEmail = email.trim().toLowerCase();
+  const emailDirty   = trimmedEmail !== (user?.email ?? '').toLowerCase();
+  const canSaveEmail = emailDirty && EMAIL_RE.test(trimmedEmail) && !emailSaving;
+
+  const handleSaveEmail = useCallback(async () => {
+    const next = email.trim().toLowerCase();
+    if (!EMAIL_RE.test(next)) { setEmailError('Enter a valid email address.'); return; }
+    if (next === (user?.email ?? '').toLowerCase()) {
+      setEmailError("That's already your email.");
+      return;
+    }
+    setEmailSaving(true);
+    setEmailError(null);
+    setEmailNotice(null);
+    try {
+      // Sends a confirmation link to the new address. Email is updated
+      // server-side once the link is tapped; it reflects here after the
+      // session token next refreshes.
+      const { error: err } = await supabase.auth.updateUser(
+        { email: next },
+        { emailRedirectTo: Linking.createURL('/') },
+      );
+      if (err) { setEmailError(err.message); return; }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setEmailNotice(`Confirmation link sent to ${next}. Tap it to verify.`);
+    } catch (e: any) {
+      setEmailError(e?.message ?? 'Could not update email. Please try again.');
+    } finally {
+      setEmailSaving(false);
+    }
+  }, [email, user?.email]);
 
   return (
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
@@ -608,6 +678,90 @@ export default function EditProfileScreen() {
                     </Text>
                   </Pressable>
                 )}
+              </View>
+
+              {/* ── Account (sign-in identity) ──────────────────────────── */}
+              <View className="h-px bg-border/40 mt-1" />
+              <View className="gap-0.5">
+                <Text className="font-display text-base text-foreground">Account</Text>
+                <Text className="font-sans text-[11px] text-muted-foreground">
+                  How you sign in. Your phone number can't be changed.
+                </Text>
+              </View>
+
+              {/* Phone — read-only sign-in identity */}
+              <View>
+                <FieldLabel>Phone number</FieldLabel>
+                <View className="flex-row items-center justify-between bg-muted/40 rounded-xl border border-border/40 px-4 py-3">
+                  <Text className="font-sans text-sm text-foreground">
+                    {phoneDisplay ?? 'Not set'}
+                  </Text>
+                  <View className="flex-row items-center gap-1">
+                    <Lock size={12} color={TC.icon} strokeWidth={2} />
+                    <Text className="font-sans text-[11px] text-muted-foreground">
+                      Can't change
+                    </Text>
+                  </View>
+                </View>
+                <Text className="font-sans text-[11px] text-muted-foreground mt-1.5 px-0.5">
+                  Used to sign in and to help friends find you.
+                </Text>
+              </View>
+
+              {/* Email — attach / change (auth-level) */}
+              <View>
+                <FieldLabel>Email</FieldLabel>
+                <TextInput
+                  value={email}
+                  onChangeText={(t) => { setEmail(t); setEmailError(null); setEmailNotice(null); }}
+                  placeholder="you@example.com"
+                  placeholderTextColor="#929298"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="email"
+                  className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
+                  maxLength={120}
+                />
+
+                {pendingEmail ? (
+                  <Text className="font-sans text-[11px] text-muted-foreground mt-1.5 px-0.5">
+                    Pending confirmation: {pendingEmail}. Tap the link we emailed to finish.
+                  </Text>
+                ) : null}
+                {emailError ? (
+                  <Text className="font-sans text-xs text-destructive mt-1.5 px-0.5">
+                    {emailError}
+                  </Text>
+                ) : null}
+                {emailNotice ? (
+                  <Text className="font-sans text-xs text-primary mt-1.5 px-0.5 font-medium">
+                    {emailNotice}
+                  </Text>
+                ) : null}
+
+                <Pressable
+                  onPress={handleSaveEmail}
+                  disabled={!canSaveEmail}
+                  hitSlop={4}
+                  className={`mt-2 self-start rounded-xl px-3 py-2 ${
+                    canSaveEmail ? 'bg-primary active:opacity-80' : 'bg-muted'
+                  }`}
+                >
+                  <Text
+                    className={`font-sans text-xs font-semibold ${
+                      canSaveEmail ? 'text-white' : 'text-muted-foreground'
+                    }`}
+                  >
+                    {emailSaving ? 'Sending…' : user?.email ? 'Update email' : 'Add email'}
+                  </Text>
+                </Pressable>
+
+                <Text className="font-sans text-[11px] text-muted-foreground mt-1.5 px-0.5">
+                  {user?.email
+                    ? 'Used for account recovery and notifications.'
+                    : "Add an email for account recovery and notifications. We'll send a confirmation link."}
+                </Text>
               </View>
             </>
           )}
