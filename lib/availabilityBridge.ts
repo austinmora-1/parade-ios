@@ -26,8 +26,10 @@ const SLOTS: TimeSlot[] = [
 ];
 
 // Covers the extension's longest share range (3 months ≈ 91 days), plus a
-// little slack so the calendar's trailing week is fully populated.
-const HORIZON_DAYS = 98;
+// little slack so the calendar's trailing week is fully populated. Exported so
+// the availability loader can extend its in-memory window to match this mirror
+// (otherwise the dashboard's ~5-week window is all the bridge ever sees).
+export const HORIZON_DAYS = 98;
 
 /**
  * Derive the next `HORIZON_DAYS` of free social slots from the availability map

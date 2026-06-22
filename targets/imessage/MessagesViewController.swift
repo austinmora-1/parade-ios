@@ -825,7 +825,7 @@ private struct ShareAvailabilityComposer: View {
   /// Every free day we know about (out to the longest range), real or fallback.
   private var allCandidates: [AvailabilityDay] {
     let base = availability.isEmpty
-      ? (0..<63).compactMap { Calendar.current.date(byAdding: .day, value: $0, to: Date()) }
+      ? (0..<91).compactMap { Calendar.current.date(byAdding: .day, value: $0, to: Date()) }
           .map { AvailabilityDay(date: DateFmt.key($0), slots: socialSlotIds(for: $0)) }
       : availability
     return base.filter { !$0.slots.isEmpty }

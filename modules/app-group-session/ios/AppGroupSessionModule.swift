@@ -22,8 +22,10 @@ private let sessionKey = "parade.session.v1"
 // Availability is bridged under a SEPARATE key from identity so the two
 // writers (auth-time identity sync vs availability-store sync) never race on a
 // shared payload. The extension reads both. Value is a JSON array string:
-// [{"d":"2026-06-21","slots":["evening","late-night"]}, ...] — next ~14 days,
-// free social slots only. Still non-secret (the same data a share link exposes).
+// [{"d":"2026-06-21","slots":["evening","late-night"]}, ...] — covers the
+// extension's longest share range (~98 days; see HORIZON_DAYS in
+// lib/availabilityBridge.ts), free social slots only. Still non-secret (the
+// same data a share link exposes).
 private let availabilityKey = "parade.availability.v1"
 
 public class AppGroupSessionModule: Module {

@@ -1,8 +1,10 @@
 import { create } from 'zustand';
+import { addDays } from 'date-fns';
 import { Plan, Friend, DayAvailability, Vibe, TimeSlot, LocationStatus, ActivityType, VibeType } from '@/types/planner';
 import { getCachedDashboard } from '@/lib/dashboardCache';
 import { queryClient } from '@/lib/queryClient';
 import { fetchDashboard } from '@/lib/dashboardQuery';
+import { HORIZON_DAYS } from '@/lib/availabilityBridge';
 
 import type { DefaultAvailabilitySettings } from './helpers/types';
 import { transformDashboardData } from './helpers/transformDashboard';
@@ -31,6 +33,20 @@ function pushDashboardToStores(transformed: ReturnType<typeof transformDashboard
   });
   useVibeStore.setState({ userTimezone: transformed.userTimezone });
   useVibeStore.getState().bootstrapVibe(transformed.currentVibe, userId);
+
+  // The dashboard only loads a ~5-week window ([today-7 .. today+34]). The
+  // iMessage "Share availability" composer can share up to 3 months, and the
+  // App Group bridge mirrors whatever's in availabilityMap — so without this
+  // the extension never sees past week 5. Background-extend the loaded range
+  // out to the bridge horizon now that defaultSettings is set (in the setState
+  // above). Fire-and-forget so it never delays the dashboard render; the
+  // loader's allCovered guard makes repeated pushes cheap and loop-free, and
+  // the store subscription re-syncs the App Group once the tail is filled.
+  const today = new Date();
+  void useAvailabilityStore
+    .getState()
+    .loadAvailabilityForRange(today, addDays(today, HORIZON_DAYS), userId)
+    .catch((e) => console.warn('[availability] horizon extend failed', e));
 }
 
 // ── Facade interface (unchanged from before) ─────────────────────────────────
