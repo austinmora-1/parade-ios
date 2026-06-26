@@ -24,6 +24,7 @@ import { format, isToday, parseISO, isTomorrow, isThisYear } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlannerStore } from '@/stores/plannerStore';
+import { isFriendInMyCity } from '@/lib/effectiveCity';
 import { useSendHangRequest } from '@/hooks/useHangRequests';
 import {
   useLastHungOut,
@@ -65,7 +66,7 @@ function useFriendProfile(userId: string) {
         .from('profiles')
         .select(
           'user_id, display_name, first_name, last_name, avatar_url, cover_photo_url, bio, ' +
-          'current_vibe, location_status, neighborhood, show_availability',
+          'current_vibe, location_status, neighborhood, show_availability, home_address',
         )
         .eq('user_id', userId)
         .single();
@@ -146,7 +147,7 @@ function useFriendAvailability(userId: string) {
       const { data } = await supabase
         .from('availability')
         .select(
-          'date, early_morning, late_morning, early_afternoon, late_afternoon, evening, late_night',
+          'date, early_morning, late_morning, early_afternoon, late_afternoon, evening, late_night, location_status, trip_location',
         )
         .eq('user_id', userId)
         .gte('date', start)
@@ -220,6 +221,7 @@ export default function FriendProfileScreen() {
   const pastShared = shared?.past ?? [];
   const { data: lastHungOutMap } = useLastHungOut();
   const myAvailability = usePlannerStore((s) => s.availability);
+  const myHomeAddress = usePlannerStore((s) => s.homeAddress);
   const [refreshing, setRefreshing] = useState(false);
 
   const onRefresh = useCallback(async () => {
@@ -242,6 +244,16 @@ export default function FriendProfileScreen() {
     return set;
   }, [myAvailability]);
 
+  /** My location per date (yyyy-MM-dd → snake-case row) for co-location. */
+  const myLocByDate = useMemo(() => {
+    const m = new Map<string, { date: string; location_status: string | null; trip_location: string | null }>();
+    for (const day of myAvailability) {
+      const k = format(day.date, 'yyyy-MM-dd');
+      m.set(k, { date: k, location_status: day.locationStatus ?? 'home', trip_location: day.tripLocation ?? null });
+    }
+    return m;
+  }, [myAvailability]);
+
   const name = p
     ? formatDisplayName({
         firstName:   p.first_name,
@@ -252,9 +264,22 @@ export default function FriendProfileScreen() {
 
   // Slot columns are booleans (true = free). A day counts as a free window if
   // any slot is free.
-  const freeDays = (availability ?? []).filter((row: any) =>
+  const freeDaysRaw = (availability ?? []).filter((row: any) =>
     SLOTS.some((s) => row[s] === true),
   );
+  // Only show the friend as available on days we're in the same city — never
+  // suggest hanging when one of us is out of town.
+  const freeDays = freeDaysRaw.filter((row: any) =>
+    isFriendInMyCity({
+      date: row.date,
+      myAvailability: myLocByDate.get(row.date) ?? null,
+      myHomeAddress,
+      friendAvailability: { date: row.date, location_status: row.location_status, trip_location: row.trip_location },
+      friendHomeAddress: p?.home_address ?? null,
+    }),
+  );
+  // The friend has free time this period but it's all in another city.
+  const awayElsewhere = freeDaysRaw.length > 0 && freeDays.length === 0;
   const mutualCount = freeDays.filter((r: any) => myFreeDateSet.has(r.date)).length;
 
   // ── Slot selection → suggest a hang at the picked times ───────────────────
@@ -563,10 +588,12 @@ export default function FriendProfileScreen() {
           {showAvail && freeDays.length === 0 && !isLoading && (
             <View className="mx-5 bg-card rounded-2xl border border-dashed border-border/40 px-4 py-6 items-center gap-1">
               <Text className="font-sans text-sm text-muted-foreground">
-                No free windows shared
+                {awayElsewhere ? 'Not in your city right now' : 'No free windows shared'}
               </Text>
-              <Text className="font-sans text-xs text-muted-foreground/60">
-                {name.split(' ')[0]} hasn't marked availability for the next 2 weeks
+              <Text className="font-sans text-xs text-muted-foreground/60 text-center">
+                {awayElsewhere
+                  ? `${name.split(' ')[0]} is free, but somewhere else over the next 2 weeks`
+                  : `${name.split(' ')[0]} hasn't marked availability for the next 2 weeks`}
               </Text>
             </View>
           )}

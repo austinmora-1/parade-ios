@@ -110,6 +110,9 @@ export interface DayWheelInput {
   dayPlans: Array<{ timeSlot?: string | null; startTime?: string | null; endTime?: string | null }>;
   /** @deprecated Trips no longer block availability; ignored. */
   onTrip?: boolean;
+  /** True when the user is away from their home city this day — recolors
+   *  free time coral instead of parade green. */
+  away?: boolean;
 }
 
 export interface DaySlotAvailability {
@@ -219,28 +222,30 @@ export function computeDayWheel(input: DayWheelInput): DayWheel {
       label: 'Booked', pill: PILL.gray, free, total,
     };
   }
+  // Base color/label by how full the day is.
+  let result: DayWheel;
   if (taken === 0) {
-    return {
-      status: 'open', fill: 1, arcColor: PARADE_GREEN,
-      label: 'Open', pill: PILL.open, free, total,
+    result = { status: 'open', fill: 1, arcColor: PARADE_GREEN, label: 'Open', pill: PILL.open, free, total };
+  } else if (free === 1) {
+    result = { status: 'some', fill, arcColor: EMBER, label: 'Almost booked', pill: PILL.tight, free, total };
+  } else if (taken < total / 2) {
+    result = { status: 'some', fill, arcColor: MINT, label: 'Mostly open', pill: PILL.mostly, free, total };
+  } else {
+    result = { status: 'some', fill, arcColor: MARIGOLD, label: 'Some time', pill: PILL.some, free, total };
+  }
+
+  // Away override: free time while out of town reads coral, not green, and
+  // the label calls out that you're away.
+  if (input.away) {
+    result = {
+      ...result,
+      arcColor: EMBER,
+      pill: PILL.tight,
+      label: result.label === 'Almost booked' ? 'Almost booked · away' : `${result.label} · away`,
     };
   }
-  if (free === 1) {
-    return {
-      status: 'some', fill, arcColor: EMBER,
-      label: 'Almost booked', pill: PILL.tight, free, total,
-    };
-  }
-  if (taken < total / 2) {
-    return {
-      status: 'some', fill, arcColor: MINT,
-      label: 'Mostly open', pill: PILL.mostly, free, total,
-    };
-  }
-  return {
-    status: 'some', fill, arcColor: MARIGOLD,
-    label: 'Some time', pill: PILL.some, free, total,
-  };
+
+  return result;
 }
 
 export function DateDial({

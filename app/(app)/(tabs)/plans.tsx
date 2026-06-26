@@ -69,6 +69,7 @@ import { WeekPickerModal } from '@/components/plans/WeekPickerModal';
 import { Avatar } from '@/components/primitives/Avatar';
 import { formatDisplayName } from '@/lib/utils';
 import { citiesMatch, normalizeCity } from '@/lib/locationMatch';
+import { resolveEffectiveCity } from '@/lib/effectiveCity';
 import { formatCityForDisplay } from '@/lib/formatCity';
 import { reconcileStaleBusyDays } from '@/lib/availabilityReconcile';
 
@@ -903,6 +904,7 @@ export default function PlansTab() {
   const availability    = usePlannerStore((s) => s.availability);
   const isLoading       = usePlannerStore((s) => s.isLoading);
   const defaultSettings = useAvailabilityStore((s) => s.defaultSettings);
+  const homeAddress     = useAvailabilityStore((s) => s.homeAddress);
   const { data: trips, refetch: refetchTrips } = useUpcomingTrips(user?.id);
 
   const [weekOffset, setWeekOffset] = useState(0);
@@ -991,15 +993,29 @@ export default function PlansTab() {
       ),
     );
     const dayTrip = (trips ?? []).find((t) => tripOverlapsDays(t, [day]));
+    const dayAvail = availability.find((a) => format(a.date, 'yyyy-MM-dd') === dateStr);
+    // Am I away from my home city this day? A covering trip wins, else the
+    // availability row's away→trip_location, else home.
+    const homeCity = homeAddress ? normalizeCity(homeAddress) : '';
+    const dayCity = dayTrip?.location
+      ? normalizeCity(dayTrip.location)
+      : resolveEffectiveCity({
+          date: dateStr,
+          availability: dayAvail
+            ? { date: dateStr, location_status: dayAvail.locationStatus, trip_location: dayAvail.tripLocation }
+            : null,
+          homeAddress,
+        });
+    const away = !!homeCity && !!dayCity && !citiesMatch(dayCity, homeCity);
     const wheel = computeDayWheel({
       date: day,
-      dayAvail: availability.find((a) => format(a.date, 'yyyy-MM-dd') === dateStr),
+      dayAvail,
       settings: defaultSettings,
       // Only plans that actually take a slot count against the wheel
       dayPlans: dayPlans
         .filter(planBlocksAvailability)
         .map((p) => ({ timeSlot: p.timeSlot as string, startTime: p.startTime, endTime: p.endTime })),
-      onTrip: !!dayTrip,
+      away,
     });
     return { day, dateStr, dayPlans, dayTrip, wheel };
   });

@@ -329,7 +329,8 @@ export default function DayDetailScreen() {
     dayPlans: plans
       .filter(planBlocksAvailability)
       .map((p) => ({ timeSlot: normalizeSlot(p.time_slot), startTime: p.start_time, endTime: p.end_time })),
-    onTrip: !!dayTrip,
+    // Away from home this day → free time reads coral (matches the location pill)
+    away: !!dayTrip || locStatus === 'away',
   });
 
   const toggleSlot = useCallback(
