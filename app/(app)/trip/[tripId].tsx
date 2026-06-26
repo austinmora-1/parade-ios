@@ -63,8 +63,12 @@ function useTrip(tripId: string) {
           'id, user_id, name, location, start_date, end_date, available_slots, priority_friend_ids, proposal_id',
         )
         .eq('id', tripId)
-        .single();
+        .maybeSingle();
       if (error) throw error;
+      // Trip was deleted / never existed (or is hidden by RLS) — surface the
+      // screen's "Trip not found" state instead of throwing a PGRST116 that
+      // gets logged as a crash.
+      if (!trip) return { trip: null, companions: [], friendsToSee: [] };
 
       // Travel companions live in trip_participants; friends to see are the
       // trip's priority_friend_ids. Resolve both to display names + avatars.
@@ -217,7 +221,7 @@ export default function TripDetailScreen() {
               if (delErr) {
                 if (user?.id && trip?.start_date && trip?.end_date) {
                   try {
-                    await setTripLocationRange(user.id, trip.start_date, trip.end_date, trip.location ?? null, true);
+                    await setTripLocationRange(user.id, trip.start_date, trip.end_date, trip.location ?? null, true, tripId);
                   } catch { /* best-effort restore */ }
                 }
                 throw delErr;

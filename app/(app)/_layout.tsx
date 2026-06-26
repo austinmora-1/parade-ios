@@ -6,6 +6,7 @@ import { usePushToken } from '@/hooks/usePushToken';
 import { useCalendarAutoSync } from '@/hooks/useCalendarAutoSync';
 import { setPendingDeepLink, consumePendingDeepLink } from '@/lib/pendingDeepLink';
 import { FirstPlanCelebration } from '@/components/onboarding/FirstPlanCelebration';
+import { BugReportButton } from '@/components/feedback/BugReportButton';
 
 // Protected deep-link landings that should survive the login bounce.
 const PRESERVED_PREFIXES = ['/imessage-plan', '/invite', '/share'];
@@ -15,7 +16,7 @@ const PRESERVED_PREFIXES = ['/imessage-plan', '/invite', '/share'];
  * detail screens (plan, trip, friend, notifications, day).
  * Redirects to login if the session is missing.
  */
-function AppLayoutInner() {
+function AppLayoutInner({ route }: { route?: string }) {
   usePushToken();         // registers push token after sign-in
   useCalendarAutoSync();  // auto-syncs calendar busy times on foreground
 
@@ -141,6 +142,7 @@ function AppLayoutInner() {
       <Stack.Screen name="share/[code]" options={{ animation: 'none' }} />
     </Stack>
     <FirstPlanCelebration />
+    <BugReportButton route={route} />
     </View>
   );
 }
@@ -172,5 +174,5 @@ export default function AppLayout() {
     return <Redirect href="/(auth)/login" />;
   }
 
-  return <AppLayoutInner />;
+  return <AppLayoutInner route={pathname} />;
 }

@@ -102,6 +102,16 @@ export async function setTripLocationRange(
   endDate: string | Date,
   location: string | null,
   away: boolean,
+  /**
+   * When these availability rows belong to an app-managed trip, pass its id.
+   * The DB trigger `auto_create_trip_from_availability` treats a non-null
+   * `trip_id` as "the app owns this trip's lifecycle" and skips its auto
+   * create/cleanup logic — without this, editing a trip's dates clears the
+   * old range to "home", which makes the trigger DELETE the trip mid-edit.
+   * Leave null for manual availability edits (lets the trigger materialise
+   * trips from away-runs as before).
+   */
+  tripId: string | null = null,
 ): Promise<{ daysAffected: number }> {
   const start = toLocalDate(startDate);
   const last  = toLocalDate(endDate);
@@ -116,6 +126,7 @@ export async function setTripLocationRange(
     date,
     location_status: away ? 'away' : 'home',
     trip_location: away ? location : null,
+    trip_id: tripId,
   }));
 
   const { error } = await supabase

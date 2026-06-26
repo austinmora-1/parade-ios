@@ -31,6 +31,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { setTripLocationRange } from '@/lib/tripBusy';
 import { LocationAutocomplete } from '@/components/primitives/LocationAutocomplete';
+import { FriendSearchSelect } from '@/components/new-trip/FriendSearchSelect';
+import { rankFriendsByPlanHistory } from '@/lib/friendSuggestions';
 import { TC } from '@/lib/theme';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -83,33 +85,70 @@ export default function NewTripScreen() {
   const isEditing = !!tripId;
   const queryClient     = useQueryClient();
   const setUserId       = usePlannerStore((s) => s.setUserId);
+  const friends         = usePlannerStore((s) => s.friends);
+  const plans           = usePlannerStore((s) => s.plans);
 
   // Ensure planner store has userId for the block-availability writes
   useMemo(() => {
     if (user?.id) setUserId(user.id);
   }, [user?.id]);
 
+  const connectedFriends = useMemo(
+    () => friends.filter((f) => f.status === 'connected' && f.friendUserId),
+    [friends],
+  );
+
+  // Recent / frequently-seen friends — suggested shortlist shown (when the
+  // search box is empty) for both "Traveling with" and "Friends to see".
+  const friendShortlist = useMemo(
+    () => rankFriendsByPlanHistory(plans, connectedFriends, 5),
+    [plans, connectedFriends],
+  );
+
   const [name,     setName]     = useState('');
   const [location, setLocation] = useState('');
   const [startDate, setStartDate] = useState<Date>(new Date());
   const [duration,  setDuration]  = useState<number>(3);
+  // Travel companions → trip_participants; people to visit → priority_friend_ids
+  const [companionIds, setCompanionIds] = useState<Set<string>>(new Set());
+  const [visitIds,     setVisitIds]     = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState<string | null>(null);
   // When editing, remember the original away-range so a date change can clear it
   const [loadingTrip, setLoadingTrip] = useState(isEditing);
   const [originalRange, setOriginalRange] = useState<{ start: Date; end: Date } | null>(null);
+  // Companions present before this edit — so we only notify the newly added ones
+  const [originalCompanionIds, setOriginalCompanionIds] = useState<Set<string>>(new Set());
+
+  const toggleId = useCallback(
+    (setter: React.Dispatch<React.SetStateAction<Set<string>>>) =>
+      (friendUserId: string) =>
+        setter((prev) => {
+          const next = new Set(prev);
+          if (next.has(friendUserId)) next.delete(friendUserId);
+          else next.add(friendUserId);
+          return next;
+        }),
+    [],
+  );
 
   // Load the existing trip when editing
   useEffect(() => {
     if (!isEditing || !user?.id) return;
     let cancelled = false;
     (async () => {
-      const { data, error: loadErr } = await supabase
-        .from('trips')
-        .select('name, location, start_date, end_date')
-        .eq('id', tripId)
-        .eq('user_id', user.id)
-        .maybeSingle();
+      const [{ data, error: loadErr }, { data: participants }] = await Promise.all([
+        supabase
+          .from('trips')
+          .select('name, location, start_date, end_date, priority_friend_ids')
+          .eq('id', tripId)
+          .eq('user_id', user.id)
+          .maybeSingle(),
+        supabase
+          .from('trip_participants')
+          .select('friend_user_id')
+          .eq('trip_id', tripId),
+      ]);
       if (cancelled) return;
       if (loadErr || !data) {
         Alert.alert('Could not load trip', 'Please try again.');
@@ -122,6 +161,10 @@ export default function NewTripScreen() {
       setLocation(data.location ?? '');
       setStartDate(start);
       setDuration(Math.max(1, differenceInDays(end, start) + 1));
+      setVisitIds(new Set((data.priority_friend_ids ?? []) as string[]));
+      const companionSet = new Set<string>((participants ?? []).map((p: any) => p.friend_user_id));
+      setCompanionIds(companionSet);
+      setOriginalCompanionIds(new Set(companionSet));
       setOriginalRange({ start, end });
       setLoadingTrip(false);
     })();
@@ -139,6 +182,34 @@ export default function NewTripScreen() {
     [startDate, duration],
   );
 
+  // Fire-and-forget push/email to companions just added to this trip. Reuses
+  // the shared on-plan-created edge function (type: 'trip'), same as the PWA.
+  const notifyNewCompanions = useCallback(
+    async (participantIds: string[], locationLabel: string | null, datesLabel: string) => {
+      if (!user?.id || participantIds.length === 0) return;
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData?.session?.access_token;
+        const projectId = process.env.EXPO_PUBLIC_SUPABASE_PROJECT_ID;
+        if (!token || !projectId) return;
+        await fetch(`https://${projectId}.supabase.co/functions/v1/on-plan-created`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'trip',
+            creator_id: user.id,
+            participant_ids: participantIds,
+            trip_location: locationLabel ?? undefined,
+            trip_dates: datesLabel,
+          }),
+        });
+      } catch {
+        // Best-effort — never block the save on a notification failure.
+      }
+    },
+    [user?.id],
+  );
+
   const handleSubmit = useCallback(async () => {
     if (!user?.id) return;
     if (!name.trim()) {
@@ -151,6 +222,11 @@ export default function NewTripScreen() {
 
     try {
       const loc = location.trim() || null;
+      const visitArr = [...visitIds];
+      const companionArr = [...companionIds];
+      // Companions added in this session (all of them for a brand-new trip)
+      const newCompanionIds = companionArr.filter((id) => !originalCompanionIds.has(id));
+      let resolvedTripId: string | null = tripId ?? null;
       if (isEditing && tripId) {
         const { error: updateErr } = await supabase
           .from('trips')
@@ -159,31 +235,59 @@ export default function NewTripScreen() {
             location:   loc,
             start_date: format(startDate, 'yyyy-MM-dd'),
             end_date:   format(endDate, 'yyyy-MM-dd'),
+            priority_friend_ids: visitArr,
           } as any)
           .eq('id', tripId)
           .eq('user_id', user.id);
         if (updateErr) throw updateErr;
 
+        // Sync travel companions: clear then re-insert the current selection.
+        await supabase.from('trip_participants').delete().eq('trip_id', tripId);
+        if (companionArr.length > 0) {
+          await supabase.from('trip_participants').insert(
+            companionArr.map((fid) => ({ trip_id: tripId, friend_user_id: fid })) as any,
+          );
+        }
+
         // If the dates moved, clear the old away-range first so stale days
         // don't stay marked "away", then stamp the new range.
         if (originalRange) {
-          await setTripLocationRange(user.id, originalRange.start, originalRange.end, null, false);
+          await setTripLocationRange(user.id, originalRange.start, originalRange.end, null, false, tripId);
         }
-        await setTripLocationRange(user.id, startDate, endDate, loc, true);
+        await setTripLocationRange(user.id, startDate, endDate, loc, true, tripId);
       } else {
-        const { error: insertErr } = await supabase.from('trips').insert({
-          user_id:    user.id,
-          name:       name.trim(),
-          location:   loc,
-          start_date: format(startDate, 'yyyy-MM-dd'),
-          end_date:   format(endDate, 'yyyy-MM-dd'),
-          needs_return_date: false,
-        } as any);
+        const { data: created, error: insertErr } = await supabase
+          .from('trips')
+          .insert({
+            user_id:    user.id,
+            name:       name.trim(),
+            location:   loc,
+            start_date: format(startDate, 'yyyy-MM-dd'),
+            end_date:   format(endDate, 'yyyy-MM-dd'),
+            needs_return_date: false,
+            priority_friend_ids: visitArr,
+          } as any)
+          .select('id')
+          .single();
         if (insertErr) throw insertErr;
+        resolvedTripId = created?.id ?? null;
+
+        // Add travel companions on the new trip.
+        if (created?.id && companionArr.length > 0) {
+          await supabase.from('trip_participants').insert(
+            companionArr.map((fid) => ({ trip_id: created.id, friend_user_id: fid })) as any,
+          );
+        }
 
         // Mark the trip days as a location change ("away" + destination) —
         // availability slots stay untouched so the trip never blocks plans
-        await setTripLocationRange(user.id, startDate, endDate, loc, true);
+        await setTripLocationRange(user.id, startDate, endDate, loc, true, resolvedTripId);
+      }
+
+      // Notify companions who were just added (skips ones already on the trip).
+      if (resolvedTripId && newCompanionIds.length > 0) {
+        const datesLabel = `${format(startDate, 'MMM d')} – ${format(endDate, 'MMM d')}`;
+        void notifyNewCompanions(newCompanionIds, loc, datesLabel);
       }
 
       // Refresh anything that lists trips
@@ -198,7 +302,7 @@ export default function NewTripScreen() {
     } finally {
       setSaving(false);
     }
-  }, [user?.id, isEditing, tripId, name, location, startDate, endDate, originalRange, queryClient]);
+  }, [user?.id, isEditing, tripId, name, location, startDate, endDate, originalRange, companionIds, visitIds, originalCompanionIds, notifyNewCompanions, queryClient]);
 
   const canSubmit = name.trim().length > 0 && !saving && !loadingTrip;
 
@@ -361,6 +465,26 @@ export default function NewTripScreen() {
               })}
             </View>
           </View>
+
+          {/* Traveling with — companions on the trip (search + suggestions) */}
+          <FriendSearchSelect
+            title="Traveling with"
+            hint="Search to add friends coming along on this trip."
+            connectedFriends={connectedFriends}
+            selectedIds={companionIds}
+            suggestedFriends={friendShortlist}
+            onToggle={toggleId(setCompanionIds)}
+          />
+
+          {/* Friends to see — who you're visiting / hope to meet up with */}
+          <FriendSearchSelect
+            title="Friends to see"
+            hint="Search to add friends you're visiting or hope to catch up with there."
+            connectedFriends={connectedFriends}
+            selectedIds={visitIds}
+            suggestedFriends={friendShortlist}
+            onToggle={toggleId(setVisitIds)}
+          />
 
           {/* Summary preview */}
           <View className="bg-card rounded-2xl border border-border/30 p-4 gap-1 shadow-sm">

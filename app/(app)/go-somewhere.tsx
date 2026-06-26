@@ -357,7 +357,7 @@ export default function GoSomewhereScreen() {
           .select('id')
           .single();
         if (error) throw error;
-        await setTripLocationRange(user.id, first.friday, last.sunday, destination.trim() || null, true);
+        await setTripLocationRange(user.id, first.friday, last.sunday, destination.trim() || null, true, trip?.id ?? null);
         await forceRefresh();
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         router.replace(trip?.id ? `/(app)/trip/${trip.id}` : '/(app)/(tabs)');
