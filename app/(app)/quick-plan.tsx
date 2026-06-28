@@ -47,6 +47,34 @@ function dayLabel(d: Date): string {
   return format(d, 'EEEE');
 }
 
+/** Time-slot pill selector, shared by log + suggest mode. Changing the slot
+ *  re-filters the suggest-mode friend picker to whoever's free then (XPE-270). */
+function TimeSlotPills({
+  value,
+  onChange,
+}: {
+  value: TimeSlot;
+  onChange: (s: TimeSlot) => void;
+}) {
+  return (
+    <View className="flex-row flex-wrap gap-2">
+      {(Object.entries(TIME_SLOT_LABELS) as [TimeSlot, { label: string; time: string }][]).map(([id, meta]) => {
+        const selected = value === id;
+        return (
+          <Pressable
+            key={id}
+            onPress={() => { Haptics.selectionAsync(); onChange(id); }}
+            className={`rounded-xl px-3 py-2 border active:opacity-70 ${selected ? 'bg-primary border-primary' : 'bg-card border-border/40'}`}
+          >
+            <Text className={`font-sans text-sm font-semibold ${selected ? 'text-white' : 'text-foreground'}`}>{meta.label}</Text>
+            <Text className={`font-sans text-xs ${selected ? 'text-white/70' : 'text-muted-foreground'}`}>{meta.time}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 export default function QuickPlanScreen() {
   const { date: dateParam, slot: slotParam, mode } = useLocalSearchParams<{
     date?: string;
@@ -293,21 +321,7 @@ export default function QuickPlanScreen() {
                 <Text className="font-sans text-[13px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
                   Time
                 </Text>
-                <View className="flex-row flex-wrap gap-2">
-                  {(Object.entries(TIME_SLOT_LABELS) as [TimeSlot, { label: string; time: string }][]).map(([id, meta]) => {
-                    const selected = pickedSlot === id;
-                    return (
-                      <Pressable
-                        key={id}
-                        onPress={() => { Haptics.selectionAsync(); setPickedSlot(id); }}
-                        className={`rounded-xl px-3 py-2 border active:opacity-70 ${selected ? 'bg-primary border-primary' : 'bg-card border-border/40'}`}
-                      >
-                        <Text className={`font-sans text-sm font-semibold ${selected ? 'text-white' : 'text-foreground'}`}>{meta.label}</Text>
-                        <Text className={`font-sans text-xs ${selected ? 'text-white/70' : 'text-muted-foreground'}`}>{meta.time}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+                <TimeSlotPills value={pickedSlot} onChange={setPickedSlot} />
               </View>
             </View>
           )}
@@ -338,6 +352,17 @@ export default function QuickPlanScreen() {
               </View>
             </View>
           </View>
+          )}
+
+          {/* Time selector (suggest mode) — switch the window and the picker
+              below re-filters to whoever's free then (XPE-270). */}
+          {!isLogMode && (
+            <View>
+              <Text className="font-sans text-[13px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
+                Time
+              </Text>
+              <TimeSlotPills value={pickedSlot} onChange={setPickedSlot} />
+            </View>
           )}
 
           {/* Friend multi-select */}
@@ -412,6 +437,18 @@ export default function QuickPlanScreen() {
                   );
                 })}
               </ScrollView>
+            </View>
+          )}
+
+          {/* Suggest mode: no one free in the chosen window */}
+          {!isLogMode && freeFriends.length === 0 && (
+            <View className="px-0.5">
+              <Text className="font-sans text-[13px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">
+                Invite friends
+              </Text>
+              <Text className="font-sans text-sm text-muted-foreground">
+                No friends are free in this window — pick another time above, or just add it as an open plan.
+              </Text>
             </View>
           )}
 
