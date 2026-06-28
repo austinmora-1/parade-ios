@@ -19,7 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Pencil, Trash2, Share2 } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import * as Haptics from 'expo-haptics';
 import { PlanChangeBanner } from '@/components/plan/PlanChangeBanner';
 import { PlanDetailsCard } from '@/components/plan/PlanDetailsCard';
@@ -27,7 +27,8 @@ import { ProposalVotingSection } from '@/components/plan/ProposalVotingSection';
 import { RsvpSection } from '@/components/plan/RsvpSection';
 import { JoinRequestSection } from '@/components/plan/JoinRequestSection';
 import { PlanCommentsSection } from '@/components/plan/PlanCommentsSection';
-import { SharePlanModal } from '@/components/plan/SharePlanModal';
+import { UnifiedShareSheet } from '@/components/share/UnifiedShareSheet';
+import { PlanCreatedConfetti } from '@/components/plan/PlanCreatedConfetti';
 import { PlanPhotosSection } from '@/components/plan/PlanPhotosSection';
 import { ReactionBar } from '@/components/primitives/ReactionBar';
 import { ScreenHeader } from '@/components/primitives/ScreenHeader';
@@ -60,7 +61,7 @@ function usePlan(planId: string) {
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function PlanDetailScreen() {
-  const { planId } = useLocalSearchParams<{ planId: string }>();
+  const { planId, celebrate, share } = useLocalSearchParams<{ planId: string; celebrate?: string; share?: string }>();
   const { user } = useAuth();
   const deletePlan = usePlannerStore((s) => s.deletePlan);
 
@@ -107,9 +108,18 @@ export default function PlanDetailScreen() {
     );
   }, [deletePlan, planId]);
 
-  // Share modal mints a unique join link and offers Messages / WhatsApp /
-  // Signal / copy
+  // Share sheet mints a unique join link and offers the omni-channel grid.
   const [shareOpen, setShareOpen] = useState(false);
+
+  // Auto-open share when arriving from quick-plan with ?share=1 — lets the
+  // creator immediately send the new plan to non-users (XPE-268).
+  const sharePrompted = useRef(false);
+  useEffect(() => {
+    if (share === '1' && plan && !sharePrompted.current) {
+      sharePrompted.current = true;
+      setShareOpen(true);
+    }
+  }, [share, plan]);
 
   return (
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
@@ -128,31 +138,28 @@ export default function PlanDetailScreen() {
                       : `/(app)/propose-change?planId=${planId}`,
                   );
                 }}
-                hitSlop={8}
                 accessibilityLabel={isOwner ? 'Edit plan' : 'Propose change'}
-                className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
+                className="w-11 h-11 rounded-full items-center justify-center active:opacity-70"
               >
-                <Pencil size={18} color={TC.icon} strokeWidth={2} />
+                <Pencil size={20} color={TC.icon} strokeWidth={2} />
               </Pressable>
               <Pressable
                 onPress={() => {
                   Haptics.selectionAsync();
                   setShareOpen(true);
                 }}
-                hitSlop={8}
                 accessibilityLabel="Share plan"
-                className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
+                className="w-11 h-11 rounded-full items-center justify-center active:opacity-70"
               >
-                <Share2 size={18} color={TC.icon} strokeWidth={2} />
+                <Share2 size={20} color={TC.icon} strokeWidth={2} />
               </Pressable>
               {isOwner && (
                 <Pressable
                   onPress={handleDelete}
-                  hitSlop={8}
                   accessibilityLabel="Delete plan"
-                  className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
+                  className="w-11 h-11 rounded-full items-center justify-center active:opacity-70"
                 >
-                  <Trash2 size={18} color={EMBER} strokeWidth={2} />
+                  <Trash2 size={20} color={EMBER} strokeWidth={2} />
                 </Pressable>
               )}
             </View>
@@ -233,14 +240,30 @@ export default function PlanDetailScreen() {
       )}
 
       {user && (
-        <SharePlanModal
+        <UnifiedShareSheet
           visible={shareOpen}
           onClose={() => setShareOpen(false)}
-          planId={planId}
-          planTitle={plan?.title}
-          userId={user.id}
+          heading="Share plan"
+          subheading={`Anyone with the link can ask to join${plan?.title ? ` “${plan.title}”` : ''}`}
+          emailSubject={`Join my plan${plan?.title ? `: ${plan.title}` : ''}`}
+          shareTitle={plan?.title || 'Parade plan'}
+          resolve={async () => {
+            const { data, error } = await supabase
+              .from('plan_invites')
+              .insert({ plan_id: planId, invited_by: user.id } as any)
+              .select('invite_token')
+              .single();
+            if (error || !data) return null;
+            return {
+              link: `https://helloparade.app/invite.html?t=${(data as any).invite_token}`,
+              message: `Join my plan "${plan?.title || 'on Parade'}"`,
+            };
+          }}
         />
       )}
+
+      {/* One-shot celebration when arriving from find-time (XPE-243) */}
+      <PlanCreatedConfetti active={celebrate === '1' && !!plan} />
     </SafeAreaView>
   );
 }

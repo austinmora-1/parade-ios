@@ -30,11 +30,11 @@ import { format, differenceInDays, isAfter, eachDayOfInterval } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlannerStore } from '@/stores/plannerStore';
-import { setTripLocationRange } from '@/lib/tripBusy';
+import { setTripLocationRange, toLocalDate } from '@/lib/tripBusy';
 import { resetCalendarSyncCache, syncCalendarBusyTimes } from '@/lib/calendarSync';
 import * as ExpoCalendar from 'expo-calendar';
 import { TripActivitiesSection } from '@/components/trip/TripActivitiesSection';
-import { ShareTripModal } from '@/components/trip/ShareTripModal';
+import { UnifiedShareSheet } from '@/components/share/UnifiedShareSheet';
 import { TC } from '@/lib/theme';
 import { PARADE_GREEN, EMBER } from '@/lib/colors';
 import { ScreenHeader } from '@/components/primitives/ScreenHeader';
@@ -258,8 +258,11 @@ export default function TripDetailScreen() {
   let dateLabel = '';
   let durationLabel = '';
   if (trip?.start_date && trip?.end_date) {
-    const start = new Date(trip.start_date);
-    const end = new Date(trip.end_date);
+    // Parse as LOCAL midnight — raw `new Date('yyyy-MM-dd')` is UTC midnight,
+    // which renders a day early in negative-offset zones (XPE-264). Matches the
+    // Trip Days grid + the share sheet so the displayed dates agree everywhere.
+    const start = toLocalDate(trip.start_date);
+    const end = toLocalDate(trip.end_date);
     const sameMonth = format(start, 'MMM') === format(end, 'MMM');
     dateLabel = sameMonth
       ? `${format(start, 'MMM d')} – ${format(end, 'd, yyyy')}`
@@ -269,7 +272,7 @@ export default function TripDetailScreen() {
   }
 
   const isUpcoming = trip?.start_date
-    ? isAfter(new Date(trip.start_date), new Date())
+    ? isAfter(toLocalDate(trip.start_date), new Date())
     : false;
 
   // Visit (hosting at home → green/Home) vs trip (away → ember/Plane)
@@ -283,8 +286,8 @@ export default function TripDetailScreen() {
   const tripDays =
     trip?.start_date && trip?.end_date
       ? eachDayOfInterval({
-          start: new Date(trip.start_date + 'T00:00:00'),
-          end: new Date(trip.end_date + 'T00:00:00'),
+          start: toLocalDate(trip.start_date),
+          end: toLocalDate(trip.end_date),
         })
       : [];
   const availableSlots: string[] = trip?.available_slots ?? [];
@@ -301,31 +304,28 @@ export default function TripDetailScreen() {
                   Haptics.selectionAsync();
                   router.push(`/(app)/new-trip?tripId=${tripId}`);
                 }}
-                hitSlop={8}
                 accessibilityLabel="Edit trip"
-                className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
+                className="w-11 h-11 rounded-full items-center justify-center active:opacity-70"
               >
-                <Pencil size={18} color={TC.icon} strokeWidth={2} />
+                <Pencil size={20} color={TC.icon} strokeWidth={2} />
               </Pressable>
               <Pressable
                 onPress={() => {
                   Haptics.selectionAsync();
                   setShareOpen(true);
                 }}
-                hitSlop={8}
                 accessibilityLabel="Share trip"
-                className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
+                className="w-11 h-11 rounded-full items-center justify-center active:opacity-70"
               >
-                <Share2 size={18} color={TC.icon} strokeWidth={2} />
+                <Share2 size={20} color={TC.icon} strokeWidth={2} />
               </Pressable>
               <Pressable
                 onPress={handleDelete}
                 disabled={deleting}
-                hitSlop={8}
                 accessibilityLabel="Delete trip"
-                className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
+                className="w-11 h-11 rounded-full items-center justify-center active:opacity-70"
               >
-                <Trash2 size={18} color={EMBER} strokeWidth={2} />
+                <Trash2 size={20} color={EMBER} strokeWidth={2} />
               </Pressable>
             </View>
           ) : undefined
@@ -507,11 +507,44 @@ export default function TripDetailScreen() {
       )}
 
       {trip && user && (
-        <ShareTripModal
+        <UnifiedShareSheet
           visible={shareOpen}
           onClose={() => setShareOpen(false)}
-          trip={trip}
-          userId={user.id}
+          heading="Share trip"
+          subheading={
+            trip.proposal_id
+              ? 'Anyone with the link can ask to join'
+              : `Let friends know you’ll be ${cityLabel ? `in ${cityLabel}` : 'away'}`
+          }
+          emailSubject={`Join me${trip.name ? `: ${trip.name}` : ' on Parade'}`}
+          shareTitle={trip.name || 'Parade trip'}
+          resolve={async () => {
+            const city = trip.location
+              ? formatCityForDisplay(trip.location) || trip.location
+              : null;
+            const title = trip.name || (city ? `Trip to ${city}` : 'my trip');
+            // Solo trip: no join flow — share a descriptive note + app link.
+            if (!trip.proposal_id) {
+              const dateRange = `${format(toLocalDate(trip.start_date), 'MMM d')} – ${format(
+                toLocalDate(trip.end_date),
+                'MMM d',
+              )}`;
+              return {
+                link: 'https://helloparade.app',
+                message: `I’ll be away for "${title}" (${dateRange}). Find me on Parade`,
+              };
+            }
+            const { data, error } = await supabase
+              .from('trip_proposal_invites')
+              .insert({ proposal_id: trip.proposal_id, trip_id: trip.id, invited_by: user.id } as any)
+              .select('invite_token')
+              .single();
+            if (error || !data) return null;
+            return {
+              link: `https://helloparade.app/invite.html?tt=${(data as any).invite_token}`,
+              message: `Join me for "${title}" on Parade`,
+            };
+          }}
         />
       )}
     </SafeAreaView>

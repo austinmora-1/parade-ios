@@ -9,6 +9,7 @@
  */
 import { useEffect, useRef } from 'react';
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { router } from 'expo-router';
 import { createMMKV } from 'react-native-mmkv';
@@ -93,7 +94,13 @@ export async function registerForPushNotifications(
   }
 
   try {
-    const tokenData = await Notifications.getExpoPushTokenAsync();
+    // EAS projectId is REQUIRED on real (non-Expo-Go) builds; without it
+    // getExpoPushTokenAsync throws and no device ever registers (XPE-278).
+    const projectId =
+      Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+    const tokenData = await Notifications.getExpoPushTokenAsync(
+      projectId ? { projectId } : undefined,
+    );
     const token = tokenData.data;
     tokenStore.set('expo_push_token', token);
     console.log('[Push] Token acquired:', token);
