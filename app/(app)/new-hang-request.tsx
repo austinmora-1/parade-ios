@@ -24,7 +24,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { format, addDays, isToday, isTomorrow, isSameDay } from 'date-fns';
 import * as Haptics from 'expo-haptics';
-import { X, Check, Search, Clock } from 'lucide-react-native';
+import { X, Check, Search, Clock, Send } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -38,6 +38,7 @@ import { TC } from '@/lib/theme';
 import { TINT, PARADE_GREEN } from '@/lib/colors';
 import { Chip } from '@/components/primitives/Chip';
 import { FieldLabel } from '@/components/primitives/FieldLabel';
+import { UnifiedShareSheet } from '@/components/share/UnifiedShareSheet';
 import { SLOT_OPTIONS } from '@/lib/socialSlots';
 import { StartEndTimePicker, defaultTimesForSlot } from '@/components/new-plan/StartEndTimePicker';
 import { hourToTimeString, slotForHour } from '@/lib/planSlotCoverage';
@@ -120,6 +121,7 @@ export default function NewHangRequestScreen() {
   );
   const [message, setMessage] = useState(messageParam ?? '');
   const [friendQuery, setFriendQuery] = useState('');
+  const [shareOpen, setShareOpen] = useState(false);
 
   // Optional specific start/end time (fractional hours). Off by default —
   // the coarse slot is enough for most pings. Prefilled when the iMessage
@@ -313,6 +315,17 @@ export default function NewHangRequestScreen() {
                   )}
                 </>
               )}
+
+              {/* Invite someone not on Parade (XPE-267) */}
+              <Pressable
+                onPress={() => { Haptics.selectionAsync(); setShareOpen(true); }}
+                className="flex-row items-center justify-center gap-1.5 rounded-xl border border-border/40 bg-card px-4 py-2.5 mt-2.5 active:opacity-70"
+              >
+                <Send size={14} color={PARADE_GREEN} strokeWidth={2} />
+                <Text className="font-sans text-sm font-medium text-primary">
+                  Invite someone not on Parade
+                </Text>
+              </Pressable>
             </View>
           )}
 
@@ -450,6 +463,30 @@ export default function NewHangRequestScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <UnifiedShareSheet
+        visible={shareOpen}
+        onClose={() => setShareOpen(false)}
+        heading="Invite to hang"
+        subheading="Send a quick ping to someone not on Parade"
+        emailSubject="Free to hang?"
+        shareTitle="Vibe check"
+        resolve={async () => {
+          const dayLabel = isToday(day)
+            ? 'today'
+            : isTomorrow(day)
+              ? 'tomorrow'
+              : format(day, 'EEE MMM d');
+          const slotLabel = (SLOT_OPTIONS.find((s) => s.id === slot)?.label ?? '').toLowerCase();
+          const when = slotLabel ? `${dayLabel} ${slotLabel}` : dayLabel;
+          return {
+            link: 'https://helloparade.app',
+            message: message.trim()
+              ? `${message.trim()} (${when}) — find me on Parade`
+              : `Free ${when}? Let’s hang — find me on Parade`,
+          };
+        }}
+      />
     </SafeAreaView>
   );
 }

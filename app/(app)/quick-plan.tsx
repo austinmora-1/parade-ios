@@ -245,7 +245,10 @@ export default function QuickPlanScreen() {
 
       await forceRefresh();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      if (planId) router.replace(`/(app)/plan/${planId}`);
+      // Suggest-mode quick plans land on the plan with the share sheet open so
+      // the creator can invite non-users too (XPE-268). Log mode already
+      // happened — no share prompt.
+      if (planId) router.replace(`/(app)/plan/${planId}${isLogMode ? '' : '?share=1'}`);
       else router.back();
     } catch (err: any) {
       console.error('quick-plan submit failed', err);

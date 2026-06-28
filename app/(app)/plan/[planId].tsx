@@ -19,7 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Pencil, Trash2, Share2 } from 'lucide-react-native';
 import { useQuery } from '@tanstack/react-query';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import * as Haptics from 'expo-haptics';
 import { PlanChangeBanner } from '@/components/plan/PlanChangeBanner';
 import { PlanDetailsCard } from '@/components/plan/PlanDetailsCard';
@@ -61,7 +61,7 @@ function usePlan(planId: string) {
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function PlanDetailScreen() {
-  const { planId, celebrate } = useLocalSearchParams<{ planId: string; celebrate?: string }>();
+  const { planId, celebrate, share } = useLocalSearchParams<{ planId: string; celebrate?: string; share?: string }>();
   const { user } = useAuth();
   const deletePlan = usePlannerStore((s) => s.deletePlan);
 
@@ -108,9 +108,18 @@ export default function PlanDetailScreen() {
     );
   }, [deletePlan, planId]);
 
-  // Share modal mints a unique join link and offers Messages / WhatsApp /
-  // Signal / copy
+  // Share sheet mints a unique join link and offers the omni-channel grid.
   const [shareOpen, setShareOpen] = useState(false);
+
+  // Auto-open share when arriving from quick-plan with ?share=1 — lets the
+  // creator immediately send the new plan to non-users (XPE-268).
+  const sharePrompted = useRef(false);
+  useEffect(() => {
+    if (share === '1' && plan && !sharePrompted.current) {
+      sharePrompted.current = true;
+      setShareOpen(true);
+    }
+  }, [share, plan]);
 
   return (
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
