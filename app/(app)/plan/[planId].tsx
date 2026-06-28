@@ -27,7 +27,7 @@ import { ProposalVotingSection } from '@/components/plan/ProposalVotingSection';
 import { RsvpSection } from '@/components/plan/RsvpSection';
 import { JoinRequestSection } from '@/components/plan/JoinRequestSection';
 import { PlanCommentsSection } from '@/components/plan/PlanCommentsSection';
-import { SharePlanModal } from '@/components/plan/SharePlanModal';
+import { UnifiedShareSheet } from '@/components/share/UnifiedShareSheet';
 import { PlanCreatedConfetti } from '@/components/plan/PlanCreatedConfetti';
 import { PlanPhotosSection } from '@/components/plan/PlanPhotosSection';
 import { ReactionBar } from '@/components/primitives/ReactionBar';
@@ -231,12 +231,25 @@ export default function PlanDetailScreen() {
       )}
 
       {user && (
-        <SharePlanModal
+        <UnifiedShareSheet
           visible={shareOpen}
           onClose={() => setShareOpen(false)}
-          planId={planId}
-          planTitle={plan?.title}
-          userId={user.id}
+          heading="Share plan"
+          subheading={`Anyone with the link can ask to join${plan?.title ? ` “${plan.title}”` : ''}`}
+          emailSubject={`Join my plan${plan?.title ? `: ${plan.title}` : ''}`}
+          shareTitle={plan?.title || 'Parade plan'}
+          resolve={async () => {
+            const { data, error } = await supabase
+              .from('plan_invites')
+              .insert({ plan_id: planId, invited_by: user.id } as any)
+              .select('invite_token')
+              .single();
+            if (error || !data) return null;
+            return {
+              link: `https://helloparade.app/invite.html?t=${(data as any).invite_token}`,
+              message: `Join my plan "${plan?.title || 'on Parade'}"`,
+            };
+          }}
         />
       )}
 
