@@ -32,7 +32,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format, addDays, parseISO } from 'date-fns';
 import * as Haptics from 'expo-haptics';
-import { X } from 'lucide-react-native';
+import { X, TriangleAlert } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { supabase } from '@/integrations/supabase/client';
@@ -47,8 +47,12 @@ import { VisibilityPicker } from '@/components/new-plan/VisibilityPicker';
 import { FrequencyPicker } from '@/components/new-plan/FrequencyPicker';
 import { FriendSelector } from '@/components/new-plan/FriendSelector';
 import type { TimeSlot } from '@/types/planner';
+import { TIME_SLOT_LABELS } from '@/types/planner';
 import { slotForHour, hourToTimeString, parseTimeToHour } from '@/lib/planSlotCoverage';
+import { findOverlappingPlans, freeSlotsOnDate, slotWindowTimes, planWindowLabel } from '@/lib/planOverlap';
+import { isCalendarSourced } from '@/lib/planSource';
 import { TC } from '@/lib/theme';
+import { EMBER } from '@/lib/colors';
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
@@ -71,6 +75,7 @@ export default function NewPlanScreen() {
   const addPlan    = usePlannerStore((s) => s.addPlan);
   const updatePlan = usePlannerStore((s) => s.updatePlan);
   const friends    = usePlannerStore((s) => s.friends);
+  const plans      = usePlannerStore((s) => s.plans);
   const setUserId  = usePlannerStore((s) => s.setUserId);
   const { data: pods } = usePods();
 
@@ -198,6 +203,54 @@ export default function NewPlanScreen() {
       { date: addDays(lastDate, 1), slot: timeSlot },
     ]);
   }, [extraOptions, date, timeSlot]);
+
+  // ── Overlap detection (XPE-252/253) ─────────────────────────────────────────
+  // Soft warning when this plan's window collides with an existing active plan
+  // on the same day; if the clashing plan is yours, offer to move it to a free
+  // slot. Reactive — clears itself once the time changes or the plan is moved.
+  const overlappingPlans = useMemo(
+    () =>
+      findOverlappingPlans(
+        { date, timeSlot, startTime: startTimeStr, endTime: endTimeStr },
+        plans,
+        isEditMode ? planIdParam : undefined,
+      ),
+    [date, timeSlot, startTimeStr, endTimeStr, plans, isEditMode, planIdParam],
+  );
+
+  // First free slot to suggest moving a conflicting plan into (never the slot
+  // this new plan is taking).
+  const suggestedSlot = useMemo(() => {
+    const exclude = isEditMode && planIdParam ? [planIdParam] : [];
+    return freeSlotsOnDate(date, plans, exclude).find((s) => s !== timeSlot) ?? null;
+  }, [date, plans, timeSlot, isEditMode, planIdParam]);
+
+  const handleMovePlan = useCallback(
+    (plan: { id: string; title: string }, toSlot: TimeSlot) => {
+      const label = TIME_SLOT_LABELS[toSlot]?.label ?? toSlot;
+      Alert.alert(
+        'Move this plan?',
+        `Move “${plan.title || 'this plan'}” to ${label} so the two don’t overlap?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Move',
+            onPress: async () => {
+              try {
+                const { startTime, endTime } = slotWindowTimes(toSlot);
+                await updatePlan(plan.id, { timeSlot: toSlot, startTime, endTime });
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              } catch {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                Alert.alert('Could not move the plan', 'Please try again.');
+              }
+            },
+          },
+        ],
+      );
+    },
+    [updatePlan],
+  );
 
   // ── Submit ─────────────────────────────────────────────────────────────────
   const handleSubmit = useCallback(async () => {
@@ -420,6 +473,47 @@ export default function NewPlanScreen() {
             endHour={endHour}
             onChange={(s, e) => { setStartHour(s); setEndHour(e); }}
           />
+
+          {/* ── Overlap warning (XPE-252/272/253) ─────────────────────── */}
+          {overlappingPlans.length > 0 && (
+            <View
+              className="rounded-2xl border bg-card p-4 gap-2.5 shadow-sm"
+              style={{ borderColor: EMBER }}
+            >
+              <View className="flex-row items-center gap-2">
+                <TriangleAlert size={16} color={EMBER} strokeWidth={2} />
+                <Text className="font-sans text-sm font-semibold" style={{ color: EMBER }}>
+                  Already planned then
+                </Text>
+              </View>
+              {overlappingPlans.map((p) => {
+                // Only offer to move native Parade plans you own — a calendar
+                // import (flight, holiday…) isn't reschedulable from here.
+                const canMove =
+                  !!user?.id &&
+                  p.userId === user.id &&
+                  !isCalendarSourced(p) &&
+                  !!suggestedSlot;
+                return (
+                  <View key={p.id} className="gap-1.5">
+                    <Text className="font-sans text-sm text-foreground">
+                      You’ve already got “{p.title || 'Untitled plan'}” ({planWindowLabel(p)}).
+                    </Text>
+                    {canMove && suggestedSlot && (
+                      <Pressable
+                        onPress={() => handleMovePlan(p, suggestedSlot)}
+                        className="self-start rounded-full border border-primary/40 bg-primary/10 px-3 py-1.5 active:opacity-70"
+                      >
+                        <Text className="font-sans text-[13px] font-semibold text-primary">
+                          Move it to {TIME_SLOT_LABELS[suggestedSlot]?.label ?? suggestedSlot} ({TIME_SLOT_LABELS[suggestedSlot]?.time})
+                        </Text>
+                      </Pressable>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          )}
 
           {/* ── Location ─────────────────────────────────────────────── */}
           <View>
