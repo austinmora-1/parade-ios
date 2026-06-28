@@ -306,7 +306,8 @@ export default function FindTimeScreen() {
 
       await forceRefresh();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      if (planId) router.replace(`/(app)/plan/${planId}`);
+      // Land on the new plan's detail with a one-shot celebration (XPE-243).
+      if (planId) router.replace(`/(app)/plan/${planId}?celebrate=1`);
       else router.back();
     } catch (err: any) {
       console.error('find-time submit failed', err);

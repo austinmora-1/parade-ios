@@ -63,7 +63,7 @@ export default function ShareAvailabilityScreen() {
   const availabilityMap = useAvailabilityStore((s) => s.availabilityMap);
   const defaultSettings = useAvailabilityStore((s) => s.defaultSettings);
 
-  const [view, setView] = useState<RangeView>('1m');
+  const [view, setView] = useState<RangeView>('3m');
   const range = RANGES.find((r) => r.view === view)!;
 
   // share_code + display name for the link and the notification copy

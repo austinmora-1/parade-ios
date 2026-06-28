@@ -227,6 +227,7 @@ CREATE TABLE public.plan_invites (
   invited_by uuid NOT NULL,
   invite_token text DEFAULT generate_share_code(12) NOT NULL,
   email text,
+  phone text,
   status text DEFAULT 'pending'::text NOT NULL,
   created_at timestamp with time zone DEFAULT now() NOT NULL,
   accepted_at timestamp with time zone,

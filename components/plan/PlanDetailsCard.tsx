@@ -15,6 +15,18 @@ const SLOT_LABELS: Record<string, string> = {
   late_night:       'Late night',
 };
 
+/** Format a stored "HH:mm[:ss]" clock string as "3:40 PM". Null if invalid. */
+function formatClockTime(value?: string | null): string | null {
+  if (!value) return null;
+  const [h, m] = value.split(':');
+  const hour = Number(h);
+  const minute = Number(m ?? '0');
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+  const d = new Date();
+  d.setHours(hour, minute, 0, 0);
+  return format(d, 'h:mm a');
+}
+
 function DetailRow({
   icon,
   label,
@@ -44,6 +56,9 @@ export function PlanDetailsCard({
   plan: any;
   participantCount: number;
 }) {
+  const startTime = formatClockTime(plan.start_time);
+  const endTime = formatClockTime(plan.end_time);
+
   return (
     <View className="bg-card rounded-2xl border border-border/30 shadow-sm overflow-hidden">
       <DetailRow icon={<Calendar size={15} color="#929298" strokeWidth={1.75} />} label="Date">
@@ -55,6 +70,15 @@ export function PlanDetailsCard({
         <>
           <DetailRow icon={<Clock size={15} color="#929298" strokeWidth={1.75} />} label="Time">
             {SLOT_LABELS[plan.time_slot] ?? plan.time_slot}
+          </DetailRow>
+          <View className="h-px bg-border/30 mx-4" />
+        </>
+      )}
+
+      {startTime && endTime && (
+        <>
+          <DetailRow icon={<Clock size={15} color="#929298" strokeWidth={1.75} />} label="Window">
+            {`${startTime} – ${endTime}`}
           </DetailRow>
           <View className="h-px bg-border/30 mx-4" />
         </>

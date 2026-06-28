@@ -451,12 +451,13 @@ function WeekendHeroCard({
                 </View>
               ))}
 
-              {/* "Add plan" — taps through to plan creation with date pre-set */}
+              {/* "Add plan" — quick-plan with date pre-set, picker filtered
+                  to friends free that day */}
               {dayPlans.length === 0 && (
                 <Pressable
                   onPress={(e) => {
                     e.stopPropagation?.();
-                    router.push(`/(app)/new-plan?date=${dateStr}`);
+                    router.push(`/(app)/quick-plan?date=${dateStr}`);
                   }}
                   className="flex-row items-center gap-1 mt-0.5 active:opacity-60"
                   hitSlop={4}
@@ -694,11 +695,13 @@ function WeekdayRow({
         ) : null}
       </View>
 
-      {/* "+" button — dark circle (matches PWA inverted bg-foreground button) */}
+      {/* "+" button — dark circle (matches PWA inverted bg-foreground button).
+          Routes to quick-plan with date pre-set, picker filtered to friends
+          free that day */}
       <Pressable
         onPress={(e) => {
           e.stopPropagation?.();
-          router.push(`/(app)/new-plan?date=${dateStr}`);
+          router.push(`/(app)/quick-plan?date=${dateStr}`);
         }}
         hitSlop={4}
         className="w-9 h-9 rounded-full items-center justify-center"

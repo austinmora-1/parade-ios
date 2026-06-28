@@ -28,6 +28,7 @@ import { RsvpSection } from '@/components/plan/RsvpSection';
 import { JoinRequestSection } from '@/components/plan/JoinRequestSection';
 import { PlanCommentsSection } from '@/components/plan/PlanCommentsSection';
 import { SharePlanModal } from '@/components/plan/SharePlanModal';
+import { PlanCreatedConfetti } from '@/components/plan/PlanCreatedConfetti';
 import { PlanPhotosSection } from '@/components/plan/PlanPhotosSection';
 import { ReactionBar } from '@/components/primitives/ReactionBar';
 import { ScreenHeader } from '@/components/primitives/ScreenHeader';
@@ -60,7 +61,7 @@ function usePlan(planId: string) {
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function PlanDetailScreen() {
-  const { planId } = useLocalSearchParams<{ planId: string }>();
+  const { planId, celebrate } = useLocalSearchParams<{ planId: string; celebrate?: string }>();
   const { user } = useAuth();
   const deletePlan = usePlannerStore((s) => s.deletePlan);
 
@@ -128,31 +129,28 @@ export default function PlanDetailScreen() {
                       : `/(app)/propose-change?planId=${planId}`,
                   );
                 }}
-                hitSlop={8}
                 accessibilityLabel={isOwner ? 'Edit plan' : 'Propose change'}
-                className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
+                className="w-11 h-11 rounded-full items-center justify-center active:opacity-70"
               >
-                <Pencil size={18} color={TC.icon} strokeWidth={2} />
+                <Pencil size={20} color={TC.icon} strokeWidth={2} />
               </Pressable>
               <Pressable
                 onPress={() => {
                   Haptics.selectionAsync();
                   setShareOpen(true);
                 }}
-                hitSlop={8}
                 accessibilityLabel="Share plan"
-                className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
+                className="w-11 h-11 rounded-full items-center justify-center active:opacity-70"
               >
-                <Share2 size={18} color={TC.icon} strokeWidth={2} />
+                <Share2 size={20} color={TC.icon} strokeWidth={2} />
               </Pressable>
               {isOwner && (
                 <Pressable
                   onPress={handleDelete}
-                  hitSlop={8}
                   accessibilityLabel="Delete plan"
-                  className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
+                  className="w-11 h-11 rounded-full items-center justify-center active:opacity-70"
                 >
-                  <Trash2 size={18} color={EMBER} strokeWidth={2} />
+                  <Trash2 size={20} color={EMBER} strokeWidth={2} />
                 </Pressable>
               )}
             </View>
@@ -241,6 +239,9 @@ export default function PlanDetailScreen() {
           userId={user.id}
         />
       )}
+
+      {/* One-shot celebration when arriving from find-time (XPE-243) */}
+      <PlanCreatedConfetti active={celebrate === '1' && !!plan} />
     </SafeAreaView>
   );
 }
