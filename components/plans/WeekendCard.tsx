@@ -9,7 +9,7 @@ import { View, Text, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import { format } from 'date-fns';
 import * as Haptics from 'expo-haptics';
-import { Plane, CalendarCheck, Plus, Users } from 'lucide-react-native';
+import { Plane, CalendarCheck } from 'lucide-react-native';
 import { Avatar } from '@/components/primitives/Avatar';
 import { PARADE_GREEN, EMBER } from '@/lib/colors';
 import type { TimeSlot } from '@/types/planner';
@@ -46,19 +46,18 @@ function dateRangeLabel(saturday: string, sunday: string): string {
   return `${format(sat, 'MMM d')} – ${sameMonth ? format(sun, 'd') : format(sun, 'MMM d')}`;
 }
 
-/** Collapse open slots into one chip per (day, day-part), keeping a concrete
- *  slot to prefill quick-plan — turns up to 12 raw slots into ≤8 tidy chips. */
-function bucketChips(openSlots: WeekendSlot[]): { date: string; slot: TimeSlot; label: string }[] {
-  const seen = new Set<string>();
-  const out: { date: string; slot: TimeSlot; label: string }[] = [];
+const DAY_PARTS: Bucket[] = ['morning', 'afternoon', 'evening', 'night'];
+
+/** Open day-parts for one date → a concrete slot to prefill quick-plan
+ *  (early/late within a part collapse to the first that's open). */
+function openDayParts(openSlots: WeekendSlot[], date: string): Map<Bucket, TimeSlot> {
+  const m = new Map<Bucket, TimeSlot>();
   for (const s of openSlots) {
-    const key = `${s.date}|${BUCKET[s.slot]}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const day = parseLocal(s.date).getDay() === 6 ? 'Sat' : 'Sun';
-    out.push({ date: s.date, slot: s.slot, label: `${day} ${BUCKET[s.slot]}` });
+    if (s.date !== date) continue;
+    const b = BUCKET[s.slot];
+    if (!m.has(b)) m.set(b, s.slot);
   }
-  return out;
+  return m;
 }
 
 function goToQuickPlan(date: string, slot: TimeSlot) {
@@ -66,16 +65,10 @@ function goToQuickPlan(date: string, slot: TimeSlot) {
   router.push(`/(app)/quick-plan?date=${date}&slot=${slot}`);
 }
 
-const MAX_CHIPS = 6;
-
 export function WeekendCard({ summary }: { summary: WeekendSummary }) {
   const { state, openSlots, friends, bookedTitles, awayLocation } = summary;
   const accent = ACCENT[state];
   const interactive = state === 'open' || state === 'partial';
-
-  const allChips = bucketChips(openSlots);
-  const chips = allChips.slice(0, MAX_CHIPS);
-  const extra = allChips.length - chips.length;
 
   const stateLine =
     state === 'open' ? 'Free all weekend'
@@ -115,24 +108,45 @@ export function WeekendCard({ summary }: { summary: WeekendSummary }) {
           </Text>
         </View>
 
-        {interactive && chips.length > 0 && (
-          <View className="flex-row flex-wrap gap-1.5 mt-2.5">
-            {chips.map((c) => (
-              <Pressable
-                key={`${c.date}-${c.slot}`}
-                onPress={() => goToQuickPlan(c.date, c.slot)}
-                className="flex-row items-center gap-1 rounded-full px-2.5 py-1.5 active:opacity-70"
-                style={{ backgroundColor: 'rgba(35,116,77,0.10)', borderWidth: 1, borderColor: 'rgba(35,116,77,0.20)' }}
-              >
-                <Plus size={12} color={PARADE_GREEN} strokeWidth={2.5} />
-                <Text className="font-sans text-[12px] font-medium text-primary">{c.label}</Text>
-              </Pressable>
-            ))}
-            {extra > 0 && (
-              <View className="rounded-full px-2.5 py-1.5" style={{ backgroundColor: 'rgba(0,0,0,0.04)' }}>
-                <Text className="font-sans text-[12px] text-muted-foreground">+{extra} more</Text>
-              </View>
-            )}
+        {interactive && (
+          <View className="mt-2.5 gap-1.5">
+            {([['Sat', summary.saturday], ['Sun', summary.sunday]] as const).map(([dayLabel, date]) => {
+              const open = openDayParts(openSlots, date);
+              return (
+                <View key={dayLabel} className="flex-row items-center gap-2.5">
+                  <Text
+                    className="font-sans text-[11px] font-medium text-muted-foreground"
+                    style={{ width: 22 }}
+                  >
+                    {dayLabel}
+                  </Text>
+                  <View className="flex-row gap-1.5">
+                    {DAY_PARTS.map((part) => {
+                      const slot = open.get(part);
+                      const isOpen = !!slot;
+                      return (
+                        <Pressable
+                          key={part}
+                          disabled={!isOpen}
+                          onPress={isOpen ? () => goToQuickPlan(date, slot!) : undefined}
+                          hitSlop={6}
+                          accessibilityLabel={isOpen ? `${dayLabel} ${part} — open` : undefined}
+                          className="active:opacity-60"
+                          style={{
+                            width: 34,
+                            height: 16,
+                            borderRadius: 999,
+                            backgroundColor: isOpen ? 'rgba(35,116,77,0.16)' : 'transparent',
+                            borderWidth: 1,
+                            borderColor: isOpen ? 'rgba(35,116,77,0.45)' : 'rgba(0,0,0,0.08)',
+                          }}
+                        />
+                      );
+                    })}
+                  </View>
+                </View>
+              );
+            })}
           </View>
         )}
 
