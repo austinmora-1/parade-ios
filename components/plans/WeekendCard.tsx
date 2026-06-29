@@ -25,11 +25,12 @@ const ACCENT: Record<WeekendState, string> = {
   away: EMBER,
 };
 
-const SLOT_SHORT: Record<TimeSlot, string> = {
+type Bucket = 'morning' | 'afternoon' | 'evening' | 'night';
+const BUCKET: Record<TimeSlot, Bucket> = {
   'early-morning': 'morning',
-  'late-morning': 'late morning',
+  'late-morning': 'morning',
   'early-afternoon': 'afternoon',
-  'late-afternoon': 'late afternoon',
+  'late-afternoon': 'afternoon',
   'evening': 'evening',
   'late-night': 'night',
 };
@@ -45,9 +46,19 @@ function dateRangeLabel(saturday: string, sunday: string): string {
   return `${format(sat, 'MMM d')} – ${sameMonth ? format(sun, 'd') : format(sun, 'MMM d')}`;
 }
 
-function slotChipLabel(s: WeekendSlot): string {
-  const day = parseLocal(s.date).getDay() === 6 ? 'Sat' : 'Sun';
-  return `${day} ${SLOT_SHORT[s.slot]}`;
+/** Collapse open slots into one chip per (day, day-part), keeping a concrete
+ *  slot to prefill quick-plan — turns up to 12 raw slots into ≤8 tidy chips. */
+function bucketChips(openSlots: WeekendSlot[]): { date: string; slot: TimeSlot; label: string }[] {
+  const seen = new Set<string>();
+  const out: { date: string; slot: TimeSlot; label: string }[] = [];
+  for (const s of openSlots) {
+    const key = `${s.date}|${BUCKET[s.slot]}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const day = parseLocal(s.date).getDay() === 6 ? 'Sat' : 'Sun';
+    out.push({ date: s.date, slot: s.slot, label: `${day} ${BUCKET[s.slot]}` });
+  }
+  return out;
 }
 
 function goToQuickPlan(date: string, slot: TimeSlot) {
@@ -55,15 +66,16 @@ function goToQuickPlan(date: string, slot: TimeSlot) {
   router.push(`/(app)/quick-plan?date=${date}&slot=${slot}`);
 }
 
-const MAX_CHIPS = 4;
+const MAX_CHIPS = 6;
 
 export function WeekendCard({ summary }: { summary: WeekendSummary }) {
   const { state, openSlots, friends, bookedTitles, awayLocation } = summary;
   const accent = ACCENT[state];
   const interactive = state === 'open' || state === 'partial';
 
-  const chips = openSlots.slice(0, MAX_CHIPS);
-  const extra = openSlots.length - chips.length;
+  const allChips = bucketChips(openSlots);
+  const chips = allChips.slice(0, MAX_CHIPS);
+  const extra = allChips.length - chips.length;
 
   const stateLine =
     state === 'open' ? 'Free all weekend'
@@ -105,15 +117,15 @@ export function WeekendCard({ summary }: { summary: WeekendSummary }) {
 
         {interactive && chips.length > 0 && (
           <View className="flex-row flex-wrap gap-1.5 mt-2.5">
-            {chips.map((s) => (
+            {chips.map((c) => (
               <Pressable
-                key={`${s.date}-${s.slot}`}
-                onPress={() => goToQuickPlan(s.date, s.slot)}
+                key={`${c.date}-${c.slot}`}
+                onPress={() => goToQuickPlan(c.date, c.slot)}
                 className="flex-row items-center gap-1 rounded-full px-2.5 py-1.5 active:opacity-70"
                 style={{ backgroundColor: 'rgba(35,116,77,0.10)', borderWidth: 1, borderColor: 'rgba(35,116,77,0.20)' }}
               >
                 <Plus size={12} color={PARADE_GREEN} strokeWidth={2.5} />
-                <Text className="font-sans text-[12px] font-medium text-primary">{slotChipLabel(s)}</Text>
+                <Text className="font-sans text-[12px] font-medium text-primary">{c.label}</Text>
               </Pressable>
             ))}
             {extra > 0 && (

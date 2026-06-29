@@ -978,6 +978,11 @@ export default function PlansTab() {
       loadAvailabilityForRange(today, end, user.id).catch(() => {});
     }
   }, [scope, user?.id]);
+  // Honor a ?scope=weekends deep-link (e.g. the Home entry) even when the
+  // Plans tab is already mounted.
+  useEffect(() => {
+    if (scopeParam === 'weekends') setScope('weekends');
+  }, [scopeParam]);
 
   // Recommended open social windows for the displayed week (today-or-future
   // days only), ranked by friend overlap → drives the Recommended CTA.
