@@ -13,7 +13,8 @@ import { Plane, CalendarCheck } from 'lucide-react-native';
 import { Avatar } from '@/components/primitives/Avatar';
 import { PARADE_GREEN, EMBER } from '@/lib/colors';
 import type { TimeSlot } from '@/types/planner';
-import type { WeekendSummary, WeekendState, WeekendSlot } from '@/lib/openWeekends';
+import { SLOT_ORDER } from '@/lib/planSlotCoverage';
+import type { WeekendSummary, WeekendState } from '@/lib/openWeekends';
 
 const AMBER = '#BA7517';
 const GRAY = '#B4B2A9';
@@ -25,16 +26,6 @@ const ACCENT: Record<WeekendState, string> = {
   away: EMBER,
 };
 
-type Bucket = 'morning' | 'afternoon' | 'evening' | 'night';
-const BUCKET: Record<TimeSlot, Bucket> = {
-  'early-morning': 'morning',
-  'late-morning': 'morning',
-  'early-afternoon': 'afternoon',
-  'late-afternoon': 'afternoon',
-  'evening': 'evening',
-  'late-night': 'night',
-};
-
 function parseLocal(d: string): Date {
   return new Date(`${d}T00:00:00`);
 }
@@ -44,20 +35,6 @@ function dateRangeLabel(saturday: string, sunday: string): string {
   const sun = parseLocal(sunday);
   const sameMonth = sat.getMonth() === sun.getMonth();
   return `${format(sat, 'MMM d')} – ${sameMonth ? format(sun, 'd') : format(sun, 'MMM d')}`;
-}
-
-const DAY_PARTS: Bucket[] = ['morning', 'afternoon', 'evening', 'night'];
-
-/** Open day-parts for one date → a concrete slot to prefill quick-plan
- *  (early/late within a part collapse to the first that's open). */
-function openDayParts(openSlots: WeekendSlot[], date: string): Map<Bucket, TimeSlot> {
-  const m = new Map<Bucket, TimeSlot>();
-  for (const s of openSlots) {
-    if (s.date !== date) continue;
-    const b = BUCKET[s.slot];
-    if (!m.has(b)) m.set(b, s.slot);
-  }
-  return m;
 }
 
 function goToQuickPlan(date: string, slot: TimeSlot) {
@@ -111,7 +88,9 @@ export function WeekendCard({ summary }: { summary: WeekendSummary }) {
         {interactive && (
           <View className="mt-2.5 gap-1.5">
             {([['Sat', summary.saturday], ['Sun', summary.sunday]] as const).map(([dayLabel, date]) => {
-              const open = openDayParts(openSlots, date);
+              const openSet = new Set(
+                openSlots.filter((s) => s.date === date).map((s) => s.slot),
+              );
               return (
                 <View key={dayLabel} className="flex-row items-center gap-2.5">
                   <Text
@@ -120,20 +99,19 @@ export function WeekendCard({ summary }: { summary: WeekendSummary }) {
                   >
                     {dayLabel}
                   </Text>
-                  <View className="flex-row gap-1.5">
-                    {DAY_PARTS.map((part) => {
-                      const slot = open.get(part);
-                      const isOpen = !!slot;
+                  <View className="flex-1 flex-row gap-1">
+                    {SLOT_ORDER.map((slot) => {
+                      const isOpen = openSet.has(slot);
                       return (
                         <Pressable
-                          key={part}
+                          key={slot}
                           disabled={!isOpen}
-                          onPress={isOpen ? () => goToQuickPlan(date, slot!) : undefined}
-                          hitSlop={6}
-                          accessibilityLabel={isOpen ? `${dayLabel} ${part} — open` : undefined}
+                          onPress={isOpen ? () => goToQuickPlan(date, slot) : undefined}
+                          hitSlop={4}
+                          accessibilityLabel={isOpen ? `${dayLabel} ${slot} — open` : undefined}
                           className="active:opacity-60"
                           style={{
-                            width: 34,
+                            flex: 1,
                             height: 16,
                             borderRadius: 999,
                             backgroundColor: isOpen ? 'rgba(35,116,77,0.16)' : 'transparent',
