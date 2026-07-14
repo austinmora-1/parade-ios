@@ -10,7 +10,8 @@ import { TC } from '@/lib/theme';
 import type { ReactNode } from 'react';
 
 interface ScreenHeaderProps {
-  title: string;
+  /** Omit (or pass '') to leave the bar title-less, e.g. when a hero card below repeats it. */
+  title?: string;
   /** Second line under the title (e.g. date, helper text). */
   subtitle?: string;
   /** Rendered at the right edge (action button, menu, badge). */
@@ -29,7 +30,9 @@ export function ScreenHeader({ title, subtitle, rightAction, onBack }: ScreenHea
       >
         <ChevronLeft size={22} color={TC.icon} strokeWidth={2} />
       </Pressable>
-      {subtitle ? (
+      {!title ? (
+        <View className="flex-1" />
+      ) : subtitle ? (
         <View className="flex-1">
           <Text className="font-display text-base text-foreground" numberOfLines={1}>
             {title}

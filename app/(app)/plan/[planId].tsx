@@ -124,10 +124,9 @@ export default function PlanDetailScreen() {
   return (
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
       <ScreenHeader
-        title={plan?.title ?? 'Plan'}
         rightAction={
           isOwner || myParticipant ? (
-            <View className="flex-row items-center">
+            <View className="flex-row items-center gap-1">
               {/* Edit: owners edit directly; participants propose a change */}
               <Pressable
                 onPress={() => {

@@ -295,10 +295,9 @@ export default function TripDetailScreen() {
   return (
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
       <ScreenHeader
-        title={trip?.name ?? 'Trip'}
         rightAction={
           isOwner && !isLoading && !error ? (
-            <View className="flex-row items-center">
+            <View className="flex-row items-center gap-1">
               <Pressable
                 onPress={() => {
                   Haptics.selectionAsync();
