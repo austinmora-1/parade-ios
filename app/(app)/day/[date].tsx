@@ -42,7 +42,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlannerStore } from '@/stores/plannerStore';
 import type { TimeSlot, LocationStatus, DayAvailability } from '@/types/planner';
-import { activityAccent } from '@/lib/activityColors';
 import { getPlanSlotCoverage } from '@/lib/planSlotCoverage';
 import { getCalendarBusyTitlesForDate } from '@/lib/calendarSync';
 import { createDefaultAvailability } from '@/stores/helpers/mapAvailability';
@@ -51,7 +50,8 @@ import { ScreenHeader } from '@/components/primitives/ScreenHeader';
 import { LocationAutocomplete } from '@/components/primitives/LocationAutocomplete';
 import { DateDial, computeDayWheel, planBlocksAvailability } from '@/components/plans/DateDial';
 import { useAvailabilityStore } from '@/stores/availabilityStore';
-import { TINT, PARADE_GREEN, EMBER, ELEPHANT, tint } from '@/lib/colors';
+import { TINT, PARADE_GREEN, EMBER, ELEPHANT, PLAN_BLUE, tint } from '@/lib/colors';
+import { isCalendarSourced } from '@/lib/planSource';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -144,7 +144,8 @@ function SlotPlanRow({ plan }: { plan: any }) {
       onPress={() => router.push(`/(app)/plan/${plan.id}`)}
       className="bg-card rounded-xl border border-border/30 overflow-hidden flex-row shadow-sm active:opacity-80"
     >
-      <View style={{ width: 4, backgroundColor: activityAccent(plan.activity) }} />
+      {/* Blue = a Parade social plan; gray = a synced calendar import (XPE-288) */}
+      <View style={{ width: 4, backgroundColor: isCalendarSourced(plan) ? ELEPHANT : PLAN_BLUE }} />
       <View className="flex-1 px-3 py-2.5 flex-row items-center gap-2">
         <View className="flex-1 gap-0.5">
           <Text className="font-sans text-sm font-semibold text-foreground" numberOfLines={1}>
@@ -208,6 +209,9 @@ export default function DayDetailScreen() {
       activity: p.activity as string | undefined,
       status: p.status,
       myRsvpStatus: p.myRsvpStatus,
+      // Carry source so the slot bar / plan rows can distinguish synced
+      // calendar imports (gray) from real Parade plans (blue) — XPE-288.
+      source: p.source ?? null,
     }));
 
   // Calendar events blocking slots on this day (empty without permission)
@@ -501,13 +505,16 @@ export default function DayDetailScreen() {
                 </Text>
               </View>
 
-              {/* Slot coverage bar — green free, ember planned, gray busy */}
+              {/* Slot coverage bar — green free, blue Parade plan, gray busy/import (XPE-288) */}
               <View className="flex-row gap-1">
                 {SLOTS.map((s) => {
-                  const hasPlan = (plansBySlot.get(s.slot) ?? []).length > 0;
+                  const slotPlans = plansBySlot.get(s.slot) ?? [];
+                  // Only a real Parade social plan counts as "planned" (blue);
+                  // synced calendar imports read as busy (gray), not a plan.
+                  const hasSocialPlan = slotPlans.some((p: any) => !isCalendarSourced(p));
                   const free = slotIsFree(s.col);
-                  const color = hasPlan
-                    ? tint(EMBER, 0.7)
+                  const color = hasSocialPlan
+                    ? tint(PLAN_BLUE, 0.7)
                     : free
                       ? tint(PARADE_GREEN, 0.7)
                       : tint(ELEPHANT, 0.2);

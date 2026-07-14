@@ -8,7 +8,8 @@
  */
 export const PARADE_GREEN = '#23744D';
 export const MINT         = '#67B28E'; // faded mint (PWA --go-mint) — "mostly open"
-export const EMBER        = '#D46549';
+export const EMBER        = '#D46549'; // "away" / travel accent
+export const PLAN_BLUE    = '#3F86D6'; // Parade social plans ("planned") — kept distinct from EMBER "away" (XPE-288)
 export const MARIGOLD     = '#DFA53A';
 export const ELEPHANT     = '#929298'; // muted-foreground gray
 export const AMBER        = '#B45309'; // "some time" availability accent
