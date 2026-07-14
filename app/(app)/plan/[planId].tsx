@@ -32,6 +32,7 @@ import { PlanCreatedConfetti } from '@/components/plan/PlanCreatedConfetti';
 import { PlanPhotosSection } from '@/components/plan/PlanPhotosSection';
 import { ReactionBar } from '@/components/primitives/ReactionBar';
 import { ScreenHeader } from '@/components/primitives/ScreenHeader';
+import { Avatar } from '@/components/primitives/Avatar';
 import { activityAccent } from '@/lib/activityColors';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -40,6 +41,14 @@ import { TC } from '@/lib/theme';
 import { EMBER } from '@/lib/colors';
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
+
+interface GoingPerson {
+  user_id: string;
+  display_name: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  avatar_url: string | null;
+}
 
 function usePlan(planId: string) {
   return useQuery({
@@ -53,7 +62,25 @@ function usePlan(planId: string) {
           .eq('plan_id', planId),
       ]);
       if (error) throw error;
-      return { plan, participants: participants ?? [] };
+
+      // Resolve profiles for accepted participants (+ the plan owner) so the
+      // "Going" row can show avatars (XPE-282). Email-only invites have no
+      // friend_id and the RPC only returns rows for real profiles, so
+      // unresolvable entries drop out naturally. Row hides when zero accepted.
+      const acceptedIds = (participants ?? [])
+        .filter((p: any) => p.status === 'accepted' && p.friend_id)
+        .map((p: any) => p.friend_id as string);
+      let going: GoingPerson[] = [];
+      if (acceptedIds.length > 0) {
+        const goingIds = [...new Set([plan?.user_id, ...acceptedIds].filter(Boolean))] as string[];
+        const { data: profiles } = await supabase.rpc('get_display_names_for_users', {
+          p_user_ids: goingIds,
+        });
+        const byId = new Map((profiles ?? []).map((p: any) => [p.user_id as string, p]));
+        going = goingIds.map((id) => byId.get(id)).filter(Boolean) as GoingPerson[];
+      }
+
+      return { plan, participants: participants ?? [], going };
     },
   });
 }
@@ -68,6 +95,7 @@ export default function PlanDetailScreen() {
   const { data, isLoading, error, refetch } = usePlan(planId);
   const plan = data?.plan as any;
   const participants = (data?.participants ?? []) as any[];
+  const going = data?.going ?? [];
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -202,6 +230,40 @@ export default function PlanDetailScreen() {
           <PlanChangeBanner planId={planId} currentUserId={user?.id} />
 
           <PlanDetailsCard plan={plan} participantCount={participants.length} />
+
+          {/* Going — accepted participants (+ owner) with resolvable profiles (XPE-282) */}
+          {going.length > 0 && (
+            <View className="bg-card rounded-2xl border border-border/30 p-5 gap-3 shadow-sm">
+              <Text className="font-sans text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
+                Going
+              </Text>
+              <View className="flex-row flex-wrap gap-2">
+                {going.map((person) => (
+                  <Pressable
+                    key={person.user_id}
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      router.push(`/(app)/friend/${person.user_id}`);
+                    }}
+                    accessibilityLabel={`View ${
+                      person.display_name ||
+                      [person.first_name, person.last_name].filter(Boolean).join(' ') ||
+                      'friend'
+                    }'s profile`}
+                    className="active:opacity-70"
+                  >
+                    <Avatar
+                      url={person.avatar_url}
+                      firstName={person.first_name}
+                      lastName={person.last_name}
+                      displayName={person.display_name}
+                      size="sm"
+                    />
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          )}
 
           {/* Notes */}
           {plan.notes ? (

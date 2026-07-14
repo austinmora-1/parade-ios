@@ -30,6 +30,7 @@ import { format, differenceInDays, isAfter, eachDayOfInterval } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlannerStore } from '@/stores/plannerStore';
+import { useAvailabilityStore } from '@/stores/availabilityStore';
 import { setTripLocationRange, toLocalDate } from '@/lib/tripBusy';
 import { resetCalendarSyncCache, syncCalendarBusyTimes } from '@/lib/calendarSync';
 import * as ExpoCalendar from 'expo-calendar';
@@ -44,6 +45,9 @@ import { getTravelKind } from '@/lib/visitVsTrip';
 import { formatCityForDisplay } from '@/lib/formatCity';
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
+
+// Canonical slot order (early-morning → late-night) for the per-day view.
+const ALL_TIME_SLOTS = Object.keys(TIME_SLOT_LABELS) as TimeSlot[];
 
 interface TripPerson {
   user_id: string;
@@ -60,7 +64,7 @@ function useTrip(tripId: string) {
       const { data: trip, error } = await supabase
         .from('trips')
         .select(
-          'id, user_id, name, location, start_date, end_date, available_slots, priority_friend_ids, proposal_id',
+          'id, user_id, name, location, start_date, end_date, priority_friend_ids, proposal_id',
         )
         .eq('id', tripId)
         .maybeSingle();
@@ -68,7 +72,7 @@ function useTrip(tripId: string) {
       // Trip was deleted / never existed (or is hidden by RLS) — surface the
       // screen's "Trip not found" state instead of throwing a PGRST116 that
       // gets logged as a crash.
-      if (!trip) return { trip: null, companions: [], friendsToSee: [] };
+      if (!trip) return { trip: null, companions: [], friendsToSee: [], going: [] };
 
       // Travel companions live in trip_participants; friends to see are the
       // trip's priority_friend_ids. Resolve both to display names + avatars.
@@ -79,7 +83,23 @@ function useTrip(tripId: string) {
       const companionIds = (participants ?? []).map((p: any) => p.friend_user_id);
       const friendIds = (trip as any).priority_friend_ids ?? [];
 
-      const allIds = [...new Set([...companionIds, ...friendIds])] as string[];
+      // Accepted RSVPs for proposal-backed trips (owner always going).
+      // Statuses actually written (go-somewhere.tsx): creator = 'voted',
+      // invited friends = 'pending' (invited but hasn't accepted — votes land
+      // in trip_proposal_votes without flipping this). 'accepted' kept for
+      // forward-compat with the PWA-aligned model.
+      let goingIds: string[] = [];
+      if ((trip as any).proposal_id) {
+        const { data: rsvps } = await supabase
+          .from('trip_proposal_participants')
+          .select('user_id, status')
+          .eq('proposal_id', (trip as any).proposal_id)
+          .in('status', ['accepted', 'voted']);
+        const acceptedIds = (rsvps ?? []).map((r: any) => r.user_id);
+        goingIds = [...new Set([(trip as any).user_id, ...acceptedIds])] as string[];
+      }
+
+      const allIds = [...new Set([...companionIds, ...friendIds, ...goingIds])] as string[];
       let profileMap = new Map<string, TripPerson>();
       if (allIds.length > 0) {
         const { data: profiles } = await supabase.rpc('get_display_names_for_users', {
@@ -97,12 +117,13 @@ function useTrip(tripId: string) {
         trip,
         companions: toPeople(companionIds),
         friendsToSee: toPeople(friendIds),
+        going: toPeople(goingIds),
       };
     },
   });
 }
 
-// People row shared by Traveling With + Friends to See
+// People row for the "Who's in" list (companions + friends to see)
 function PersonRow({
   person,
   badge,
@@ -172,7 +193,9 @@ export default function TripDetailScreen() {
   const trip = data?.trip as any;
   const companions = data?.companions ?? [];
   const friendsToSee = data?.friendsToSee ?? [];
+  const going = data?.going ?? [];
   const homeAddress = usePlannerStore((s) => s.homeAddress);
+  const availabilityMap = useAvailabilityStore((s) => s.availabilityMap);
   const setAvailability = usePlannerStore((s) => s.setAvailability);
   const [deleting, setDeleting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -260,7 +283,7 @@ export default function TripDetailScreen() {
   if (trip?.start_date && trip?.end_date) {
     // Parse as LOCAL midnight — raw `new Date('yyyy-MM-dd')` is UTC midnight,
     // which renders a day early in negative-offset zones (XPE-264). Matches the
-    // Trip Days grid + the share sheet so the displayed dates agree everywhere.
+    // per-day availability + the share sheet so displayed dates agree everywhere.
     const start = toLocalDate(trip.start_date);
     const end = toLocalDate(trip.end_date);
     const sameMonth = format(start, 'MMM') === format(end, 'MMM');
@@ -290,7 +313,16 @@ export default function TripDetailScreen() {
           end: toLocalDate(trip.end_date),
         })
       : [];
-  const availableSlots: string[] = trip?.available_slots ?? [];
+
+  // XPE-283 — one "Who's in" list: companions + friends-to-see deduped by
+  // user_id. Companions sort first and win the badge when someone is in both.
+  const companionIdSet = new Set(companions.map((p) => p.user_id));
+  const whosIn: { person: TripPerson; role: 'companion' | 'seeing' }[] = [
+    ...companions.map((p) => ({ person: p, role: 'companion' as const })),
+    ...friendsToSee
+      .filter((p) => !companionIdSet.has(p.user_id))
+      .map((p) => ({ person: p, role: 'seeing' as const })),
+  ];
 
   return (
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
@@ -395,102 +427,132 @@ export default function TripDetailScreen() {
             )}
           </View>
 
-          {/* Available time slots — when you're free to meet up on the trip */}
-          <View className="gap-2">
-            <Text className="font-display text-sm font-semibold text-foreground">
-              Available Time Slots
-            </Text>
-            {availableSlots.length > 0 ? (
-              <View className="flex-row flex-wrap gap-1.5">
-                {availableSlots.map((slot) => {
-                  const label = TIME_SLOT_LABELS[slot as TimeSlot];
+          {/* Per-day availability (XPE-284) — each trip day's free slots from
+              the owner's availabilityMap (slot free when !== false, missing day
+              = fully free — same semantics as computeOpenWeekends). Owner-only:
+              other viewers have no availability data. */}
+          {isOwner && tripDays.length > 0 && (
+            <View className="gap-2">
+              <View className="flex-row items-center gap-1.5">
+                <Clock size={15} color="#929298" strokeWidth={1.75} />
+                <Text className="font-display text-sm font-semibold text-foreground">
+                  Availability
+                </Text>
+              </View>
+              <View className="gap-1.5">
+                {tripDays.map((day) => {
+                  const dateStr = format(day, 'yyyy-MM-dd');
+                  const daySlots = availabilityMap[dateStr]?.slots;
+                  const freeSlots = ALL_TIME_SLOTS.filter(
+                    (slot) => daySlots?.[slot] !== false,
+                  );
                   return (
                     <View
-                      key={slot}
-                      className="flex-row items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1"
+                      key={dateStr}
+                      className="flex-row items-center gap-2.5 rounded-xl border border-border/30 bg-card p-2.5"
                     >
-                      <Clock size={12} color={PARADE_GREEN} strokeWidth={2} />
-                      <Text className="font-sans text-xs font-medium text-primary">
-                        {label ? `${label.label} (${label.time})` : slot}
-                      </Text>
+                      <View
+                        className="items-center rounded-lg bg-away/10 px-2.5 py-1.5"
+                        style={{ minWidth: 44 }}
+                      >
+                        <Text className="font-sans text-[10px] text-muted-foreground">
+                          {format(day, 'EEE')}
+                        </Text>
+                        <Text className="font-sans text-sm font-medium text-foreground">
+                          {format(day, 'd')}
+                        </Text>
+                      </View>
+                      {freeSlots.length === 0 ? (
+                        <Text className="font-sans text-xs text-muted-foreground">
+                          Busy
+                        </Text>
+                      ) : freeSlots.length === ALL_TIME_SLOTS.length ? (
+                        <Text className="font-sans text-xs font-medium text-primary">
+                          Available all day
+                        </Text>
+                      ) : (
+                        <View className="flex-1 flex-row flex-wrap gap-1.5">
+                          {freeSlots.map((slot) => (
+                            <View
+                              key={slot}
+                              className="rounded-full bg-primary/10 px-2 py-0.5"
+                            >
+                              <Text className="font-sans text-[10px] font-medium text-primary">
+                                {TIME_SLOT_LABELS[slot].label}
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
                     </View>
                   );
                 })}
               </View>
-            ) : (
-              <Text className="font-sans text-xs text-muted-foreground">
-                Available all day
-              </Text>
-            )}
-          </View>
+            </View>
+          )}
 
-          {/* Trip days */}
-          {tripDays.length > 0 && (
+          {/* Going — accepted RSVPs on proposal-backed trips (XPE-282) */}
+          {trip.proposal_id && going.length > 0 && (
             <View className="gap-2">
-              <Text className="font-display text-sm font-semibold text-foreground">
-                Trip Days
-              </Text>
-              <View className="flex-row flex-wrap gap-1.5">
-                {tripDays.map((day) => (
-                  <View
-                    key={day.toISOString()}
-                    className="items-center rounded-lg bg-away/10 px-2.5 py-1.5"
-                    style={{ minWidth: 44 }}
+              <View className="flex-row items-center gap-1.5">
+                <Users size={15} color="#929298" strokeWidth={1.75} />
+                <Text className="font-display text-sm font-semibold text-foreground">
+                  Going ({going.length})
+                </Text>
+              </View>
+              <View className="flex-row flex-wrap gap-2">
+                {going.map((p) => (
+                  <Pressable
+                    key={p.user_id}
+                    onPress={() => router.push(`/(app)/friend/${p.user_id}`)}
+                    accessibilityLabel={`View ${p.display_name || 'friend'}`}
+                    className="active:opacity-70"
                   >
-                    <Text className="font-sans text-[10px] text-muted-foreground">
-                      {format(day, 'EEE')}
-                    </Text>
-                    <Text className="font-sans text-sm font-medium text-foreground">
-                      {format(day, 'd')}
-                    </Text>
-                  </View>
+                    <Avatar
+                      url={p.avatar_url}
+                      firstName={p.first_name}
+                      lastName={p.last_name}
+                      displayName={p.display_name}
+                      size="md"
+                    />
+                  </Pressable>
                 ))}
               </View>
             </View>
           )}
 
-          {/* Traveling with — companions on the trip */}
-          <View className="gap-2">
-            <View className="flex-row items-center gap-1.5">
-              <Plane size={15} color="#929298" strokeWidth={1.75} />
-              <Text className="font-display text-sm font-semibold text-foreground">
-                Traveling With ({companions.length})
-              </Text>
-            </View>
-            {companions.length > 0 ? (
-              <View className="gap-1.5">
-                {companions.map((p) => (
-                  <PersonRow
-                    key={p.user_id}
-                    person={p}
-                    badge={
-                      <View className="flex-row items-center gap-0.5">
-                        <Plane size={10} color={EMBER} strokeWidth={2} />
-                        <Text className="font-sans text-[10px] font-medium" style={{ color: EMBER }}>
-                          Companion
-                        </Text>
-                      </View>
-                    }
-                  />
-                ))}
-              </View>
-            ) : (
-              <SectionEmpty text="No travel companions added" />
-            )}
-          </View>
-
-          {/* Friends to see — who you're visiting / being visited by */}
+          {/* Who's in — companions + friends to see, deduped (XPE-283) */}
           <View className="gap-2">
             <View className="flex-row items-center gap-1.5">
               <Users size={15} color="#929298" strokeWidth={1.75} />
               <Text className="font-display text-sm font-semibold text-foreground">
-                Friends to See ({friendsToSee.length})
+                Who’s in ({whosIn.length})
               </Text>
             </View>
-            {friendsToSee.length > 0 ? (
+            {whosIn.length > 0 ? (
               <View className="gap-1.5">
-                {friendsToSee.map((p) => (
-                  <PersonRow key={p.user_id} person={p} />
+                {whosIn.map(({ person, role }) => (
+                  <PersonRow
+                    key={person.user_id}
+                    person={person}
+                    badge={
+                      role === 'companion' ? (
+                        <View className="flex-row items-center gap-0.5">
+                          <Plane size={10} color={EMBER} strokeWidth={2} />
+                          <Text className="font-sans text-[10px] font-medium" style={{ color: EMBER }}>
+                            Companion
+                          </Text>
+                        </View>
+                      ) : (
+                        <View className="flex-row items-center gap-0.5">
+                          <Users size={10} color={PARADE_GREEN} strokeWidth={2} />
+                          <Text className="font-sans text-[10px] font-medium" style={{ color: PARADE_GREEN }}>
+                            Seeing
+                          </Text>
+                        </View>
+                      )
+                    }
+                  />
                 ))}
               </View>
             ) : (
