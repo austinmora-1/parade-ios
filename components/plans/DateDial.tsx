@@ -52,7 +52,9 @@ const STATUS_COLOR: Record<DayDialStatus, string> = {
   open: PARADE_GREEN,
   'mostly-open': PARADE_GREEN,
   some: MARIGOLD,
-  busy: EMBER,
+  // Strict three-color wheel: green (open) / yellow (filling) / coral
+  // (away only) — no separate amber tier (XPE-288).
+  busy: MARIGOLD,
   unavailable: tint(ELEPHANT, 0.35),
   unknown: 'transparent',
 };
@@ -73,6 +75,7 @@ const PILL = {
   open:   { bg: TINT.primaryBorder,   text: '#1A5C3A' },
   mostly: { bg: tint(MINT, 0.2),      text: '#2F7D57' },
   some:   { bg: TINT.amberSubtle,     text: '#92400E' },
+  /** Coral — reserved exclusively for the away override (XPE-288) */
   tight:  { bg: TINT.secondarySubtle, text: '#D46549' },
   gray:   { bg: TINT.grayFaint,       text: '#6E6E74' },
 } as const;
@@ -210,9 +213,11 @@ export function computeDayWheel(input: DayWheelInput): DayWheel {
     };
   }
 
-  // Arc always shows the FREE share of capacity (gray track = taken);
-  // the color escalates as the day fills: green while less than half
-  // taken, yellow after, red when only one window remains.
+  // Arc always shows the FREE share of capacity (gray track = taken).
+  // Strict three-color scheme (XPE-288): green = open/mostly open,
+  // yellow = some time/almost booked, gray = fully booked ("Booked"
+  // renders as the bare gray track). Coral is reserved for the away
+  // override below.
   const taken = total - free;
   const fill = total > 0 ? free / total : 0;
 
@@ -227,9 +232,9 @@ export function computeDayWheel(input: DayWheelInput): DayWheel {
   if (taken === 0) {
     result = { status: 'open', fill: 1, arcColor: PARADE_GREEN, label: 'Open', pill: PILL.open, free, total };
   } else if (free === 1) {
-    result = { status: 'some', fill, arcColor: EMBER, label: 'Almost booked', pill: PILL.tight, free, total };
+    result = { status: 'some', fill, arcColor: MARIGOLD, label: 'Almost booked', pill: PILL.some, free, total };
   } else if (taken < total / 2) {
-    result = { status: 'some', fill, arcColor: MINT, label: 'Mostly open', pill: PILL.mostly, free, total };
+    result = { status: 'some', fill, arcColor: PARADE_GREEN, label: 'Mostly open', pill: PILL.mostly, free, total };
   } else {
     result = { status: 'some', fill, arcColor: MARIGOLD, label: 'Some time', pill: PILL.some, free, total };
   }
