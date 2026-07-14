@@ -7,7 +7,6 @@
  *  3. Location: Home/Away toggle + trip location editing (away days)
  *  4. Time slots: per-slot free/busy toggle, plans inline under their slot,
  *     and a "Quick plan" fast-path on free empty slots
- *  5. Create-plan CTA
  */
 import {
   ScrollView,
@@ -24,7 +23,6 @@ import { router, useLocalSearchParams } from 'expo-router';
 import {
   MapPin,
   Check,
-  Plus,
   Zap,
   Home,
   Plane,
@@ -725,19 +723,6 @@ export default function DayDetailScreen() {
               ))}
             </View>
           )}
-
-          {/* ── Create plan CTA ──────────────────────────────────────── */}
-          {/* Routes to quick-plan (availability-filtered friend picker) to
-              match the Plans-tab entry points — XPE-270. */}
-          <Pressable
-            onPress={() => router.push(`/(app)/quick-plan?date=${date}`)}
-            className="bg-primary rounded-2xl flex-row items-center justify-center gap-2 px-4 py-3.5 active:opacity-80 shadow-sm"
-          >
-            <Plus size={16} color="#FFFFFF" strokeWidth={2.5} />
-            <Text className="font-sans text-sm font-semibold text-white">
-              Create a plan for this day
-            </Text>
-          </Pressable>
         </ScrollView>
         </KeyboardAvoidingView>
       )}

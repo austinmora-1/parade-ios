@@ -310,12 +310,16 @@ export function DateDial({
       <View className="absolute inset-0 items-center justify-center">
         {size >= 44 && dayName ? (
           <Text
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.7}
             style={{
               fontFamily: 'Fraunces_900Black',
               fontSize: size >= 60 ? 10 : 9,
               letterSpacing: 0.8,
               textTransform: 'uppercase',
               color: isToday ? PARADE_GREEN : ELEPHANT,
+              maxWidth: size - stroke * 2 - 6,
             }}
           >
             {dayName}

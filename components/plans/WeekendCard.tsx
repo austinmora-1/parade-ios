@@ -95,7 +95,8 @@ export function WeekendCard({ summary }: { summary: WeekendSummary }) {
                 <View key={dayLabel} className="flex-row items-center gap-2.5">
                   <Text
                     className="font-sans text-[11px] font-medium text-muted-foreground"
-                    style={{ width: 22 }}
+                    style={{ minWidth: 26 }}
+                    numberOfLines={1}
                   >
                     {dayLabel}
                   </Text>

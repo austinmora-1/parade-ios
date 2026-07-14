@@ -1202,8 +1202,10 @@ export default function PlansTab() {
             trip={(trips ?? []).find((t) => tripOverlapsDays(t, weekend))}
           />
 
-          {/* ── Today ─────────────────────────────────────────────────── */}
-          <TodayCard todayPlans={todayPlans} friendsFreeCount={friendsFreeToday} />
+          {/* ── Today — only when viewing the current week ─────────────── */}
+          {weekOffset === 0 && (
+            <TodayCard todayPlans={todayPlans} friendsFreeCount={friendsFreeToday} />
+          )}
 
           {/* ── Week at a glance ──────────────────────────────────────── */}
           <WeekSummaryCard dayInfos={dayInfos} />
