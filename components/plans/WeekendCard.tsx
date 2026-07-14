@@ -1,15 +1,18 @@
 /**
  * WeekendCard — one Sat/Sun pair in the "Open weekends" view. Renders the
  * weekend's state (open / partial / away / booked), tappable open-slot chips,
- * and friends-free avatars. Tapping a chip (or an open card) routes into the
- * existing quick-plan composer with the date + slot prefilled — the same
- * non-FAB path FreeWindowCard / RecommendedCTA use. (Reframe of XPE-274.)
+ * and friends-free avatars. Open/partial cards collapse the slot-pill rows by
+ * default; tapping the card toggles expand/collapse (XPE-286). When expanded,
+ * tapping a chip routes into the existing quick-plan composer with the date +
+ * slot prefilled — the same non-FAB path FreeWindowCard / RecommendedCTA use.
+ * (Reframe of XPE-274.)
  */
+import { useState } from 'react';
 import { View, Text, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import { format } from 'date-fns';
 import * as Haptics from 'expo-haptics';
-import { Plane, CalendarCheck } from 'lucide-react-native';
+import { Plane, CalendarCheck, ChevronDown, ChevronRight, Home } from 'lucide-react-native';
 import { Avatar } from '@/components/primitives/Avatar';
 import { PARADE_GREEN, EMBER } from '@/lib/colors';
 import type { TimeSlot } from '@/types/planner';
@@ -46,6 +49,7 @@ export function WeekendCard({ summary }: { summary: WeekendSummary }) {
   const { state, openSlots, friends, bookedTitles, awayLocation } = summary;
   const accent = ACCENT[state];
   const interactive = state === 'open' || state === 'partial';
+  const [expanded, setExpanded] = useState(false);
 
   const stateLine =
     state === 'open' ? 'Free all weekend'
@@ -54,13 +58,20 @@ export function WeekendCard({ summary }: { summary: WeekendSummary }) {
     : `Booked${bookedTitles[0] ? ` · ${bookedTitles[0]}` : ''}`;
 
   const onCardPress = interactive
-    ? () => goToQuickPlan(openSlots[0].date, openSlots[0].slot)
+    ? () => {
+        Haptics.selectionAsync();
+        setExpanded((e) => !e);
+      }
     : undefined;
+
+  const Chevron = expanded ? ChevronDown : ChevronRight;
 
   return (
     <Pressable
       onPress={onCardPress}
       disabled={!interactive}
+      accessibilityRole={interactive ? 'button' : undefined}
+      accessibilityState={interactive ? { expanded } : undefined}
       className="flex-row gap-3 bg-card rounded-2xl border border-border/20 p-3.5 mb-2.5 active:opacity-80"
       style={state === 'away' ? { backgroundColor: 'rgba(212,101,73,0.06)' } : undefined}
     >
@@ -70,7 +81,10 @@ export function WeekendCard({ summary }: { summary: WeekendSummary }) {
           <Text className="font-display text-[17px] text-foreground">
             {dateRangeLabel(summary.saturday, summary.sunday)}
           </Text>
-          <Text className="font-sans text-[11px] text-muted-foreground">Sat – Sun</Text>
+          <View className="flex-row items-center gap-1">
+            <Text className="font-sans text-[11px] text-muted-foreground">Sat – Sun</Text>
+            {interactive && <Chevron size={14} color={GRAY} strokeWidth={2} />}
+          </View>
         </View>
 
         <View className="flex-row items-center gap-1.5 mt-0.5">
@@ -78,14 +92,25 @@ export function WeekendCard({ summary }: { summary: WeekendSummary }) {
           {state === 'booked' && <CalendarCheck size={14} color={GRAY} strokeWidth={2} />}
           <Text
             className="font-sans text-[13px] font-medium"
-            style={{ color: accent === GRAY ? '#8A8579' : accent }}
+            style={{ color: accent === GRAY ? '#8A8579' : accent, flexShrink: 1 }}
             numberOfLines={1}
           >
             {stateLine}
           </Text>
+          {state !== 'away' && (
+            <View
+              className="flex-row items-center gap-1 rounded-full px-1.5 py-0.5"
+              style={{ marginLeft: 'auto', backgroundColor: 'rgba(35,116,77,0.10)' }}
+            >
+              <Home size={11} color={PARADE_GREEN} strokeWidth={2} />
+              <Text className="font-sans text-[10px] font-medium" style={{ color: PARADE_GREEN }}>
+                Home
+              </Text>
+            </View>
+          )}
         </View>
 
-        {interactive && (
+        {interactive && expanded && (
           <View className="mt-2.5 gap-1.5">
             {([['Sat', summary.saturday], ['Sun', summary.sunday]] as const).map(([dayLabel, date]) => {
               const openSet = new Set(

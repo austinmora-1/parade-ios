@@ -37,6 +37,7 @@ function AppLayoutInner({ route }: { route?: string }) {
       <Stack.Screen name="pending-requests" options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="pods" options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="day/[date]" options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="free-this-weekend" options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="notifications" options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="trips" options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />

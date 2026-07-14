@@ -13,7 +13,8 @@ import { Bell, MapPin, ChevronRight, CalendarDays } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useCallback, useState, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { format, addDays, startOfWeek, parseISO, differenceInCalendarDays } from 'date-fns';
+import { format, addDays, parseISO, differenceInCalendarDays } from 'date-fns';
+import * as Haptics from 'expo-haptics';
 import { formatCityForDisplay } from '@/lib/formatCity';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -35,6 +36,7 @@ import { DiscoverableInvitesWidget } from '@/components/dashboard/DiscoverableIn
 import { TripProposalInvitesWidget } from '@/components/dashboard/TripProposalInvitesWidget';
 import { TINT, PARADE_GREEN } from '@/lib/colors';
 import { TC } from '@/lib/theme';
+import { weekendDateStrs } from '@/app/(app)/free-this-weekend';
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
@@ -193,13 +195,11 @@ export default function HomeTab() {
       return d >= now && d <= cutoff;
     }).length;
 
-    // Count friends free on Fri / Sat / Sun of this week
-    const weekStart = startOfWeek(now, { weekStartsOn: 1 });
-    const weekendDateStrs = [4, 5, 6].map((i) =>
-      format(addDays(weekStart, i), 'yyyy-MM-dd'),
-    );
+    // Count friends free on Fri / Sat / Sun of this week — same shared day
+    // set the /free-this-weekend page renders, so pill and page never drift.
+    const weekendDates = weekendDateStrs(now);
     const friendsFreeWeekend = (friendData ?? []).filter((f) =>
-      weekendDateStrs.some((d) => f.freeDates.includes(d)),
+      weekendDates.some((d) => f.freeDates.includes(d)),
     ).length;
 
     return { upcomingCount, friendsFreeWeekend };
@@ -400,12 +400,20 @@ export default function HomeTab() {
               </View>
             )}
             {stats.friendsFreeWeekend > 0 && (
-              <View className="flex-row items-center gap-1.5 bg-marigold/10 rounded-full px-3 py-1.5">
+              <Pressable
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  router.push('/(app)/free-this-weekend');
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={`${stats.friendsFreeWeekend} ${stats.friendsFreeWeekend === 1 ? 'friend' : 'friends'} free this weekend. See who.`}
+                className="flex-row items-center gap-1.5 bg-marigold/10 rounded-full px-3 py-1.5 active:opacity-70"
+              >
                 <Text style={{ fontSize: 12 }}>👥</Text>
                 <Text className="font-sans text-xs text-marigold font-medium">
                   {stats.friendsFreeWeekend} free this weekend
                 </Text>
-              </View>
+              </Pressable>
             )}
           </View>
         )}
