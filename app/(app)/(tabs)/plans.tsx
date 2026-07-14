@@ -18,8 +18,8 @@ import {
 } from 'react-native';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
-import { useCallback, useState, useEffect } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useCallback, useState, useEffect, useMemo } from 'react';
 import {
   format,
   startOfWeek,
@@ -66,6 +66,9 @@ import {
 } from '@/components/plans/DateDial';
 import { useAvailabilityStore } from '@/stores/availabilityStore';
 import { WeekPickerModal } from '@/components/plans/WeekPickerModal';
+import { OpenWeekendsList } from '@/components/plans/OpenWeekendsList';
+import { useFriendWeekendAvailability } from '@/hooks/useFriendWeekendAvailability';
+import { computeOpenWeekends, listWeekends, weekendDatesFlat } from '@/lib/openWeekends';
 import { Avatar } from '@/components/primitives/Avatar';
 import { formatDisplayName } from '@/lib/utils';
 import { citiesMatch, normalizeCity } from '@/lib/locationMatch';
@@ -915,6 +918,12 @@ export default function PlansTab() {
   const [weekdaysOpen, setWeekdaysOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const { data: friendData } = useFriendDashboardData();
+  const availabilityMap = useAvailabilityStore((s) => s.availabilityMap);
+  const loadAvailabilityForRange = useAvailabilityStore((s) => s.loadAvailabilityForRange);
+  const { scope: scopeParam } = useLocalSearchParams<{ scope?: string }>();
+  const [scope, setScope] = useState<'week' | 'weekends'>(
+    scopeParam === 'weekends' ? 'weekends' : 'week',
+  );
 
   useEffect(() => {
     if (user?.id) {
@@ -943,6 +952,37 @@ export default function PlansTab() {
   const days      = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   const weekend   = [days[5], days[6]]; // Sat, Sun
   const label     = getWeekLabel(weekStart, weekEnd);
+
+  // ── Open-weekends lens (XPE-274): browse open weekends across ~6 months ──────
+  const todayKey = format(today, 'yyyy-MM-dd');
+  const weekends = useMemo(() => listWeekends(today, 26), [todayKey]);
+  const weekendDates = useMemo(() => weekendDatesFlat(weekends), [weekends]);
+  const { data: friendsByDate, isLoading: weekendFriendsLoading } =
+    useFriendWeekendAvailability(scope === 'weekends' ? weekendDates : []);
+  const openWeekendSummaries = useMemo(
+    () =>
+      scope === 'weekends'
+        ? computeOpenWeekends({
+            weekends,
+            availabilityMap,
+            plans,
+            trips: trips ?? [],
+            friendsByDate: friendsByDate ?? {},
+          })
+        : [],
+    [scope, weekends, availabilityMap, plans, trips, friendsByDate],
+  );
+  useEffect(() => {
+    if (scope === 'weekends' && user?.id && weekends.length) {
+      const end = new Date(`${weekends[weekends.length - 1].sunday}T00:00:00`);
+      loadAvailabilityForRange(today, end, user.id).catch(() => {});
+    }
+  }, [scope, user?.id]);
+  // Honor a ?scope=weekends deep-link (e.g. the Home entry) even when the
+  // Plans tab is already mounted.
+  useEffect(() => {
+    if (scopeParam === 'weekends') setScope('weekends');
+  }, [scopeParam]);
 
   // Recommended open social windows for the displayed week (today-or-future
   // days only), ranked by friend overlap → drives the Recommended CTA.
@@ -1084,6 +1124,35 @@ export default function PlansTab() {
           </View>
         </View>
 
+        {/* ── Scope toggle: This week | Open weekends (XPE-274) ───────────── */}
+        <View className="flex-row gap-1.5 mx-5 mt-1 mb-1 p-1 rounded-full bg-muted/40">
+          {(['week', 'weekends'] as const).map((s) => {
+            const active = scope === s;
+            return (
+              <Pressable
+                key={s}
+                onPress={() => setScope(s)}
+                className="flex-1 items-center py-2 rounded-full active:opacity-80"
+                style={active ? { backgroundColor: PARADE_GREEN } : undefined}
+              >
+                <Text
+                  className={`font-sans text-[13px] font-semibold ${active ? 'text-white' : 'text-muted-foreground'}`}
+                >
+                  {s === 'week' ? 'This week' : 'Open weekends'}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {scope === 'weekends' && (
+          <View className="px-5 mt-1">
+            <OpenWeekendsList summaries={openWeekendSummaries} loading={weekendFriendsLoading} />
+          </View>
+        )}
+
+        {scope === 'week' && (
+        <>
         {/* ── Week navigator ───────────────────────────────────────────── */}
         <View className="flex-row items-center px-4 py-1 gap-1">
           <Pressable
@@ -1224,6 +1293,8 @@ export default function PlansTab() {
             </View>
           )}
         </View>
+        </>
+        )}
       </ScrollView>
 
       {/* Week picker — jump to any week from a month calendar */}

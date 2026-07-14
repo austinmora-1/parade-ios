@@ -9,7 +9,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useColorScheme } from 'nativewind';
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Stop, Rect } from 'react-native-svg';
-import { Bell, MapPin, ChevronRight } from 'lucide-react-native';
+import { Bell, MapPin, ChevronRight, CalendarDays } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useCallback, useState, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -33,7 +33,7 @@ import { PushNotificationPrompt } from '@/components/dashboard/PushNotificationP
 import { HangRequestsWidget } from '@/components/dashboard/HangRequestsWidget';
 import { DiscoverableInvitesWidget } from '@/components/dashboard/DiscoverableInvitesWidget';
 import { TripProposalInvitesWidget } from '@/components/dashboard/TripProposalInvitesWidget';
-import { TINT } from '@/lib/colors';
+import { TINT, PARADE_GREEN } from '@/lib/colors';
 import { TC } from '@/lib/theme';
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
@@ -429,6 +429,25 @@ export default function HomeTab() {
           <FriendVibeStrip />
           {/* "Recommended" free-window section */}
           <FreeWindowCard />
+          {/* Browse open weekends → Plans tab lens (XPE-274) */}
+          <Pressable
+            onPress={() => router.push('/(app)/(tabs)/plans?scope=weekends')}
+            className="flex-row items-center gap-3 bg-card rounded-2xl border border-border/30 px-4 py-3.5 active:opacity-70"
+          >
+            <View
+              className="w-9 h-9 rounded-full items-center justify-center"
+              style={{ backgroundColor: 'rgba(35,116,77,0.10)' }}
+            >
+              <CalendarDays size={18} color={PARADE_GREEN} strokeWidth={2} />
+            </View>
+            <View className="flex-1">
+              <Text className="font-sans text-[15px] font-semibold text-foreground">Open weekends</Text>
+              <Text className="font-sans text-xs text-muted-foreground">
+                Browse free weekends and make plans
+              </Text>
+            </View>
+            <ChevronRight size={18} color="#929298" strokeWidth={2} />
+          </Pressable>
           {/* Upcoming Trips moved off Home — trips live on the Plans & Trips tab */}
           <UpcomingPlansWidget />
         </View>
