@@ -256,7 +256,7 @@ export default function TripDetailScreen() {
                 const { status } = await ExpoCalendar.getCalendarPermissionsAsync();
                 if (status === 'granted') {
                   resetCalendarSyncCache();
-                  await syncCalendarBusyTimes(setAvailability, 14);
+                  await syncCalendarBusyTimes(setAvailability);
                 }
               } catch {
                 /* best-effort */

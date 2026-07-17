@@ -9,6 +9,7 @@ import {
 import Svg, { Path } from 'react-native-svg';
 import { formatDistanceToNow } from 'date-fns';
 import { TINT } from '@/lib/colors';
+import { CALENDAR_SYNC_DAYS_AHEAD } from '@/lib/calendarSync';
 import { SectionCard, SectionHeader } from '@/components/settings/SettingsPrimitives';
 import type { useGoogleCalendar } from '@/hooks/useGoogleCalendar';
 import type { useNylasCalendar } from '@/hooks/useNylasCalendar';
@@ -114,7 +115,7 @@ function CalendarSyncRow({
       (lastResult?.eventsProcessed
         ? ` · ${lastResult.eventsProcessed} events → ${lastResult.datesUpdated ?? 0} days`
         : '')
-    : 'Pull busy times from the next 14 days.';
+    : `Pull busy times from the next ${CALENDAR_SYNC_DAYS_AHEAD} days.`;
   return (
     <Pressable
       onPress={onSync}

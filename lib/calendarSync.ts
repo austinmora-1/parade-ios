@@ -1,7 +1,8 @@
 /**
  * Calendar sync — pulls events from iOS Calendar (via expo-calendar /
- * EventKit) for the next 14 days, maps them to Parade time slots, and
- * marks those slots as busy in the user's availability.
+ * EventKit) for the next `CALENDAR_SYNC_DAYS_AHEAD` days, maps them to
+ * Parade time slots, and marks those slots as busy in the user's
+ * availability.
  *
  * Phase 4 reconciliation:
  *   - Cache the set of "yyyy-MM-dd:slot" keys we wrote last sync in MMKV
@@ -18,6 +19,9 @@ import * as Calendar from 'expo-calendar';
 import { addDays, format, parseISO } from 'date-fns';
 import { createMMKV } from 'react-native-mmkv';
 import type { TimeSlot } from '@/types/planner';
+
+/** How far forward device-calendar sync looks (matches Google's ~3 months) */
+export const CALENDAR_SYNC_DAYS_AHEAD = 90;
 
 // ─── Slot definitions ────────────────────────────────────────────────────────
 
@@ -134,7 +138,7 @@ export interface SyncResult {
  */
 export async function syncCalendarBusyTimes(
   setAvailability: (date: Date, slot: TimeSlot, available: boolean) => Promise<void>,
-  daysAhead: number = 14,
+  daysAhead: number = CALENDAR_SYNC_DAYS_AHEAD,
 ): Promise<SyncResult> {
   // 1. Calendars
   const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
@@ -168,22 +172,27 @@ export async function syncCalendarBusyTimes(
     if (!newKeys.has(k)) toMarkFree.push(k);
   }
 
-  // 5. Persist writes in parallel
+  // 5. Persist writes in sequential chunks — a 90-day first sync can produce
+  //    hundreds of slot writes, so cap concurrency instead of one unbounded
+  //    Promise.all.
   const daysAffected = new Set<string>();
-  const writes: Promise<void>[] = [];
+  const writes: (() => Promise<void>)[] = [];
 
   for (const key of toMarkBusy) {
     const [dateStr, slot] = key.split(':');
     daysAffected.add(dateStr);
-    writes.push(setAvailability(parseISO(dateStr), slot as TimeSlot, false));
+    writes.push(() => setAvailability(parseISO(dateStr), slot as TimeSlot, false));
   }
   for (const key of toMarkFree) {
     const [dateStr, slot] = key.split(':');
     daysAffected.add(dateStr);
-    writes.push(setAvailability(parseISO(dateStr), slot as TimeSlot, true));
+    writes.push(() => setAvailability(parseISO(dateStr), slot as TimeSlot, true));
   }
 
-  await Promise.all(writes);
+  const WRITE_CHUNK_SIZE = 25;
+  for (let i = 0; i < writes.length; i += WRITE_CHUNK_SIZE) {
+    await Promise.all(writes.slice(i, i + WRITE_CHUNK_SIZE).map((w) => w()));
+  }
 
   // 6. Save the new set for next reconciliation
   saveLastKeys(newKeys);

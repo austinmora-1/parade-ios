@@ -15,7 +15,10 @@ import {
   Pressable,
   RefreshControl,
   StyleSheet,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -43,6 +46,7 @@ import {
   Plane,
   Zap,
   Users,
+  RefreshCw,
   Share2,
   Sparkles,
 } from 'lucide-react-native';
@@ -75,6 +79,7 @@ import { citiesMatch, normalizeCity } from '@/lib/locationMatch';
 import { resolveEffectiveCity } from '@/lib/effectiveCity';
 import { formatCityForDisplay } from '@/lib/formatCity';
 import { reconcileStaleBusyDays } from '@/lib/availabilityReconcile';
+import { useSyncAllCalendars } from '@/hooks/useSyncAllCalendars';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -924,6 +929,7 @@ export default function PlansTab() {
   const [scope, setScope] = useState<'week' | 'weekends'>(
     scopeParam === 'weekends' ? 'weekends' : 'week',
   );
+  const { syncAll, isSyncing: isCalendarSyncing } = useSyncAllCalendars();
 
   useEffect(() => {
     if (user?.id) {
@@ -978,6 +984,36 @@ export default function PlansTab() {
       loadAvailabilityForRange(today, end, user.id).catch(() => {});
     }
   }, [scope, user?.id]);
+
+  // Manual calendar sync from the header button (XPE-291): sync every
+  // connected source, then refresh whichever scope is on screen.
+  const handleSyncCalendars = async () => {
+    if (isCalendarSyncing) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const { attempted, error } = await syncAll();
+    if (!attempted) {
+      Alert.alert(
+        'Connect a calendar',
+        'Allow calendar access or connect Google or Apple Calendar in Settings to sync your busy times.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => router.push('/(app)/settings') },
+        ],
+      );
+      return;
+    }
+    await usePlannerStore.getState().loadAllData(true);
+    if (scope === 'weekends' && user?.id && weekends.length) {
+      const end = new Date(`${weekends[weekends.length - 1].sunday}T00:00:00`);
+      await loadAvailabilityForRange(today, end, user.id).catch(() => {});
+    }
+    if (error) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert('Sync failed', error);
+    } else {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  };
   // Honor a ?scope=weekends deep-link (e.g. the Home entry) even when the
   // Plans tab is already mounted.
   useEffect(() => {
@@ -1113,6 +1149,18 @@ export default function PlansTab() {
             >
               <Plane size={14} color={PARADE_GREEN} strokeWidth={2} />
               <Text className="font-sans text-[13px] font-semibold text-primary">Trips</Text>
+            </Pressable>
+            <Pressable
+              onPress={handleSyncCalendars}
+              disabled={isCalendarSyncing}
+              hitSlop={8}
+              className="w-9 h-9 rounded-full items-center justify-center bg-card border border-border/30 active:opacity-70"
+            >
+              {isCalendarSyncing ? (
+                <ActivityIndicator size="small" color="#23744D" />
+              ) : (
+                <RefreshCw size={16} color={PARADE_GREEN} strokeWidth={2} />
+              )}
             </Pressable>
             <Pressable
               onPress={() => router.push('/(app)/share-availability')}

@@ -30,7 +30,7 @@ import { LogOut } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlannerStore } from '@/stores/plannerStore';
-import { syncCalendarBusyTimes, getLastSyncTime } from '@/lib/calendarSync';
+import { syncCalendarBusyTimes, getLastSyncTime, CALENDAR_SYNC_DAYS_AHEAD } from '@/lib/calendarSync';
 import { useGoogleCalendar } from '@/hooks/useGoogleCalendar';
 import { useNylasCalendar } from '@/hooks/useNylasCalendar';
 import { ScreenHeader } from '@/components/primitives/ScreenHeader';
@@ -228,7 +228,7 @@ export default function SettingsPage() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSyncing(true);
     try {
-      const result = await syncCalendarBusyTimes(setAvailability, 14);
+      const result = await syncCalendarBusyTimes(setAvailability);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setLastSyncAt(getLastSyncTime());
 
@@ -244,7 +244,7 @@ export default function SettingsPage() {
       Alert.alert(
         'Calendar synced',
         noChange
-          ? `No changes — you have ${result.eventsCount} event${result.eventsCount === 1 ? '' : 's'} in the next 14 days.`
+          ? `No changes — you have ${result.eventsCount} event${result.eventsCount === 1 ? '' : 's'} in the next ${CALENDAR_SYNC_DAYS_AHEAD} days.`
           : `${parts.join(' · ')} across ${result.daysAffected} day${result.daysAffected === 1 ? '' : 's'}.`,
       );
     } catch (err: any) {
