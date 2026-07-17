@@ -428,7 +428,8 @@ export default function GoSomewhereScreen() {
               ? `Vote on dates for a visit to ${destination.trim() || 'their city'}!`
               : `A visit to ${destination.trim() || 'your city'} is brewing — vote on dates!`
             : `Trip options${destination.trim() ? ` to ${destination.trim()}` : ''} — vote on dates!`,
-          url: '/trips',
+          url: `/trip-proposal/${proposal.id}`,
+          type: isVisit ? 'visit-proposal' : 'trip-proposal',
         },
       }).catch(() => {});
 

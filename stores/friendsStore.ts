@@ -67,7 +67,8 @@ export const useFriendsStore = create<FriendsState & FriendsActions>((set, get) 
             user_id: friend.friendUserId,
             title: 'New Friend Request! 🎉',
             body: `${senderName} wants to connect with you`,
-            url: '/notifications',
+            url: '/pending-requests',
+            type: 'friend-request',
           }),
         }).catch(() => {});
       } catch (err) {
@@ -181,7 +182,8 @@ export const useFriendsStore = create<FriendsState & FriendsActions>((set, get) 
           user_id: friend.friendUserId,
           title: 'Friend Request Reminder 👋',
           body: `${senderName} still wants to connect with you`,
-          url: '/notifications',
+          url: '/pending-requests',
+          type: 'friend-request',
         }),
       });
     } catch (err) {

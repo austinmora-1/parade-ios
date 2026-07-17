@@ -11,26 +11,18 @@ import { supabase } from '@/integrations/supabase/client';
 import { TIME_SLOT_LABELS } from '@/types/planner';
 import type { TimeSlot } from '@/types/planner';
 
-/** Best-effort notification: in-app row + device push. Never throws — a
- *  delivery hiccup must not fail the underlying action. */
+/** Best-effort notification: the send-push-notification edge function writes
+ *  the in-app `notifications` row (actor_id from the caller's JWT) and
+ *  delivers the device push — don't also insert client-side or the recipient
+ *  sees the notification twice. Never throws — a delivery hiccup must not
+ *  fail the underlying action. */
 export async function notify(input: {
   recipientId: string;
-  actorId: string;
   type: string;
   title: string;
   body: string;
   url?: string;
 }) {
-  try {
-    await (supabase as any).from('notifications').insert({
-      user_id:  input.recipientId,
-      actor_id: input.actorId,
-      type:     input.type,
-      title:    input.title,
-      body:     input.body,
-      url:      input.url ?? '/notifications',
-    });
-  } catch { /* ignore */ }
   supabase.functions
     .invoke('send-push-notification', {
       body: {
@@ -38,6 +30,7 @@ export async function notify(input: {
         title: input.title,
         body: input.body,
         url: input.url ?? '/notifications',
+        type: input.type,
       },
     })
     .catch(() => {});
@@ -164,10 +157,10 @@ export function useSendHangRequest() {
       const slotLabel = TIME_SLOT_LABELS[input.selectedSlot]?.label ?? '';
       await notify({
         recipientId: input.recipientUserId,
-        actorId:     user.id,
         type:        'vibe-check',
         title:       `${input.requesterName} sent you a vibe check 👋`,
         body:        input.message?.trim() || `Free ${slotLabel.toLowerCase()}? Tap to respond.`,
+        url:         '/home', // dashboard — HangRequestsWidget is the respond UI
       });
     },
     onSuccess: () => {
