@@ -9,7 +9,7 @@ import { FirstPlanCelebration } from '@/components/onboarding/FirstPlanCelebrati
 import { BugReportButton } from '@/components/feedback/BugReportButton';
 
 // Protected deep-link landings that should survive the login bounce.
-const PRESERVED_PREFIXES = ['/imessage-plan', '/invite', '/share'];
+const PRESERVED_PREFIXES = ['/imessage-plan', '/invite', '/share', '/plan-invite', '/trip-invite'];
 
 /**
  * Authenticated app shell — stack that contains the tab navigator + all
