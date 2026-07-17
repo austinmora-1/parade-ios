@@ -602,7 +602,7 @@ export default function TripDetailScreen() {
               .single();
             if (error || !data) return null;
             return {
-              link: `https://helloparade.app/invite.html?tt=${(data as any).invite_token}`,
+              link: `https://helloparade.app/invite.html?tt=${(data as any).invite_token}&src=ios`,
               message: `Join me for "${title}" on Parade`,
             };
           }}
