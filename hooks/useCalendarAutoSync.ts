@@ -39,7 +39,7 @@ export function useCalendarAutoSync() {
 
       isRunning.current = true;
       try {
-        await syncCalendarBusyTimes(setAvailability, 14);
+        await syncCalendarBusyTimes(setAvailability);
       } catch (err) {
         console.warn('[calendar-auto-sync] failed:', err);
       } finally {

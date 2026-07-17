@@ -387,7 +387,7 @@ export default function OnboardingScreen() {
       setCalendarConnected(granted);
       if (granted) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        syncCalendarBusyTimes(setAvailability, 14).catch(() => {});
+        syncCalendarBusyTimes(setAvailability).catch(() => {});
       }
     } finally {
       setCalendarChecking(false);
