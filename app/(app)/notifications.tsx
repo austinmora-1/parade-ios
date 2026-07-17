@@ -33,37 +33,21 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { ScreenHeader } from '@/components/primitives/ScreenHeader';
 import { TINT } from '@/lib/colors';
+import { resolveNotificationRoute } from '@/lib/notificationRoutes';
 
 // ─── Notification routing ────────────────────────────────────────────────────
 
 /**
- * Translate a notification's `url` field (PWA convention) into an iOS route
- * compatible with Expo Router. Returns null if no deep link can be resolved.
+ * Resolve where tapping this notification should navigate. Shared mapper
+ * (lib/notificationRoutes) — url first, notification type as fallback, and
+ * urls pointing back at this screen fall through to the type fallback.
  */
 function notificationToRoute(notif: any): string | null {
-  const url: string | undefined = notif.url ?? notif.data?.url;
-  if (!url || typeof url !== 'string') return null;
-
-  // /plan/<id> or /plans/<id> → plan detail
-  let match = url.match(/^\/plans?\/([^/?#]+)/);
-  if (match) return `/(app)/plan/${match[1]}`;
-
-  // /friend/<id> or /friends/<id>
-  match = url.match(/^\/friends?\/([^/?#]+)/);
-  if (match) return `/(app)/friend/${match[1]}`;
-
-  // /day/<yyyy-MM-dd>
-  match = url.match(/^\/day\/([^/?#]+)/);
-  if (match) return `/(app)/day/${match[1]}`;
-
-  // /trip/<id> or /trips/<id>
-  match = url.match(/^\/trips?\/([^/?#]+)/);
-  if (match) return `/(app)/trip/${match[1]}`;
-
-  // Anything pointing to /notifications stays here
-  if (url.startsWith('/notifications')) return null;
-
-  return null;
+  return resolveNotificationRoute({
+    url: notif.url ?? notif.data?.url,
+    type: notif.type,
+    selfRoute: '/(app)/notifications',
+  });
 }
 
 // ─── Type → icon ─────────────────────────────────────────────────────────────

@@ -6,9 +6,10 @@
  *      recipient sees) plus an omni-channel grid matching the PWA
  *      UnifiedShareSheet (Messages, WhatsApp, Telegram, Email, Copy, More).
  *      Links point at helloparade.app/share/{code}?view=…&src=ios.
- *   2. Send directly to friends on Parade — inserts an in-app notification
- *      row per friend + fires send-push-notification (same fn as the other
- *      flows), deep-linking them to your profile.
+ *   2. Send directly to friends on Parade — invokes send-push-notification
+ *      (same fn as the other flows), which writes the in-app notification
+ *      row per friend and delivers the push, deep-linking them to your
+ *      profile.
  *
  * Range options mirror the PWA ShareDialog: 1 week / 4 weeks / 3 months
  * (view params 1w / 1m / 3m so the existing share page understands them).
@@ -146,27 +147,21 @@ export default function ShareAvailabilityScreen() {
       const targets = [...selectedIds];
       const title = `📅 ${myName} shared their availability`;
       const body = `See when ${myName} is free over the next ${range.label} and make a plan.`;
-      // In-app notification rows (recipient's notifications screen routes
-      // /friends/<id> urls to the friend profile = my availability)
-      const { error } = await (supabase as any).from('notifications').insert(
-        targets.map((friendUserId) => ({
-          user_id: friendUserId,
-          actor_id: user.id,
-          type: 'availability-share',
+      // The edge function writes the in-app notifications row per recipient
+      // (recipient's notifications screen routes /friends/<id> urls to the
+      // friend profile = my availability) AND delivers the device push —
+      // don't also insert client-side or recipients see it twice.
+      const { error } = await supabase.functions.invoke('send-push-notification', {
+        body: {
+          user_ids: targets,
           title,
           body,
           url: `/friends/${user.id}`,
+          type: 'availability-share',
           data: { share_code: me?.share_code ?? null, view },
-        })),
-      );
+        },
+      });
       if (error) throw error;
-
-      // Device push — fire-and-forget, same fn the other flows use
-      supabase.functions
-        .invoke('send-push-notification', {
-          body: { user_ids: targets, title, body, url: `/friends/${user.id}` },
-        })
-        .catch(() => {});
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert(

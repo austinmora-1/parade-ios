@@ -14,6 +14,7 @@ import { Platform } from 'react-native';
 import { router } from 'expo-router';
 import { createMMKV } from 'react-native-mmkv';
 import { supabase } from '@/integrations/supabase/client';
+import { resolveNotificationRoute } from '@/lib/notificationRoutes';
 
 const tokenStore = createMMKV({ id: 'parade-push-token' });
 
@@ -28,24 +29,18 @@ Notifications.setNotificationHandler({
 });
 
 /**
- * Translate a notification's `data.url` (PWA convention used by server-side
- * push payloads) into an Expo Router route. Returns null if no mapping.
+ * Translate a push payload's `data` into an Expo Router route via the shared
+ * mapper (lib/notificationRoutes). Unmapped payloads fall back to the
+ * notifications screen so a tap never goes nowhere.
  */
 function dataToRoute(data: any): string | null {
   if (!data) return null;
-  const url: string | undefined = data.url ?? data.deep_link;
-  if (!url || typeof url !== 'string') return null;
-
-  let m = url.match(/^\/plans?\/([^/?#]+)/);
-  if (m) return `/(app)/plan/${m[1]}`;
-  m = url.match(/^\/friends?\/([^/?#]+)/);
-  if (m) return `/(app)/friend/${m[1]}`;
-  m = url.match(/^\/day\/([^/?#]+)/);
-  if (m) return `/(app)/day/${m[1]}`;
-  m = url.match(/^\/trips?\/([^/?#]+)/);
-  if (m) return `/(app)/trip/${m[1]}`;
-  if (url.startsWith('/notifications')) return '/(app)/notifications';
-  return null;
+  return (
+    resolveNotificationRoute({
+      url: data.url ?? data.deep_link,
+      type: data.type,
+    }) ?? '/(app)/notifications'
+  );
 }
 
 /**

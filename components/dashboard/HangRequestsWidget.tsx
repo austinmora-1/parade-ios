@@ -147,10 +147,10 @@ export function HangRequestsWidget() {
         const extra = [vibeLabel, actLabel].filter(Boolean).join(' · ');
         await notify({
           recipientId: r.senderId,
-          actorId: user.id,
           type: 'vibe-check-accepted',
           title: `${myName ?? 'Your friend'} is in! 🎉`,
           body: extra ? `${dayLabel(r.selectedDay)} · ${extra}` : `You're on for ${dayLabel(r.selectedDay)}`,
+          url: `/day/${r.selectedDay}`, // day view shows the freshly created plan
         });
       }
 
