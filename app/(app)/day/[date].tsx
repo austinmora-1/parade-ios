@@ -41,6 +41,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { usePlannerStore } from '@/stores/plannerStore';
 import type { TimeSlot, LocationStatus, DayAvailability } from '@/types/planner';
 import { getPlanSlotCoverage } from '@/lib/planSlotCoverage';
+import { tripTravelDayView } from '@/lib/tripTimes';
 import { getCalendarBusyTitlesForDate } from '@/lib/calendarSync';
 import { createDefaultAvailability } from '@/stores/helpers/mapAvailability';
 import { formatCityForDisplay } from '@/lib/formatCity';
@@ -98,7 +99,7 @@ function useDayData(userId: string | undefined, date: string) {
           .maybeSingle(),
         supabase
           .from('trips')
-          .select('id, name, location')
+          .select('id, name, location, start_date, end_date, arrival_time, departure_time')
           .eq('user_id', userId!)
           .lte('start_date', date)
           .gte('end_date', date),
@@ -595,7 +596,12 @@ export default function DayDetailScreen() {
                   >
                     <Icon size={11} color={accent} strokeWidth={2} />
                     <Text className="font-sans text-[11px] font-semibold" style={{ color: accent }}>
-                      {dayTrip ? 'Away · Trip' : isAway ? 'Away' : 'Home'}
+                      {(() => {
+                        if (!dayTrip) return isAway ? 'Away' : 'Home';
+                        // Trip start/end → "Travel · NYC → Lisbon · ~3:00 PM"
+                        const view = tripTravelDayView(dayTrip, date, homeAddress);
+                        return view ? `Travel · ${view.label}` : 'Away · Trip';
+                      })()}
                     </Text>
                     {!dayTrip && (
                       <Text className="font-sans text-[10px] text-muted-foreground/60">

@@ -250,6 +250,8 @@ export default function NewTripScreen() {
             location:   loc,
             start_date: format(startDate, 'yyyy-MM-dd'),
             end_date:   format(endDate, 'yyyy-MM-dd'),
+            arrival_time:   arrivalHour   != null ? hourToTimeString(arrivalHour)   : null,
+            departure_time: departureHour != null ? hourToTimeString(departureHour) : null,
             priority_friend_ids: visitArr,
           } as any)
           .eq('id', tripId)
@@ -279,6 +281,8 @@ export default function NewTripScreen() {
             location:   loc,
             start_date: format(startDate, 'yyyy-MM-dd'),
             end_date:   format(endDate, 'yyyy-MM-dd'),
+            arrival_time:   arrivalHour   != null ? hourToTimeString(arrivalHour)   : null,
+            departure_time: departureHour != null ? hourToTimeString(departureHour) : null,
             needs_return_date: false,
             priority_friend_ids: visitArr,
           } as any)
@@ -317,7 +321,7 @@ export default function NewTripScreen() {
     } finally {
       setSaving(false);
     }
-  }, [user?.id, isEditing, tripId, name, location, startDate, endDate, originalRange, companionIds, visitIds, originalCompanionIds, notifyNewCompanions, queryClient]);
+  }, [user?.id, isEditing, tripId, name, location, startDate, endDate, duration, arrivalHour, departureHour, originalRange, companionIds, visitIds, originalCompanionIds, notifyNewCompanions, queryClient]);
 
   const canSubmit = name.trim().length > 0 && !saving && !loadingTrip;
 
@@ -481,6 +485,68 @@ export default function NewTripScreen() {
             </View>
           </View>
 
+          {/* Arrival / departure times — optional; unset = all-day (XPE-285) */}
+          <View>
+            <FieldLabel>Times (optional)</FieldLabel>
+            <View className="flex-row gap-2">
+              <Pressable
+                onPress={() => { Haptics.selectionAsync(); setTimeOpen('arrival'); }}
+                className="flex-1 rounded-xl border border-border/40 bg-card px-3.5 py-3 active:opacity-70"
+              >
+                <Text className="font-sans text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Arrive {format(startDate, 'MMM d')}
+                </Text>
+                <View className="flex-row items-center justify-between mt-0.5">
+                  <Text
+                    className={`font-sans text-base ${
+                      arrivalHour != null ? 'font-semibold text-foreground' : 'text-muted-foreground'
+                    }`}
+                  >
+                    {arrivalHour != null ? formatHour12(arrivalHour) : 'Any time'}
+                  </Text>
+                  {arrivalHour != null && (
+                    <Pressable
+                      onPress={() => { Haptics.selectionAsync(); setArrivalHour(null); }}
+                      hitSlop={8}
+                      accessibilityLabel="Clear arrival time"
+                    >
+                      <X size={14} color={TC.icon} strokeWidth={2} />
+                    </Pressable>
+                  )}
+                </View>
+              </Pressable>
+              <Pressable
+                onPress={() => { Haptics.selectionAsync(); setTimeOpen('departure'); }}
+                className="flex-1 rounded-xl border border-border/40 bg-card px-3.5 py-3 active:opacity-70"
+              >
+                <Text className="font-sans text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Depart {format(endDate, 'MMM d')}
+                </Text>
+                <View className="flex-row items-center justify-between mt-0.5">
+                  <Text
+                    className={`font-sans text-base ${
+                      departureHour != null ? 'font-semibold text-foreground' : 'text-muted-foreground'
+                    }`}
+                  >
+                    {departureHour != null ? formatHour12(departureHour) : 'Any time'}
+                  </Text>
+                  {departureHour != null && (
+                    <Pressable
+                      onPress={() => { Haptics.selectionAsync(); setDepartureHour(null); }}
+                      hitSlop={8}
+                      accessibilityLabel="Clear departure time"
+                    >
+                      <X size={14} color={TC.icon} strokeWidth={2} />
+                    </Pressable>
+                  )}
+                </View>
+              </Pressable>
+            </View>
+            <Text className="font-sans text-[11px] text-muted-foreground mt-2 px-0.5">
+              Set when you arrive and head home so friends see your travel days — leave blank for all day.
+            </Text>
+          </View>
+
           {/* Traveling with — companions on the trip (search + suggestions) */}
           <FriendSearchSelect
             title="Traveling with"
@@ -507,7 +573,10 @@ export default function NewTripScreen() {
               Trip will be
             </Text>
             <Text className="font-display text-base text-foreground mt-1">
-              {format(startDate, 'EEE, MMM d')} – {format(endDate, 'EEE, MMM d')}
+              {format(startDate, 'EEE, MMM d')}
+              {arrivalHour != null ? `, ${formatHour12(arrivalHour)}` : ''} –{' '}
+              {format(endDate, 'EEE, MMM d')}
+              {departureHour != null ? `, ${formatHour12(departureHour)}` : ''}
             </Text>
             <Text className="font-sans text-xs text-muted-foreground">
               {duration} {duration === 1 ? 'day' : 'days'} away
@@ -515,6 +584,21 @@ export default function NewTripScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <TimeWheelPicker
+        visible={timeOpen === 'arrival'}
+        value={arrivalHour ?? 15}
+        title="Arrival time"
+        onCancel={() => setTimeOpen(null)}
+        onConfirm={(v) => { setArrivalHour(v); setTimeOpen(null); }}
+      />
+      <TimeWheelPicker
+        visible={timeOpen === 'departure'}
+        value={departureHour ?? 11}
+        title="Departure time"
+        onCancel={() => setTimeOpen(null)}
+        onConfirm={(v) => { setDepartureHour(v); setTimeOpen(null); }}
+      />
     </SafeAreaView>
   );
 }

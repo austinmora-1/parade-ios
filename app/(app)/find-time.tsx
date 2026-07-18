@@ -127,7 +127,7 @@ export default function FindTimeScreen() {
         // only flip slots busy and don't record where you are.
         (supabase as any)
           .from('trips')
-          .select('user_id, location, start_date, end_date')
+          .select('user_id, location, start_date, end_date, arrival_time, departure_time')
           .in('user_id', ids)
           .lte('start_date', end)
           .gte('end_date', start),

@@ -77,6 +77,7 @@ import { Avatar } from '@/components/primitives/Avatar';
 import { formatDisplayName } from '@/lib/utils';
 import { citiesMatch, normalizeCity } from '@/lib/locationMatch';
 import { resolveEffectiveCity } from '@/lib/effectiveCity';
+import { tripTravelDayView } from '@/lib/tripTimes';
 import { formatCityForDisplay } from '@/lib/formatCity';
 import { reconcileStaleBusyDays } from '@/lib/availabilityReconcile';
 import { useSyncAllCalendars } from '@/hooks/useSyncAllCalendars';
@@ -627,11 +628,14 @@ function WeekdayRow({
   dayPlans,
   wheel,
   trip,
+  travelLabel,
 }: {
   day: Date;
   dayPlans: Plan[];
   wheel: DayWheel;
   trip?: any | null;
+  /** "NYC → Lisbon · ~3:00 PM" on trip start/end days */
+  travelLabel?: string | null;
 }) {
   const today = isToday(day);
   const dateStr = format(day, 'yyyy-MM-dd');
@@ -666,12 +670,14 @@ function WeekdayRow({
           )}
         </View>
 
-        {/* Trip badge for days the user is away */}
+        {/* Trip badge for days the user is away. Trip start/end days show
+            the travel direction ("NYC → Lisbon · ~3:00 PM") instead of a
+            flat "In X" — the user is only there part of the day (XPE-285). */}
         {trip && (
           <View className="flex-row items-center gap-1.5">
             <Plane size={11} color="#23744D" strokeWidth={2} />
             <Text className="font-sans text-xs font-medium text-primary flex-1" numberOfLines={1}>
-              {trip.location ? `In ${trip.location}` : 'Traveling'}
+              {travelLabel ?? (trip.location ? `In ${trip.location}` : 'Traveling')}
             </Text>
           </View>
         )}
@@ -740,7 +746,7 @@ function useUpcomingTrips(userId: string | undefined) {
       const todayStr = format(new Date(), 'yyyy-MM-dd');
       const { data, error } = await supabase
         .from('trips')
-        .select('id, name, location, start_date, end_date, priority_friend_ids')
+        .select('id, name, location, start_date, end_date, arrival_time, departure_time, priority_friend_ids')
         .eq('user_id', userId!)
         .gte('end_date', todayStr)
         .order('start_date', { ascending: true });
@@ -817,15 +823,14 @@ function useUpcomingTrips(userId: string | undefined) {
   });
 }
 
-/** Helper: does this trip cover any of the given days? */
+/** Helper: does this trip cover any of the given days? Compares yyyy-MM-dd
+ *  strings — `new Date('yyyy-MM-dd')` is UTC midnight, which dropped the
+ *  trip's END day in negative-offset timezones (same class as XPE-264). */
 function tripOverlapsDays(trip: any, days: Date[]): boolean {
   if (!trip?.start_date || !trip?.end_date) return false;
-  const tripStart = new Date(trip.start_date).getTime();
-  const tripEnd   = new Date(trip.end_date).getTime();
   return days.some((d) => {
-    const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-    const dayEnd   = dayStart + 24 * 60 * 60 * 1000 - 1;
-    return tripStart <= dayEnd && tripEnd >= dayStart;
+    const key = format(d, 'yyyy-MM-dd');
+    return trip.start_date <= key && trip.end_date >= key;
   });
 }
 
@@ -1086,6 +1091,8 @@ export default function PlansTab() {
           homeAddress,
         });
     const away = !!homeCity && !!dayCity && !citiesMatch(dayCity, homeCity);
+    // Trip start/end days are travel days: "NYC → Lisbon · ~3:00 PM"
+    const travelView = dayTrip ? tripTravelDayView(dayTrip, dateStr, homeAddress) : null;
     const wheel = computeDayWheel({
       date: day,
       dayAvail,
@@ -1095,8 +1102,9 @@ export default function PlansTab() {
         .filter(planBlocksAvailability)
         .map((p) => ({ timeSlot: p.timeSlot as string, startTime: p.startTime, endTime: p.endTime })),
       away,
+      travel: away && !!travelView,
     });
-    return { day, dateStr, dayPlans, dayTrip, wheel };
+    return { day, dateStr, dayPlans, dayTrip, travelLabel: travelView?.label ?? null, wheel };
   });
   const weekdayInfos = dayInfos.slice(0, 5); // Mon–Fri
 
@@ -1281,11 +1289,12 @@ export default function PlansTab() {
             </Pressable>
 
             {weekdaysOpen &&
-              weekdayInfos.map(({ day, dateStr, dayPlans, dayTrip, wheel }) => (
+              weekdayInfos.map(({ day, dateStr, dayPlans, dayTrip, travelLabel, wheel }) => (
                 <WeekdayRow
                   key={dateStr}
                   day={day}
                   trip={dayTrip}
+                  travelLabel={travelLabel}
                   dayPlans={dayPlans}
                   wheel={wheel}
                 />

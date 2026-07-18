@@ -98,15 +98,34 @@ export function WeekendCard({ summary }: { summary: WeekendSummary }) {
             {stateLine}
           </Text>
           {state !== 'away' && (
-            <View
-              className="flex-row items-center gap-1 rounded-full px-1.5 py-0.5"
-              style={{ marginLeft: 'auto', backgroundColor: 'rgba(35,116,77,0.10)' }}
-            >
-              <Home size={11} color={PARADE_GREEN} strokeWidth={2} />
-              <Text className="font-sans text-[10px] font-medium" style={{ color: PARADE_GREEN }}>
-                Home
-              </Text>
-            </View>
+            // A weekend a trip only touches via a timed travel day stays
+            // open/partial — keep the trip visible with a Travel pill
+            // instead of claiming a full "Home" weekend.
+            awayLocation ? (
+              <View
+                className="flex-row items-center gap-1 rounded-full px-1.5 py-0.5"
+                style={{ marginLeft: 'auto', backgroundColor: 'rgba(212,101,73,0.10)' }}
+              >
+                <Plane size={11} color={EMBER} strokeWidth={2} />
+                <Text
+                  className="font-sans text-[10px] font-medium"
+                  style={{ color: EMBER, maxWidth: 120 }}
+                  numberOfLines={1}
+                >
+                  Travel · {awayLocation}
+                </Text>
+              </View>
+            ) : (
+              <View
+                className="flex-row items-center gap-1 rounded-full px-1.5 py-0.5"
+                style={{ marginLeft: 'auto', backgroundColor: 'rgba(35,116,77,0.10)' }}
+              >
+                <Home size={11} color={PARADE_GREEN} strokeWidth={2} />
+                <Text className="font-sans text-[10px] font-medium" style={{ color: PARADE_GREEN }}>
+                  Home
+                </Text>
+              </View>
+            )
           )}
         </View>
 

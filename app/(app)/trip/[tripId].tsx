@@ -43,6 +43,7 @@ import { Avatar } from '@/components/primitives/Avatar';
 import { TIME_SLOT_LABELS, TimeSlot } from '@/types/planner';
 import { getTravelKind } from '@/lib/visitVsTrip';
 import { formatCityForDisplay } from '@/lib/formatCity';
+import { formatTripTime, tripTravelDayView, tripTimesSummary } from '@/lib/tripTimes';
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
@@ -64,7 +65,7 @@ function useTrip(tripId: string) {
       const { data: trip, error } = await supabase
         .from('trips')
         .select(
-          'id, user_id, name, location, start_date, end_date, priority_friend_ids, proposal_id',
+          'id, user_id, name, location, start_date, end_date, arrival_time, departure_time, priority_friend_ids, proposal_id',
         )
         .eq('id', tripId)
         .maybeSingle();
@@ -275,7 +276,11 @@ export default function TripDetailScreen() {
         },
       ],
     );
-  }, [tripId]);
+    // NOTE: `trip` must be a dep — with only [tripId] this closure captured
+    // trip=undefined from the loading render forever, so the away-range clear
+    // was silently skipped and every deleted trip stranded its days as "away"
+    // (trip_id nulled by the FK, location_status left behind).
+  }, [tripId, trip, user?.id, setAvailability]);
 
   // ── Computed display values ────────────────────────────────────────────────
   let dateLabel = '';
@@ -305,6 +310,9 @@ export default function TripDetailScreen() {
   const cityLabel = trip?.location
     ? formatCityForDisplay(trip.location) || trip.location
     : null;
+
+  // "Arrives 3:00 PM · Departs 11:00 AM" — null for all-day trips (XPE-285)
+  const timesLabel = trip ? tripTimesSummary(trip as any) : null;
 
   const tripDays =
     trip?.start_date && trip?.end_date
@@ -425,6 +433,14 @@ export default function TripDetailScreen() {
                 </DetailRow>
               </>
             )}
+            {timesLabel && (
+              <>
+                <View className="h-px bg-border/30 mx-4" />
+                <DetailRow icon={<Clock size={15} color="#929298" strokeWidth={1.75} />} label="Times">
+                  {timesLabel}
+                </DetailRow>
+              </>
+            )}
           </View>
 
           {/* Per-day availability (XPE-284) — each trip day's free slots from
@@ -446,6 +462,12 @@ export default function TripDetailScreen() {
                   const freeSlots = ALL_TIME_SLOTS.filter(
                     (slot) => daySlots?.[slot] !== false,
                   );
+                  // Travel-day annotation — "NYC → Lisbon · ~3:00 PM" on the
+                  // first day / "Lisbon → NYC · ~11:00 AM" on the last (times
+                  // omitted for all-day trips)
+                  const travelLabel = trip
+                    ? tripTravelDayView(trip as any, dateStr, homeAddress)?.label ?? null
+                    : null;
                   return (
                     <View
                       key={dateStr}
@@ -462,28 +484,38 @@ export default function TripDetailScreen() {
                           {format(day, 'd')}
                         </Text>
                       </View>
-                      {freeSlots.length === 0 ? (
-                        <Text className="font-sans text-xs text-muted-foreground">
-                          Busy
-                        </Text>
-                      ) : freeSlots.length === ALL_TIME_SLOTS.length ? (
-                        <Text className="font-sans text-xs font-medium text-primary">
-                          Available all day
-                        </Text>
-                      ) : (
-                        <View className="flex-1 flex-row flex-wrap gap-1.5">
-                          {freeSlots.map((slot) => (
-                            <View
-                              key={slot}
-                              className="rounded-full bg-primary/10 px-2 py-0.5"
-                            >
-                              <Text className="font-sans text-[10px] font-medium text-primary">
-                                {TIME_SLOT_LABELS[slot].label}
-                              </Text>
-                            </View>
-                          ))}
-                        </View>
-                      )}
+                      <View className="flex-1 gap-1">
+                        {travelLabel && (
+                          <View className="flex-row items-center gap-1">
+                            <Plane size={11} color={EMBER} strokeWidth={2} />
+                            <Text className="font-sans text-[11px] font-medium" style={{ color: EMBER }}>
+                              {travelLabel}
+                            </Text>
+                          </View>
+                        )}
+                        {freeSlots.length === 0 ? (
+                          <Text className="font-sans text-xs text-muted-foreground">
+                            Busy
+                          </Text>
+                        ) : freeSlots.length === ALL_TIME_SLOTS.length ? (
+                          <Text className="font-sans text-xs font-medium text-primary">
+                            Available all day
+                          </Text>
+                        ) : (
+                          <View className="flex-row flex-wrap gap-1.5">
+                            {freeSlots.map((slot) => (
+                              <View
+                                key={slot}
+                                className="rounded-full bg-primary/10 px-2 py-0.5"
+                              >
+                                <Text className="font-sans text-[10px] font-medium text-primary">
+                                  {TIME_SLOT_LABELS[slot].label}
+                                </Text>
+                              </View>
+                            ))}
+                          </View>
+                        )}
+                      </View>
                     </View>
                   );
                 })}
@@ -590,9 +622,11 @@ export default function TripDetailScreen() {
                 toLocalDate(trip.end_date),
                 'MMM d',
               )}`;
+              // Share the ETA when one is set (XPE-275)
+              const eta = formatTripTime((trip as any).arrival_time);
               return {
                 link: 'https://helloparade.app',
-                message: `I’ll be away for "${title}" (${dateRange}). Find me on Parade`,
+                message: `I’ll be away for "${title}" (${dateRange}${eta ? `, arriving ~${eta}` : ''}). Find me on Parade`,
               };
             }
             const { data, error } = await supabase
