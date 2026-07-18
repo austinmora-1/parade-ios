@@ -16,7 +16,6 @@ import {
   Text,
   Pressable,
   TextInput,
-  KeyboardAvoidingView,
   Platform,
   Alert,
   ActivityIndicator,
@@ -376,7 +375,18 @@ export default function EditProfileScreen() {
         { email: next },
         { emailRedirectTo: Linking.createURL('/') },
       );
-      if (err) { setEmailError(err.message); return; }
+      if (err) {
+        // The address already belongs to another auth user — almost always an
+        // email-first account created before phone sign-in existed.
+        const alreadyTaken =
+          err.code === 'email_exists' || /already been registered/i.test(err.message ?? '');
+        setEmailError(
+          alreadyTaken
+            ? "That email is already attached to another Parade account — likely one you created before phone sign-in. Tap the bug button and we'll merge them for you."
+            : err.message,
+        );
+        return;
+      }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setEmailNotice(`Confirmation link sent to ${next}. Tap it to verify.`);
     } catch (e: any) {
@@ -477,462 +487,461 @@ export default function EditProfileScreen() {
         </Pressable>
       </View>
 
-      <KeyboardAvoidingView
+      {/* pageSheet modal: KeyboardAvoidingView mis-measures the keyboard
+          overlap here, so let the ScrollView adjust its own insets and keep
+          the focused input in view. */}
+      <ScrollView
         className="flex-1"
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        contentContainerClassName="px-5 py-6 gap-5"
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
       >
-        <ScrollView
-          className="flex-1"
-          contentContainerClassName="px-5 py-6 gap-5"
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-        >
-          {isLoading ? (
-            <ActivityIndicator className="mt-12" color="#23744D" />
-          ) : (
-            <>
-              {/* ── Avatar ──────────────────────────────────────────────── */}
-              <View className="items-center gap-3">
-                <Pressable
-                  onPress={handlePickAvatar}
-                  disabled={uploading}
-                  hitSlop={6}
-                  className="active:opacity-70"
+        {isLoading ? (
+          <ActivityIndicator className="mt-12" color="#23744D" />
+        ) : (
+          <>
+            {/* ── Avatar ──────────────────────────────────────────────── */}
+            <View className="items-center gap-3">
+              <Pressable
+                onPress={handlePickAvatar}
+                disabled={uploading}
+                hitSlop={6}
+                className="active:opacity-70"
+              >
+                <View
+                  style={{
+                    borderWidth: 4,
+                    borderColor: '#FFFFFF',
+                    borderRadius: 999,
+                    shadowColor: '#040A2A',
+                    shadowOpacity: 0.10,
+                    shadowRadius: 8,
+                    shadowOffset: { width: 0, height: 3 },
+                  }}
                 >
-                  <View
-                    style={{
-                      borderWidth: 4,
-                      borderColor: '#FFFFFF',
-                      borderRadius: 999,
-                      shadowColor: '#040A2A',
-                      shadowOpacity: 0.10,
-                      shadowRadius: 8,
-                      shadowOffset: { width: 0, height: 3 },
-                    }}
-                  >
-                    <Avatar
-                      url={avatarUrl}
-                      firstName={firstName}
-                      lastName={lastName}
-                      displayName={displayName}
-                      size="xl"
-                    />
-                    {/* Camera overlay */}
-                    <View
-                      style={{
-                        position: 'absolute',
-                        bottom: -2,
-                        right: -2,
-                        width: 32,
-                        height: 32,
-                        borderRadius: 999,
-                        backgroundColor: '#23744D',
-                        borderWidth: 3,
-                        borderColor: '#FBF9F4',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      {uploading ? (
-                        <ActivityIndicator size="small" color="#FFFFFF" />
-                      ) : (
-                        <Camera size={14} color="#FFFFFF" strokeWidth={2.2} />
-                      )}
-                    </View>
-                  </View>
-                </Pressable>
-                <Pressable onPress={handlePickAvatar} disabled={uploading} hitSlop={4}>
-                  <Text className="font-sans text-xs font-semibold text-primary">
-                    {uploading ? 'Uploading…' : 'Change photo'}
-                  </Text>
-                </Pressable>
-              </View>
-
-              {/* ── Display name ────────────────────────────────────────── */}
-              <View>
-                <FieldLabel>Display name</FieldLabel>
-                <View className="relative">
-                  <TextInput
-                    value={displayName}
-                    onChangeText={(t) => { setDisplayName(t); setError(null); }}
-                    placeholder="e.g. austin"
-                    placeholderTextColor="#929298"
-                    className="bg-card rounded-xl border border-border/40 px-4 py-3 pr-10 font-sans text-sm text-foreground shadow-sm"
-                    maxLength={40}
-                    autoCapitalize="none"
-                    autoCorrect={false}
+                  <Avatar
+                    url={avatarUrl}
+                    firstName={firstName}
+                    lastName={lastName}
+                    displayName={displayName}
+                    size="xl"
                   />
-                  {/* Inline availability badge */}
+                  {/* Camera overlay */}
                   <View
                     style={{
                       position: 'absolute',
-                      right: 12,
-                      top: 0,
-                      bottom: 0,
+                      bottom: -2,
+                      right: -2,
+                      width: 32,
+                      height: 32,
+                      borderRadius: 999,
+                      backgroundColor: '#23744D',
+                      borderWidth: 3,
+                      borderColor: '#FBF9F4',
+                      alignItems: 'center',
                       justifyContent: 'center',
                     }}
                   >
-                    {usernameState === 'checking' && (
-                      <ActivityIndicator size="small" color="#929298" />
-                    )}
-                    {usernameState === 'available' && (
-                      <View
-                        className="w-5 h-5 rounded-full items-center justify-center"
-                        style={{ backgroundColor: TINT.primaryBorder }}
-                      >
-                        <Check size={12} color="#23744D" strokeWidth={2.5} />
-                      </View>
-                    )}
-                    {(usernameState === 'taken' || usernameState === 'invalid') && (
-                      <View
-                        className="w-5 h-5 rounded-full items-center justify-center"
-                        style={{ backgroundColor: TINT.secondaryBorder }}
-                      >
-                        <AlertCircle size={12} color="#D46549" strokeWidth={2.5} />
-                      </View>
+                    {uploading ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Camera size={14} color="#FFFFFF" strokeWidth={2.2} />
                     )}
                   </View>
                 </View>
-
-                {/* Status hint text below input */}
-                {usernameState === 'taken' && (
-                  <Text className="font-sans text-xs text-destructive mt-1.5 px-0.5">
-                    "{displayName.trim()}" is taken — try another.
-                  </Text>
-                )}
-                {usernameState === 'invalid' && displayName.trim().length > 0 && (
-                  <Text className="font-sans text-xs text-destructive mt-1.5 px-0.5">
-                    Letters, numbers, and underscores only (2+ chars).
-                  </Text>
-                )}
-                {usernameState === 'available' && (
-                  <Text className="font-sans text-xs text-primary mt-1.5 px-0.5 font-medium">
-                    Available — looks good!
-                  </Text>
-                )}
-                {error && !['taken', 'invalid', 'available'].includes(usernameState) && (
-                  <Text className="font-sans text-xs text-destructive mt-1.5 px-0.5">
-                    {error}
-                  </Text>
-                )}
-                <Text className="font-sans text-[11px] text-muted-foreground mt-1.5 px-0.5">
-                  How friends see you — appears as @{displayName || 'handle'}
+              </Pressable>
+              <Pressable onPress={handlePickAvatar} disabled={uploading} hitSlop={4}>
+                <Text className="font-sans text-xs font-semibold text-primary">
+                  {uploading ? 'Uploading…' : 'Change photo'}
                 </Text>
-              </View>
+              </Pressable>
+            </View>
 
-              {/* ── First / Last name ──────────────────────────────────── */}
-              <View className="flex-row gap-3">
-                <View className="flex-1">
-                  <FieldLabel>First name</FieldLabel>
-                  <TextInput
-                    value={firstName}
-                    onChangeText={setFirstName}
-                    placeholder="First"
-                    placeholderTextColor="#929298"
-                    className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
-                    maxLength={40}
-                  />
-                </View>
-                <View className="flex-1">
-                  <FieldLabel>Last name</FieldLabel>
-                  <TextInput
-                    value={lastName}
-                    onChangeText={setLastName}
-                    placeholder="Last"
-                    placeholderTextColor="#929298"
-                    className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
-                    maxLength={40}
-                  />
-                </View>
-              </View>
-
-              {/* ── Bio ────────────────────────────────────────────────── */}
-              <View>
-                <View className="flex-row items-center justify-between px-0.5 mb-2">
-                  <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                    Bio
-                  </Text>
-                  <Text className="font-sans text-[10px] text-muted-foreground/60">
-                    {bio.length} / 500
-                  </Text>
-                </View>
+            {/* ── Display name ────────────────────────────────────────── */}
+            <View>
+              <FieldLabel>Display name</FieldLabel>
+              <View className="relative">
                 <TextInput
-                  value={bio}
-                  onChangeText={setBio}
-                  placeholder="A line or two about you"
+                  value={displayName}
+                  onChangeText={(t) => { setDisplayName(t); setError(null); }}
+                  placeholder="e.g. austin"
+                  placeholderTextColor="#929298"
+                  className="bg-card rounded-xl border border-border/40 px-4 py-3 pr-10 font-sans text-sm text-foreground shadow-sm"
+                  maxLength={40}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                {/* Inline availability badge */}
+                <View
+                  style={{
+                    position: 'absolute',
+                    right: 12,
+                    top: 0,
+                    bottom: 0,
+                    justifyContent: 'center',
+                  }}
+                >
+                  {usernameState === 'checking' && (
+                    <ActivityIndicator size="small" color="#929298" />
+                  )}
+                  {usernameState === 'available' && (
+                    <View
+                      className="w-5 h-5 rounded-full items-center justify-center"
+                      style={{ backgroundColor: TINT.primaryBorder }}
+                    >
+                      <Check size={12} color="#23744D" strokeWidth={2.5} />
+                    </View>
+                  )}
+                  {(usernameState === 'taken' || usernameState === 'invalid') && (
+                    <View
+                      className="w-5 h-5 rounded-full items-center justify-center"
+                      style={{ backgroundColor: TINT.secondaryBorder }}
+                    >
+                      <AlertCircle size={12} color="#D46549" strokeWidth={2.5} />
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              {/* Status hint text below input */}
+              {usernameState === 'taken' && (
+                <Text className="font-sans text-xs text-destructive mt-1.5 px-0.5">
+                  "{displayName.trim()}" is taken — try another.
+                </Text>
+              )}
+              {usernameState === 'invalid' && displayName.trim().length > 0 && (
+                <Text className="font-sans text-xs text-destructive mt-1.5 px-0.5">
+                  Letters, numbers, and underscores only (2+ chars).
+                </Text>
+              )}
+              {usernameState === 'available' && (
+                <Text className="font-sans text-xs text-primary mt-1.5 px-0.5 font-medium">
+                  Available — looks good!
+                </Text>
+              )}
+              {error && !['taken', 'invalid', 'available'].includes(usernameState) && (
+                <Text className="font-sans text-xs text-destructive mt-1.5 px-0.5">
+                  {error}
+                </Text>
+              )}
+              <Text className="font-sans text-[11px] text-muted-foreground mt-1.5 px-0.5">
+                How friends see you — appears as @{displayName || 'handle'}
+              </Text>
+            </View>
+
+            {/* ── First / Last name ──────────────────────────────────── */}
+            <View className="flex-row gap-3">
+              <View className="flex-1">
+                <FieldLabel>First name</FieldLabel>
+                <TextInput
+                  value={firstName}
+                  onChangeText={setFirstName}
+                  placeholder="First"
                   placeholderTextColor="#929298"
                   className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
-                  maxLength={500}
-                  multiline
-                  style={{ minHeight: 96, textAlignVertical: 'top' }}
+                  maxLength={40}
                 />
               </View>
-
-              {/* ── Home location ──────────────────────────────────────── */}
-              <View>
-                <FieldLabel>Home base</FieldLabel>
-                <LocationAutocomplete
-                  value={homeAddress}
-                  onChange={setHomeAddress}
-                  placeholder="Where you usually are"
-                  types="(cities)"
-                />
-                <Text className="font-sans text-[11px] text-muted-foreground mt-1.5 px-0.5">
-                  Friends see this on your profile.
-                </Text>
-              </View>
-
-              {/* ── Neighborhood ──────────────────────────────────────── */}
-              <View>
-                <FieldLabel>Neighborhood (optional)</FieldLabel>
+              <View className="flex-1">
+                <FieldLabel>Last name</FieldLabel>
                 <TextInput
-                  value={neighborhood}
-                  onChangeText={setNeighborhood}
-                  placeholder="e.g. Mission, Williamsburg"
+                  value={lastName}
+                  onChangeText={setLastName}
+                  placeholder="Last"
                   placeholderTextColor="#929298"
                   className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
-                  maxLength={80}
+                  maxLength={40}
                 />
               </View>
+            </View>
 
-              {/* ── Current vibe ──────────────────────────────────────── */}
-              <View>
-                <FieldLabel>Current vibe</FieldLabel>
-                <View className="flex-row flex-wrap gap-2">
-                  {VIBES.map((v) => {
-                    const selected = vibe === v.id;
-                    return (
-                      <Pressable
-                        key={v.id}
-                        onPress={() => {
-                          Haptics.selectionAsync();
-                          setVibe(selected ? null : v.id);
-                        }}
-                        className={`rounded-xl px-3 py-2.5 border flex-row items-center gap-1.5 active:opacity-70 ${
-                          selected ? 'bg-primary border-primary' : 'bg-card border-border/40'
+            {/* ── Bio ────────────────────────────────────────────────── */}
+            <View>
+              <View className="flex-row items-center justify-between px-0.5 mb-2">
+                <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                  Bio
+                </Text>
+                <Text className="font-sans text-[10px] text-muted-foreground/60">
+                  {bio.length} / 500
+                </Text>
+              </View>
+              <TextInput
+                value={bio}
+                onChangeText={setBio}
+                placeholder="A line or two about you"
+                placeholderTextColor="#929298"
+                className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
+                maxLength={500}
+                multiline
+                style={{ minHeight: 96, textAlignVertical: 'top' }}
+              />
+            </View>
+
+            {/* ── Home location ──────────────────────────────────────── */}
+            <View>
+              <FieldLabel>Home base</FieldLabel>
+              <LocationAutocomplete
+                value={homeAddress}
+                onChange={setHomeAddress}
+                placeholder="Where you usually are"
+                types="(cities)"
+              />
+              <Text className="font-sans text-[11px] text-muted-foreground mt-1.5 px-0.5">
+                Friends see this on your profile.
+              </Text>
+            </View>
+
+            {/* ── Neighborhood ──────────────────────────────────────── */}
+            <View>
+              <FieldLabel>Neighborhood (optional)</FieldLabel>
+              <TextInput
+                value={neighborhood}
+                onChangeText={setNeighborhood}
+                placeholder="e.g. Mission, Williamsburg"
+                placeholderTextColor="#929298"
+                className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
+                maxLength={80}
+              />
+            </View>
+
+            {/* ── Current vibe ──────────────────────────────────────── */}
+            <View>
+              <FieldLabel>Current vibe</FieldLabel>
+              <View className="flex-row flex-wrap gap-2">
+                {VIBES.map((v) => {
+                  const selected = vibe === v.id;
+                  return (
+                    <Pressable
+                      key={v.id}
+                      onPress={() => {
+                        Haptics.selectionAsync();
+                        setVibe(selected ? null : v.id);
+                      }}
+                      className={`rounded-xl px-3 py-2.5 border flex-row items-center gap-1.5 active:opacity-70 ${
+                        selected ? 'bg-primary border-primary' : 'bg-card border-border/40'
+                      }`}
+                    >
+                      <Text style={{ fontSize: 14 }}>{v.emoji}</Text>
+                      <Text
+                        className={`font-sans text-xs font-medium ${
+                          selected ? 'text-white' : 'text-foreground'
                         }`}
                       >
-                        <Text style={{ fontSize: 14 }}>{v.emoji}</Text>
-                        <Text
-                          className={`font-sans text-xs font-medium ${
-                            selected ? 'text-white' : 'text-foreground'
-                          }`}
-                        >
-                          {v.label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-                {vibe && (
+                        {v.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              {vibe && (
+                <Pressable
+                  onPress={() => { Haptics.selectionAsync(); setVibe(null); }}
+                  className="mt-2 self-start"
+                >
+                  <Text className="font-sans text-xs text-muted-foreground underline">
+                    Clear vibe
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+
+            {/* ── Account (sign-in identity) ──────────────────────────── */}
+            <View className="h-px bg-border/40 mt-1" />
+            <View className="gap-0.5">
+              <Text className="font-display text-base text-foreground">Account</Text>
+              <Text className="font-sans text-[11px] text-muted-foreground">
+                How you sign in. Your phone number can't be changed.
+              </Text>
+            </View>
+
+            {/* Phone — locked once set; one-time verified capture if missing */}
+            <View>
+              <FieldLabel>Phone number</FieldLabel>
+
+              {phoneE164 ? (
+                /* Already has a phone → read-only, immutable */
+                <>
+                  <View className="flex-row items-center justify-between bg-muted/40 rounded-xl border border-border/40 px-4 py-3">
+                    <Text className="font-sans text-sm text-foreground">
+                      {phoneDisplay}
+                    </Text>
+                    <View className="flex-row items-center gap-1">
+                      <Lock size={12} color={TC.icon} strokeWidth={2} />
+                      <Text className="font-sans text-[11px] text-muted-foreground">
+                        Can't change
+                      </Text>
+                    </View>
+                  </View>
+                  <Text className="font-sans text-[11px] text-muted-foreground mt-1.5 px-0.5">
+                    Used to sign in and to help friends find you.
+                  </Text>
+                </>
+              ) : phoneStage === 'enter' ? (
+                /* No phone yet → enter a number to verify (one-time) */
+                <>
+                  <TextInput
+                    value={phoneInput}
+                    onChangeText={(t) => { setPhoneInput(t); setPhoneErr(null); }}
+                    placeholder="+1 (555) 123-4567"
+                    placeholderTextColor="#929298"
+                    keyboardType="phone-pad"
+                    autoComplete="tel"
+                    textContentType="telephoneNumber"
+                    className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
+                    maxLength={20}
+                  />
+                  {phoneErr ? (
+                    <Text className="font-sans text-xs text-destructive mt-1.5 px-0.5">
+                      {phoneErr}
+                    </Text>
+                  ) : null}
                   <Pressable
-                    onPress={() => { Haptics.selectionAsync(); setVibe(null); }}
-                    className="mt-2 self-start"
+                    onPress={handleSendPhoneCode}
+                    disabled={phoneBusy || !phoneInput.trim()}
+                    hitSlop={4}
+                    className={`mt-2 self-start rounded-xl px-3 py-2 ${
+                      !phoneBusy && phoneInput.trim() ? 'bg-primary active:opacity-80' : 'bg-muted'
+                    }`}
                   >
-                    <Text className="font-sans text-xs text-muted-foreground underline">
-                      Clear vibe
+                    <Text
+                      className={`font-sans text-xs font-semibold ${
+                        !phoneBusy && phoneInput.trim() ? 'text-white' : 'text-muted-foreground'
+                      }`}
+                    >
+                      {phoneBusy ? 'Sending…' : 'Send code'}
                     </Text>
                   </Pressable>
-                )}
-              </View>
-
-              {/* ── Account (sign-in identity) ──────────────────────────── */}
-              <View className="h-px bg-border/40 mt-1" />
-              <View className="gap-0.5">
-                <Text className="font-display text-base text-foreground">Account</Text>
-                <Text className="font-sans text-[11px] text-muted-foreground">
-                  How you sign in. Your phone number can't be changed.
-                </Text>
-              </View>
-
-              {/* Phone — locked once set; one-time verified capture if missing */}
-              <View>
-                <FieldLabel>Phone number</FieldLabel>
-
-                {phoneE164 ? (
-                  /* Already has a phone → read-only, immutable */
-                  <>
-                    <View className="flex-row items-center justify-between bg-muted/40 rounded-xl border border-border/40 px-4 py-3">
-                      <Text className="font-sans text-sm text-foreground">
-                        {phoneDisplay}
-                      </Text>
-                      <View className="flex-row items-center gap-1">
-                        <Lock size={12} color={TC.icon} strokeWidth={2} />
-                        <Text className="font-sans text-[11px] text-muted-foreground">
-                          Can't change
-                        </Text>
-                      </View>
-                    </View>
-                    <Text className="font-sans text-[11px] text-muted-foreground mt-1.5 px-0.5">
-                      Used to sign in and to help friends find you.
+                  <Text className="font-sans text-[11px] text-muted-foreground mt-2 px-0.5 leading-relaxed">
+                    Add your number once to help friends find you — you can't change it
+                    afterward. By tapping "Send code" you agree to receive a one-time SMS
+                    verification code; message and data rates may apply. See our{' '}
+                    <Text
+                      className="text-primary underline"
+                      onPress={() => Linking.openURL('https://helloparade.app/privacy')}
+                    >
+                      Privacy Policy
+                    </Text>{' '}
+                    and{' '}
+                    <Text
+                      className="text-primary underline"
+                      onPress={() => Linking.openURL('https://helloparade.app/sms-consent')}
+                    >
+                      SMS Terms
                     </Text>
-                  </>
-                ) : phoneStage === 'enter' ? (
-                  /* No phone yet → enter a number to verify (one-time) */
-                  <>
-                    <TextInput
-                      value={phoneInput}
-                      onChangeText={(t) => { setPhoneInput(t); setPhoneErr(null); }}
-                      placeholder="+1 (555) 123-4567"
-                      placeholderTextColor="#929298"
-                      keyboardType="phone-pad"
-                      autoComplete="tel"
-                      textContentType="telephoneNumber"
-                      className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
-                      maxLength={20}
-                    />
-                    {phoneErr ? (
-                      <Text className="font-sans text-xs text-destructive mt-1.5 px-0.5">
-                        {phoneErr}
-                      </Text>
-                    ) : null}
+                    .
+                  </Text>
+                </>
+              ) : (
+                /* Verify the code we texted */
+                <>
+                  <TextInput
+                    value={phoneCode}
+                    onChangeText={(t) => { setPhoneCode(t.replace(/\D/g, '')); setPhoneErr(null); }}
+                    placeholder="123456"
+                    placeholderTextColor="#929298"
+                    keyboardType="number-pad"
+                    autoComplete="sms-otp"
+                    textContentType="oneTimeCode"
+                    maxLength={6}
+                    className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
+                  />
+                  <Text className="font-sans text-[11px] text-muted-foreground mt-1.5 px-0.5">
+                    Enter the 6-digit code we texted to {formatPhoneDisplay(phoneSentTo)}.
+                  </Text>
+                  {phoneErr ? (
+                    <Text className="font-sans text-xs text-destructive mt-1.5 px-0.5">
+                      {phoneErr}
+                    </Text>
+                  ) : null}
+                  <View className="flex-row items-center gap-4 mt-2">
                     <Pressable
-                      onPress={handleSendPhoneCode}
-                      disabled={phoneBusy || !phoneInput.trim()}
+                      onPress={handleVerifyPhone}
+                      disabled={phoneBusy || phoneCode.trim().length < 6}
                       hitSlop={4}
-                      className={`mt-2 self-start rounded-xl px-3 py-2 ${
-                        !phoneBusy && phoneInput.trim() ? 'bg-primary active:opacity-80' : 'bg-muted'
+                      className={`rounded-xl px-3 py-2 ${
+                        !phoneBusy && phoneCode.trim().length >= 6 ? 'bg-primary active:opacity-80' : 'bg-muted'
                       }`}
                     >
                       <Text
                         className={`font-sans text-xs font-semibold ${
-                          !phoneBusy && phoneInput.trim() ? 'text-white' : 'text-muted-foreground'
+                          !phoneBusy && phoneCode.trim().length >= 6 ? 'text-white' : 'text-muted-foreground'
                         }`}
                       >
-                        {phoneBusy ? 'Sending…' : 'Send code'}
+                        {phoneBusy ? 'Verifying…' : 'Verify & save'}
                       </Text>
                     </Pressable>
-                    <Text className="font-sans text-[11px] text-muted-foreground mt-2 px-0.5 leading-relaxed">
-                      Add your number once to help friends find you — you can't change it
-                      afterward. By tapping "Send code" you agree to receive a one-time SMS
-                      verification code; message and data rates may apply. See our{' '}
-                      <Text
-                        className="text-primary underline"
-                        onPress={() => Linking.openURL('https://helloparade.app/privacy')}
-                      >
-                        Privacy Policy
-                      </Text>{' '}
-                      and{' '}
-                      <Text
-                        className="text-primary underline"
-                        onPress={() => Linking.openURL('https://helloparade.app/sms-consent')}
-                      >
-                        SMS Terms
+                    <Pressable
+                      onPress={() => { setPhoneStage('enter'); setPhoneCode(''); setPhoneErr(null); }}
+                      hitSlop={6}
+                    >
+                      <Text className="font-sans text-xs text-primary font-medium">
+                        ← Change number
                       </Text>
-                      .
-                    </Text>
-                  </>
-                ) : (
-                  /* Verify the code we texted */
-                  <>
-                    <TextInput
-                      value={phoneCode}
-                      onChangeText={(t) => { setPhoneCode(t.replace(/\D/g, '')); setPhoneErr(null); }}
-                      placeholder="123456"
-                      placeholderTextColor="#929298"
-                      keyboardType="number-pad"
-                      autoComplete="sms-otp"
-                      textContentType="oneTimeCode"
-                      maxLength={6}
-                      className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
-                    />
-                    <Text className="font-sans text-[11px] text-muted-foreground mt-1.5 px-0.5">
-                      Enter the 6-digit code we texted to {formatPhoneDisplay(phoneSentTo)}.
-                    </Text>
-                    {phoneErr ? (
-                      <Text className="font-sans text-xs text-destructive mt-1.5 px-0.5">
-                        {phoneErr}
-                      </Text>
-                    ) : null}
-                    <View className="flex-row items-center gap-4 mt-2">
-                      <Pressable
-                        onPress={handleVerifyPhone}
-                        disabled={phoneBusy || phoneCode.trim().length < 6}
-                        hitSlop={4}
-                        className={`rounded-xl px-3 py-2 ${
-                          !phoneBusy && phoneCode.trim().length >= 6 ? 'bg-primary active:opacity-80' : 'bg-muted'
-                        }`}
-                      >
-                        <Text
-                          className={`font-sans text-xs font-semibold ${
-                            !phoneBusy && phoneCode.trim().length >= 6 ? 'text-white' : 'text-muted-foreground'
-                          }`}
-                        >
-                          {phoneBusy ? 'Verifying…' : 'Verify & save'}
-                        </Text>
-                      </Pressable>
-                      <Pressable
-                        onPress={() => { setPhoneStage('enter'); setPhoneCode(''); setPhoneErr(null); }}
-                        hitSlop={6}
-                      >
-                        <Text className="font-sans text-xs text-primary font-medium">
-                          ← Change number
-                        </Text>
-                      </Pressable>
-                    </View>
-                  </>
-                )}
-              </View>
+                    </Pressable>
+                  </View>
+                </>
+              )}
+            </View>
 
-              {/* Email — attach / change (auth-level) */}
-              <View>
-                <FieldLabel>Email</FieldLabel>
-                <TextInput
-                  value={email}
-                  onChangeText={(t) => { setEmail(t); setEmailError(null); setEmailNotice(null); }}
-                  placeholder="you@example.com"
-                  placeholderTextColor="#929298"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoComplete="email"
-                  className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
-                  maxLength={120}
-                />
+            {/* Email — attach / change (auth-level) */}
+            <View>
+              <FieldLabel>Email</FieldLabel>
+              <TextInput
+                value={email}
+                onChangeText={(t) => { setEmail(t); setEmailError(null); setEmailNotice(null); }}
+                placeholder="you@example.com"
+                placeholderTextColor="#929298"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="email"
+                className="bg-card rounded-xl border border-border/40 px-4 py-3 font-sans text-sm text-foreground shadow-sm"
+                maxLength={120}
+              />
 
-                {pendingEmail ? (
-                  <Text className="font-sans text-[11px] text-muted-foreground mt-1.5 px-0.5">
-                    Pending confirmation: {pendingEmail}. Tap the link we emailed to finish.
-                  </Text>
-                ) : null}
-                {emailError ? (
-                  <Text className="font-sans text-xs text-destructive mt-1.5 px-0.5">
-                    {emailError}
-                  </Text>
-                ) : null}
-                {emailNotice ? (
-                  <Text className="font-sans text-xs text-primary mt-1.5 px-0.5 font-medium">
-                    {emailNotice}
-                  </Text>
-                ) : null}
+              {pendingEmail ? (
+                <Text className="font-sans text-[11px] text-muted-foreground mt-1.5 px-0.5">
+                  Pending confirmation: {pendingEmail}. Tap the link we emailed to finish.
+                </Text>
+              ) : null}
+              {emailError ? (
+                <Text className="font-sans text-xs text-destructive mt-1.5 px-0.5">
+                  {emailError}
+                </Text>
+              ) : null}
+              {emailNotice ? (
+                <Text className="font-sans text-xs text-primary mt-1.5 px-0.5 font-medium">
+                  {emailNotice}
+                </Text>
+              ) : null}
 
-                <Pressable
-                  onPress={handleSaveEmail}
-                  disabled={!canSaveEmail}
-                  hitSlop={4}
-                  className={`mt-2 self-start rounded-xl px-3 py-2 ${
-                    canSaveEmail ? 'bg-primary active:opacity-80' : 'bg-muted'
+              <Pressable
+                onPress={handleSaveEmail}
+                disabled={!canSaveEmail}
+                hitSlop={4}
+                className={`mt-2 self-start rounded-xl px-3 py-2 ${
+                  canSaveEmail ? 'bg-primary active:opacity-80' : 'bg-muted'
+                }`}
+              >
+                <Text
+                  className={`font-sans text-xs font-semibold ${
+                    canSaveEmail ? 'text-white' : 'text-muted-foreground'
                   }`}
                 >
-                  <Text
-                    className={`font-sans text-xs font-semibold ${
-                      canSaveEmail ? 'text-white' : 'text-muted-foreground'
-                    }`}
-                  >
-                    {emailSaving ? 'Sending…' : user?.email ? 'Update email' : 'Add email'}
-                  </Text>
-                </Pressable>
-
-                <Text className="font-sans text-[11px] text-muted-foreground mt-1.5 px-0.5">
-                  {user?.email
-                    ? 'Used for account recovery and notifications.'
-                    : "Add an email for account recovery and notifications. We'll send a confirmation link."}
+                  {emailSaving ? 'Sending…' : user?.email ? 'Update email' : 'Add email'}
                 </Text>
-              </View>
-            </>
-          )}
-        </ScrollView>
-      </KeyboardAvoidingView>
+              </Pressable>
+
+              <Text className="font-sans text-[11px] text-muted-foreground mt-1.5 px-0.5">
+                {user?.email
+                  ? 'Used for account recovery and notifications.'
+                  : "Add an email for account recovery and notifications. We'll send a confirmation link."}
+              </Text>
+            </View>
+          </>
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 }
