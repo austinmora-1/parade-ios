@@ -1818,8 +1818,10 @@ export type Database = {
       }
       trips: {
         Row: {
+          arrival_time: string | null
           available_slots: string[]
           created_at: string
+          departure_time: string | null
           end_date: string
           id: string
           location: string | null
@@ -1832,8 +1834,10 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          arrival_time?: string | null
           available_slots?: string[]
           created_at?: string
+          departure_time?: string | null
           end_date: string
           id?: string
           location?: string | null
@@ -1846,8 +1850,10 @@ export type Database = {
           user_id: string
         }
         Update: {
+          arrival_time?: string | null
           available_slots?: string[]
           created_at?: string
+          departure_time?: string | null
           end_date?: string
           id?: string
           location?: string | null

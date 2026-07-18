@@ -77,6 +77,7 @@ import { Avatar } from '@/components/primitives/Avatar';
 import { formatDisplayName } from '@/lib/utils';
 import { citiesMatch, normalizeCity } from '@/lib/locationMatch';
 import { resolveEffectiveCity } from '@/lib/effectiveCity';
+import { tripDayTravelLabel } from '@/lib/tripTimes';
 import { formatCityForDisplay } from '@/lib/formatCity';
 import { reconcileStaleBusyDays } from '@/lib/availabilityReconcile';
 import { useSyncAllCalendars } from '@/hooks/useSyncAllCalendars';
@@ -666,12 +667,15 @@ function WeekdayRow({
           )}
         </View>
 
-        {/* Trip badge for days the user is away */}
+        {/* Trip badge for days the user is away. Travel days (arrival /
+            departure with a set time) say so instead of a flat "In X" —
+            the user is only there part of the day (XPE-285). */}
         {trip && (
           <View className="flex-row items-center gap-1.5">
             <Plane size={11} color="#23744D" strokeWidth={2} />
             <Text className="font-sans text-xs font-medium text-primary flex-1" numberOfLines={1}>
-              {trip.location ? `In ${trip.location}` : 'Traveling'}
+              {tripDayTravelLabel(trip, dateStr, trip.location) ??
+                (trip.location ? `In ${trip.location}` : 'Traveling')}
             </Text>
           </View>
         )}
@@ -740,7 +744,7 @@ function useUpcomingTrips(userId: string | undefined) {
       const todayStr = format(new Date(), 'yyyy-MM-dd');
       const { data, error } = await supabase
         .from('trips')
-        .select('id, name, location, start_date, end_date, priority_friend_ids')
+        .select('id, name, location, start_date, end_date, arrival_time, departure_time, priority_friend_ids')
         .eq('user_id', userId!)
         .gte('end_date', todayStr)
         .order('start_date', { ascending: true });
