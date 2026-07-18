@@ -66,23 +66,17 @@ export function PlanDetailsCard({
       </DetailRow>
       <View className="h-px bg-border/30 mx-4" />
 
-      {plan.time_slot && (
+      {/* One Time row: exact clock times win over the coarse slot label (XPE-308) */}
+      {(startTime && endTime) || plan.time_slot ? (
         <>
           <DetailRow icon={<Clock size={15} color="#929298" strokeWidth={1.75} />} label="Time">
-            {SLOT_LABELS[plan.time_slot] ?? plan.time_slot}
+            {startTime && endTime
+              ? `${startTime} – ${endTime}`
+              : SLOT_LABELS[plan.time_slot] ?? plan.time_slot}
           </DetailRow>
           <View className="h-px bg-border/30 mx-4" />
         </>
-      )}
-
-      {startTime && endTime && (
-        <>
-          <DetailRow icon={<Clock size={15} color="#929298" strokeWidth={1.75} />} label="Window">
-            {`${startTime} – ${endTime}`}
-          </DetailRow>
-          <View className="h-px bg-border/30 mx-4" />
-        </>
-      )}
+      ) : null}
 
       {plan.location && (
         <>
