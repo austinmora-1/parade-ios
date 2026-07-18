@@ -36,6 +36,9 @@ interface ProfileMatch {
   first_name:   string | null;
   last_name:    string | null;
   avatar_url:   string | null;
+  /** Present once the upgraded search_profiles RPC is deployed. */
+  relationship?: 'connected' | 'pending_outgoing' | 'pending_incoming' | 'none' | null;
+  incoming_friendship_id?: string | null;
 }
 
 // ─── Search query (debounced) ────────────────────────────────────────────────
@@ -64,11 +67,14 @@ export default function AddFriendScreen() {
   const { user } = useAuth();
   const friends = usePlannerStore((s) => s.friends);
   const addFriend = usePlannerStore((s) => s.addFriend);
+  const acceptFriendRequest = usePlannerStore((s) => s.acceptFriendRequest);
 
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
   const [requestedIds, setRequestedIds] = useState<Set<string>>(new Set());
+  const [acceptedIds, setAcceptedIds] = useState<Set<string>>(new Set());
   const [sendingId, setSendingId] = useState<string | null>(null);
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
 
   // Debounce search input by 300ms
   useEffect(() => {
@@ -111,6 +117,24 @@ export default function AddFriendScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setSendingId(null);
+    }
+  };
+
+  // ── Accept an incoming friend request found via search ────────────────────
+  const acceptRequest = async (profile: ProfileMatch) => {
+    if (!user?.id || !profile.incoming_friendship_id) return;
+    setAcceptingId(profile.user_id);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    try {
+      await acceptFriendRequest(profile.incoming_friendship_id, profile.user_id);
+      setAcceptedIds((prev) => new Set(prev).add(profile.user_id));
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err) {
+      console.error('Accept failed', err);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setAcceptingId(null);
     }
   };
 
@@ -214,10 +238,20 @@ export default function AddFriendScreen() {
           {!isLoading && (results?.length ?? 0) > 0 && (
             <View className="px-5 gap-2">
               {results!.map((p) => {
-                const existing = friendStatusMap.get(p.user_id);
-                const requested = requestedIds.has(p.user_id) || existing === 'pending';
-                const connected = existing === 'connected';
+                // Server-provided relationship (upgraded search_profiles RPC)
+                // wins; fall back to deriving from the client store when the
+                // RPC doesn't return it yet.
+                const existing  = friendStatusMap.get(p.user_id);
+                const rel       = p.relationship;
+                const connected = acceptedIds.has(p.user_id)
+                  || (rel ? rel === 'connected' : existing === 'connected');
+                const incoming  = !connected
+                  && rel === 'pending_incoming' && !!p.incoming_friendship_id;
+                const requested = !connected && !incoming
+                  && (requestedIds.has(p.user_id)
+                    || (rel ? rel === 'pending_outgoing' : existing === 'pending'));
                 const sending   = sendingId === p.user_id;
+                const accepting = acceptingId === p.user_id;
                 const displayName = formatDisplayName({
                   firstName:   p.first_name,
                   lastName:    p.last_name,
@@ -264,6 +298,24 @@ export default function AddFriendScreen() {
                           Friends
                         </Text>
                       </View>
+                    ) : incoming ? (
+                      <Pressable
+                        onPress={() => acceptRequest(p)}
+                        disabled={accepting}
+                        className="flex-row items-center gap-1 bg-primary rounded-xl px-3 py-1.5 active:opacity-80"
+                        hitSlop={4}
+                      >
+                        {accepting ? (
+                          <ActivityIndicator size="small" color="#FFFFFF" />
+                        ) : (
+                          <>
+                            <Check size={12} color="#FFFFFF" strokeWidth={2.5} />
+                            <Text className="font-sans text-xs font-semibold text-white">
+                              Accept
+                            </Text>
+                          </>
+                        )}
+                      </Pressable>
                     ) : requested ? (
                       <View className="px-2.5 py-1 rounded-full bg-muted">
                         <Text className="font-sans text-xs font-semibold text-muted-foreground">

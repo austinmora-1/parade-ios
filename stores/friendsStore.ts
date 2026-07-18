@@ -1,7 +1,16 @@
 import { create } from 'zustand';
 import { Friend } from '@/types/planner';
 import { supabase } from '@/integrations/supabase/client';
+import { formatDisplayName } from '@/lib/formatName';
 import { mapOutgoingFriendships, mapIncomingFriendships, dedupeFriends } from './helpers/mapFriends';
+
+/** Compose a push-notification sender name ("FirstName L." style) from a profile row. */
+const senderNameFromProfile = (
+  profile: { display_name?: string | null; first_name?: string | null; last_name?: string | null } | null,
+): string =>
+  profile && (profile.first_name?.trim() || profile.display_name?.trim())
+    ? formatDisplayName({ firstName: profile.first_name, lastName: profile.last_name, displayName: profile.display_name })
+    : 'Someone';
 
 export interface FriendsState {
   friends: Friend[];
@@ -57,8 +66,8 @@ export const useFriendsStore = create<FriendsState & FriendsActions>((set, get) 
         const { data: sessionData } = await supabase.auth.getSession();
         const token = sessionData?.session?.access_token;
         const projectId = process.env.EXPO_PUBLIC_SUPABASE_PROJECT_ID;
-        const { data: profile } = await supabase.from('profiles').select('display_name').eq('user_id', userId).single();
-        const senderName = profile?.display_name || 'Someone';
+        const { data: profile } = await supabase.from('profiles').select('display_name, first_name, last_name').eq('user_id', userId).single();
+        const senderName = senderNameFromProfile(profile);
 
         fetch(`https://${projectId}.supabase.co/functions/v1/send-push-notification`, {
           method: 'POST',
@@ -170,10 +179,10 @@ export const useFriendsStore = create<FriendsState & FriendsActions>((set, get) 
       const projectId = process.env.EXPO_PUBLIC_SUPABASE_PROJECT_ID;
       const { data: profile } = await supabase
         .from('profiles')
-        .select('display_name')
+        .select('display_name, first_name, last_name')
         .eq('user_id', userId)
         .single();
-      const senderName = profile?.display_name || 'Someone';
+      const senderName = senderNameFromProfile(profile);
 
       await fetch(`https://${projectId}.supabase.co/functions/v1/send-push-notification`, {
         method: 'POST',

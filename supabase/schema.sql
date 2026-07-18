@@ -125,7 +125,11 @@ CREATE TABLE public.hang_requests (
   status text DEFAULT 'pending'::text NOT NULL,
   created_at timestamp with time zone DEFAULT now() NOT NULL,
   updated_at timestamp with time zone DEFAULT now() NOT NULL,
-  sender_id uuid
+  sender_id uuid,
+  start_time time without time zone,
+  end_time time without time zone,
+  response_vibe text,
+  response_activity text
 );
 
 CREATE TABLE public.last_hung_out_cache (
@@ -227,7 +231,6 @@ CREATE TABLE public.plan_invites (
   invited_by uuid NOT NULL,
   invite_token text DEFAULT generate_share_code(12) NOT NULL,
   email text,
-  phone text,
   status text DEFAULT 'pending'::text NOT NULL,
   created_at timestamp with time zone DEFAULT now() NOT NULL,
   accepted_at timestamp with time zone,
@@ -557,7 +560,9 @@ CREATE TABLE public.trips (
   updated_at timestamp with time zone DEFAULT now() NOT NULL,
   needs_return_date boolean DEFAULT false NOT NULL,
   proposal_id uuid,
-  name text
+  name text,
+  arrival_time time without time zone,
+  departure_time time without time zone
 );
 
 CREATE TABLE public.vibe_comments (
@@ -2757,18 +2762,61 @@ $function$
 ;
 
 CREATE OR REPLACE FUNCTION public.search_profiles(p_query text)
- RETURNS TABLE(user_id uuid, display_name text, first_name text, last_name text, avatar_url text)
+ RETURNS TABLE(user_id uuid, display_name text, first_name text, last_name text, avatar_url text, relationship text, incoming_friendship_id uuid)
  LANGUAGE sql
  STABLE SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-  SELECT p.user_id, p.display_name, p.first_name, p.last_name, p.avatar_url
+  SELECT
+    p.user_id,
+    p.display_name,
+    p.first_name,
+    p.last_name,
+    p.avatar_url,
+    CASE
+      WHEN EXISTS (
+        SELECT 1 FROM friendships f
+        WHERE f.status = 'connected'
+          AND ((f.user_id = auth.uid() AND f.friend_user_id = p.user_id)
+            OR (f.user_id = p.user_id AND f.friend_user_id = auth.uid()))
+      ) THEN 'connected'
+      WHEN EXISTS (
+        SELECT 1 FROM friendships f
+        WHERE f.status = 'pending'
+          AND f.user_id = auth.uid()
+          AND f.friend_user_id = p.user_id
+      ) THEN 'pending_outgoing'
+      WHEN inc.id IS NOT NULL THEN 'pending_incoming'
+      ELSE 'none'
+    END AS relationship,
+    inc.id AS incoming_friendship_id
   FROM profiles p
+  LEFT JOIN LATERAL (
+    SELECT f.id
+    FROM friendships f
+    WHERE f.status = 'pending'
+      AND f.user_id = p.user_id
+      AND f.friend_user_id = auth.uid()
+    LIMIT 1
+  ) inc ON true
   WHERE p.discoverable = true
     AND p.user_id <> auth.uid()
     AND length(trim(p_query)) >= 2
-    AND (p.display_name ILIKE '%' || trim(p_query) || '%'
-         OR p.first_name ILIKE '%' || trim(p_query) || '%')
+    AND (
+      SELECT bool_and(COALESCE(
+        p.display_name ILIKE '%' || tok || '%'
+        OR p.first_name ILIKE '%' || tok || '%'
+        OR p.last_name ILIKE '%' || tok || '%'
+      , false))
+      FROM unnest(regexp_split_to_array(trim(p_query), E'\\s+')) AS tok
+    )
+  ORDER BY
+    COALESCE(
+      p.display_name ILIKE trim(p_query) || '%'
+      OR p.first_name ILIKE trim(p_query) || '%'
+      OR p.last_name ILIKE trim(p_query) || '%'
+    , false) DESC,
+    p.display_name NULLS LAST
   LIMIT 20;
 $function$
 ;
@@ -3110,7 +3158,7 @@ CREATE POLICY "Only recipients can view requester emails" ON public.hang_request
    FROM hang_requests hr
   WHERE ((hr.id = hang_request_emails.hang_request_id) AND owns_share_code(hr.share_code)))));
 CREATE POLICY "Senders can view their sent hang requests" ON public.hang_requests FOR SELECT TO public USING ((( SELECT auth.uid() AS uid) = sender_id));
-CREATE POLICY "Users can create their own hang requests" ON public.hang_requests FOR INSERT TO public WITH CHECK ((( SELECT auth.uid() AS uid) = user_id));
+CREATE POLICY "Users can create their own hang requests" ON public.hang_requests FOR INSERT TO public WITH CHECK (((( SELECT auth.uid() AS uid) = sender_id) OR (( SELECT auth.uid() AS uid) = user_id)));
 CREATE POLICY "Users can delete their own hang requests" ON public.hang_requests FOR DELETE TO public USING ((( SELECT auth.uid() AS uid) = user_id));
 CREATE POLICY "Users can update their own hang requests" ON public.hang_requests FOR UPDATE TO public USING ((( SELECT auth.uid() AS uid) = user_id));
 CREATE POLICY "Users can view hang requests sent to them" ON public.hang_requests FOR SELECT TO public USING (owns_share_code(share_code));
