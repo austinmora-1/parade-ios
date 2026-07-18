@@ -108,11 +108,14 @@ export function computeOpenWeekends(params: {
     const overlappingTrip = overlappingTrips[0] ?? null;
     const awayByDay: Record<string, TimeSlot[] | 'all' | null> = {};
     for (const d of days) {
+      // Trip-derived slot info WINS over the day-level row: app-created trips
+      // stamp location_status='away' on every covered day (setTripLocationRange),
+      // so checking the row first would flatten timed travel days back to
+      // fully-away. The row flag is only the authority when no covering trip
+      // exists (manual away days).
       const fromTrips = combinedAwaySlots(overlappingTrips, d);
       awayByDay[d] =
-        fromTrips === 'all' || availabilityMap[d]?.locationStatus === 'away'
-          ? 'all'
-          : fromTrips;
+        fromTrips ?? (availabilityMap[d]?.locationStatus === 'away' ? 'all' : null);
     }
     const anyAway = days.some((d) => {
       const a = awayByDay[d];
