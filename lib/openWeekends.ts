@@ -11,6 +11,7 @@
 import { format } from 'date-fns';
 import type { DayAvailability, Plan, TimeSlot } from '@/types/planner';
 import { SLOT_OPTIONS } from '@/lib/socialSlots';
+import { combinedAwaySlots } from '@/lib/tripTimes';
 import type { FriendLite, FriendsByDate } from '@/hooks/useFriendWeekendAvailability';
 
 export type WeekendState = 'open' | 'partial' | 'booked' | 'away';
@@ -37,6 +38,8 @@ interface TripLike {
   end_date: string;
   location?: string | null;
   name?: string | null;
+  arrival_time?: string | null;
+  departure_time?: string | null;
 }
 
 const ALL_SLOTS: TimeSlot[] = SLOT_OPTIONS.map((o) => o.id);
@@ -95,13 +98,27 @@ export function computeOpenWeekends(params: {
   return weekends.map(({ saturday, sunday }) => {
     const days = [saturday, sunday];
 
-    // Away: either day flagged away, or a trip overlaps the weekend.
-    const overlappingTrip = trips.find(
+    // Away, slot-level: trip arrival/departure times make the trip's first/
+    // last day only PARTIALLY away (a Sunday-9pm arrival shouldn't kill the
+    // whole weekend). Middle days, untimed travel days, and day-level
+    // locationStatus='away' rows still count as fully away.
+    const overlappingTrips = trips.filter(
       (t) => t.start_date <= sunday && t.end_date >= saturday,
     );
-    const dayAway = days.some((d) => availabilityMap[d]?.locationStatus === 'away');
-    const isAway = !!overlappingTrip || dayAway;
-    const awayLocation = isAway
+    const overlappingTrip = overlappingTrips[0] ?? null;
+    const awayByDay: Record<string, TimeSlot[] | 'all' | null> = {};
+    for (const d of days) {
+      const fromTrips = combinedAwaySlots(overlappingTrips, d);
+      awayByDay[d] =
+        fromTrips === 'all' || availabilityMap[d]?.locationStatus === 'away'
+          ? 'all'
+          : fromTrips;
+    }
+    const anyAway = days.some((d) => {
+      const a = awayByDay[d];
+      return a === 'all' || (a != null && a.length > 0);
+    });
+    const awayLocation = anyAway
       ? overlappingTrip?.location ||
         overlappingTrip?.name ||
         availabilityMap[saturday]?.tripLocation ||
@@ -111,10 +128,15 @@ export function computeOpenWeekends(params: {
 
     // Open social slots across Sat+Sun (map already reflects plan/calendar blocks;
     // a missing day defaults to free, matching the store's default semantics).
+    // Away slots are subtracted per-day.
     const openSlots: WeekendSlot[] = [];
     for (const date of days) {
+      const away = awayByDay[date];
+      if (away === 'all') continue;
+      const awaySet = new Set(away ?? []);
       const slots = availabilityMap[date]?.slots;
       for (const slot of ALL_SLOTS) {
+        if (awaySet.has(slot)) continue;
         const free = slots ? slots[slot] !== false : true;
         if (free) openSlots.push({ date, slot });
       }
@@ -127,7 +149,7 @@ export function computeOpenWeekends(params: {
 
     const total = ALL_SLOTS.length * 2;
     let state: WeekendState;
-    if (isAway) state = 'away';
+    if (anyAway && openSlots.length === 0) state = 'away';
     else if (openSlots.length >= total) state = 'open';
     else if (openSlots.length > 0) state = 'partial';
     else state = 'booked';
@@ -146,7 +168,7 @@ export function computeOpenWeekends(params: {
       sunday,
       monthLabel: format(parseLocal(saturday), 'MMMM yyyy'),
       state,
-      openSlots: isAway ? [] : openSlots,
+      openSlots,
       bookedTitles,
       awayLocation,
       friends: Array.from(friendMap.values()),

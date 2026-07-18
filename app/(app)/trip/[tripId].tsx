@@ -43,7 +43,7 @@ import { Avatar } from '@/components/primitives/Avatar';
 import { TIME_SLOT_LABELS, TimeSlot } from '@/types/planner';
 import { getTravelKind } from '@/lib/visitVsTrip';
 import { formatCityForDisplay } from '@/lib/formatCity';
-import { formatTripTime, tripDayTravelLabel, tripTimesSummary } from '@/lib/tripTimes';
+import { formatTripTime, tripTravelDayView, tripTimesSummary } from '@/lib/tripTimes';
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
@@ -462,9 +462,12 @@ export default function TripDetailScreen() {
                   const freeSlots = ALL_TIME_SLOTS.filter(
                     (slot) => daySlots?.[slot] !== false,
                   );
-                  // Travel-day annotation — "Arriving ~3:00 PM" on the first
-                  // day / "Leaving ~11:00 AM" on the last, when times are set
-                  const travelLabel = trip ? tripDayTravelLabel(trip as any, dateStr) : null;
+                  // Travel-day annotation — "NYC → Lisbon · ~3:00 PM" on the
+                  // first day / "Lisbon → NYC · ~11:00 AM" on the last (times
+                  // omitted for all-day trips)
+                  const travelLabel = trip
+                    ? tripTravelDayView(trip as any, dateStr, homeAddress)?.label ?? null
+                    : null;
                   return (
                     <View
                       key={dateStr}
