@@ -334,6 +334,8 @@ export default function DayDetailScreen() {
       .map((p) => ({ timeSlot: normalizeSlot(p.time_slot), startTime: p.start_time, endTime: p.end_time })),
     // Away from home this day → free time reads coral (matches the location pill)
     away: !!dayTrip || locStatus === 'away',
+    // Trip start/end → the label reads "· traveling" instead of "· away"
+    travel: !!dayTrip && !!tripTravelDayView(dayTrip, date),
   });
 
   const toggleSlot = useCallback(
@@ -598,9 +600,9 @@ export default function DayDetailScreen() {
                     <Text className="font-sans text-[11px] font-semibold" style={{ color: accent }}>
                       {(() => {
                         if (!dayTrip) return isAway ? 'Away' : 'Home';
-                        // Trip start/end → "Travel · NYC → Lisbon · ~3:00 PM"
+                        // Trip start/end → "Traveling · NYC → Lisbon · ~3:00 PM"
                         const view = tripTravelDayView(dayTrip, date, homeAddress);
-                        return view ? `Travel · ${view.label}` : 'Away · Trip';
+                        return view ? `Traveling · ${view.label}` : 'Away · Trip';
                       })()}
                     </Text>
                     {!dayTrip && (

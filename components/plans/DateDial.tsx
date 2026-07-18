@@ -117,7 +117,7 @@ export interface DayWheelInput {
    *  free time coral instead of parade green. */
   away?: boolean;
   /** Travel day (a trip starts or ends today) — the away override labels it
-   *  "· travel" instead of "· away" since the user is only partially away. */
+   *  "· traveling" instead of "· away" since the user is only partially away. */
   travel?: boolean;
 }
 
@@ -244,9 +244,9 @@ export function computeDayWheel(input: DayWheelInput): DayWheel {
 
   // Away override: free time while out of town reads coral, not green, and
   // the label calls out that you're away. Travel days (trip start/end) say
-  // "· travel" — the user is only partially away that day.
+  // "· traveling" — the user is only partially away that day.
   if (input.away || input.travel) {
-    const suffix = input.travel ? 'travel' : 'away';
+    const suffix = input.travel ? 'traveling' : 'away';
     result = {
       ...result,
       arcColor: EMBER,
