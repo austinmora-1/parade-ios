@@ -370,8 +370,28 @@ export default function OnboardingScreen() {
   // ── Step navigation ────────────────────────────────────────────────────────
   const goNext = useCallback(() => {
     Haptics.selectionAsync();
+    // Leaving the identity step: persist the name right away so friend
+    // requests sent from step 4 carry it (otherwise recipients see "Someone").
+    // Best-effort — finish() overwrites the same fields, so a failure here
+    // must never block advancing.
+    if (step === 0 && user?.id) {
+      supabase
+        .from('profiles')
+        .update({
+          first_name: firstName.trim(),
+          last_name:  lastName.trim(),
+          ...(displayName.trim() && usernameState === 'available'
+            ? { display_name: displayName.trim() }
+            : {}),
+        } as any)
+        .eq('user_id', user.id)
+        .then(
+          ({ error }) => { if (error) console.error('Early name persist failed', error); },
+          (err) => console.error('Early name persist failed', err),
+        );
+    }
     setStep((s) => Math.min(s + 1, TOTAL_STEPS - 1));
-  }, []);
+  }, [step, user?.id, firstName, lastName, displayName, usernameState]);
   const goBack = useCallback(() => {
     Haptics.selectionAsync();
     setStep((s) => Math.max(s - 1, 0));

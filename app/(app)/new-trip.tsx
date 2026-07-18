@@ -32,6 +32,9 @@ import { usePlannerStore } from '@/stores/plannerStore';
 import { setTripLocationRange } from '@/lib/tripBusy';
 import { LocationAutocomplete } from '@/components/primitives/LocationAutocomplete';
 import { FriendSearchSelect } from '@/components/new-trip/FriendSearchSelect';
+import { TimeWheelPicker } from '@/components/primitives/TimeWheelPicker';
+import { hourToTimeString, parseTimeToHour } from '@/lib/planSlotCoverage';
+import { formatHour12 } from '@/lib/tripTimes';
 import { rankFriendsByPlanHistory } from '@/lib/friendSuggestions';
 import { TC } from '@/lib/theme';
 
@@ -109,6 +112,11 @@ export default function NewTripScreen() {
   const [location, setLocation] = useState('');
   const [startDate, setStartDate] = useState<Date>(new Date());
   const [duration,  setDuration]  = useState<number>(3);
+  // Optional arrival/departure times (fractional hours). null = all day —
+  // trips stay all-day unless the user opts into specific times (XPE-285).
+  const [arrivalHour,   setArrivalHour]   = useState<number | null>(null);
+  const [departureHour, setDepartureHour] = useState<number | null>(null);
+  const [timeOpen, setTimeOpen] = useState<null | 'arrival' | 'departure'>(null);
   // Travel companions → trip_participants; people to visit → priority_friend_ids
   const [companionIds, setCompanionIds] = useState<Set<string>>(new Set());
   const [visitIds,     setVisitIds]     = useState<Set<string>>(new Set());
@@ -140,7 +148,7 @@ export default function NewTripScreen() {
       const [{ data, error: loadErr }, { data: participants }] = await Promise.all([
         supabase
           .from('trips')
-          .select('name, location, start_date, end_date, priority_friend_ids')
+          .select('name, location, start_date, end_date, arrival_time, departure_time, priority_friend_ids')
           .eq('id', tripId)
           .eq('user_id', user.id)
           .maybeSingle(),
@@ -161,6 +169,8 @@ export default function NewTripScreen() {
       setLocation(data.location ?? '');
       setStartDate(start);
       setDuration(Math.max(1, differenceInDays(end, start) + 1));
+      setArrivalHour(parseTimeToHour((data as any).arrival_time));
+      setDepartureHour(parseTimeToHour((data as any).departure_time));
       setVisitIds(new Set((data.priority_friend_ids ?? []) as string[]));
       const companionSet = new Set<string>((participants ?? []).map((p: any) => p.friend_user_id));
       setCompanionIds(companionSet);
@@ -214,6 +224,11 @@ export default function NewTripScreen() {
     if (!user?.id) return;
     if (!name.trim()) {
       setError('Trip name is required');
+      return;
+    }
+    // Same-day trip: being there requires arriving before you leave.
+    if (duration === 1 && arrivalHour != null && departureHour != null && departureHour <= arrivalHour) {
+      setError('Departure must be after arrival for a one-day trip');
       return;
     }
     setError(null);
