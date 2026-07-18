@@ -112,7 +112,7 @@ export function WeekendCard({ summary }: { summary: WeekendSummary }) {
                   style={{ color: EMBER, maxWidth: 120 }}
                   numberOfLines={1}
                 >
-                  Travel · {awayLocation}
+                  Traveling · {awayLocation}
                 </Text>
               </View>
             ) : (
