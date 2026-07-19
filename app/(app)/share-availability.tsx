@@ -25,7 +25,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { addDays, format, isSaturday, isSunday } from 'date-fns';
 import * as Haptics from 'expo-haptics';
 import * as WebBrowser from 'expo-web-browser';
@@ -37,8 +37,10 @@ import {
   CalendarRange,
   Users,
   Eye,
+  Globe,
 } from 'lucide-react-native';
 import { ShareChannelGrid } from '@/components/share/ShareChannelGrid';
+import { AvailabilityPreview } from '@/components/share/AvailabilityPreview';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlannerStore } from '@/stores/plannerStore';
@@ -50,22 +52,33 @@ import { PARADE_GREEN, ELEPHANT } from '@/lib/colors';
 
 const SHARE_DOMAIN = 'https://helloparade.app';
 
-/** Range options — view keys match the PWA share page's ?view= param. */
+/** Range options — view keys match the PWA share page's ?view= param. Each
+ *  range shares availability at a different granularity (XPE-312). */
 const RANGES = [
-  { view: '1w', label: '1 week', days: 7 },
-  { view: '1m', label: '4 weeks', days: 28 },
-  { view: '3m', label: '3 months', days: 91 },
+  { view: '1w', label: '1 week', days: 7, grain: 'time slots' },
+  { view: '1m', label: '4 weeks', days: 28, grain: 'open days' },
+  { view: '3m', label: '3 months', days: 91, grain: 'open weekends' },
 ] as const;
 type RangeView = (typeof RANGES)[number]['view'];
 
 export default function ShareAvailabilityScreen() {
   const { user } = useAuth();
   const friends = usePlannerStore((s) => s.friends);
+  const plans = usePlannerStore((s) => s.plans);
   const availabilityMap = useAvailabilityStore((s) => s.availabilityMap);
   const defaultSettings = useAvailabilityStore((s) => s.defaultSettings);
+  const loadAvailabilityForRange = useAvailabilityStore((s) => s.loadAvailabilityForRange);
 
   const [view, setView] = useState<RangeView>('3m');
+  const [previewOpen, setPreviewOpen] = useState(false);
   const range = RANGES.find((r) => r.view === view)!;
+
+  // Make sure real availability rows for the full 3-month horizon are loaded so
+  // the in-app preview wheels aren't all schedule-derived defaults (XPE-312).
+  useEffect(() => {
+    if (!user?.id) return;
+    loadAvailabilityForRange(new Date(), addDays(new Date(), 92), user.id).catch(() => {});
+  }, [user?.id, loadAvailabilityForRange]);
 
   // share_code + display name for the link and the notification copy
   const { data: me } = useQuery({
@@ -86,29 +99,37 @@ export default function ShareAvailabilityScreen() {
     ? `${SHARE_DOMAIN}/share/${me.share_code}?view=${view}&src=ios`
     : null;
 
-  // Weekend availability over the selected range — a day counts as free
-  // when any slot is open. Days without a row fall back to the
-  // schedule-derived default, same as the rest of the app.
-  const weekendDays = useMemo(() => {
-    const out: { dateStr: string; label: string; free: boolean }[] = [];
+  // One-line availability summary matched to the range's granularity (XPE-312):
+  // weekends for 3 months, all days otherwise. A day counts as free when any
+  // slot is open; days without a row fall back to the schedule-derived default.
+  const summary = useMemo(() => {
+    const weekendsOnly = view === '3m';
+    let free = 0;
+    let total = 0;
     for (let i = 0; i < range.days; i++) {
       const d = addDays(new Date(), i);
-      if (!isSaturday(d) && !isSunday(d)) continue;
+      if (weekendsOnly && !isSaturday(d) && !isSunday(d)) continue;
       const dateStr = format(d, 'yyyy-MM-dd');
       const day = availabilityMap[dateStr] ?? createDefaultAvailability(d, defaultSettings);
-      const free = Object.values(day.slots).some(Boolean);
-      out.push({ dateStr, label: format(d, 'EEE MMM d'), free });
+      total += 1;
+      if (Object.values(day.slots).some(Boolean)) free += 1;
     }
-    return out;
-  }, [range.days, availabilityMap, defaultSettings]);
-  const freeWeekendCount = weekendDays.filter((d) => d.free).length;
+    const noun = weekendsOnly ? 'weekend days' : 'days';
+    return `${free} of ${total} ${noun} free over the next ${range.label}`;
+  }, [view, range.days, range.label, availabilityMap, defaultSettings]);
 
   // ── Path 1: omni-channel link sharing (channel grid below) ────────────────
   const shareMessage = `Here's when I'm free over the next ${range.label} — let's make a plan!`;
   const emailSubject = `${myName} shared their Parade availability`;
 
-  // Preview opens the exact public page the recipient will see.
-  const handlePreview = useCallback(async () => {
+  // In-app preview — the granularity-adaptive view of my availability (XPE-312).
+  const openPreview = useCallback(() => {
+    Haptics.selectionAsync();
+    setPreviewOpen(true);
+  }, []);
+
+  // Secondary: open the exact public web page the recipient will see.
+  const openWebPreview = useCallback(async () => {
     if (!shareUrl) return;
     Haptics.selectionAsync();
     try {
@@ -206,7 +227,7 @@ export default function ShareAvailabilityScreen() {
                 <Pressable
                   key={r.view}
                   onPress={() => { Haptics.selectionAsync(); setView(r.view); }}
-                  className={`flex-1 rounded-xl border px-3 py-2.5 items-center active:opacity-70 ${
+                  className={`flex-1 rounded-xl border px-2 py-2.5 items-center gap-0.5 active:opacity-70 ${
                     selected ? 'bg-primary border-primary' : 'bg-card border-border/40'
                   }`}
                 >
@@ -217,6 +238,14 @@ export default function ShareAvailabilityScreen() {
                   >
                     {r.label}
                   </Text>
+                  {/* Granularity hint — what recipients see at this range */}
+                  <Text
+                    className={`font-sans text-[10px] text-center ${
+                      selected ? 'text-white/80' : 'text-muted-foreground'
+                    }`}
+                  >
+                    {r.grain}
+                  </Text>
                 </Pressable>
               );
             })}
@@ -226,9 +255,7 @@ export default function ShareAvailabilityScreen() {
         {/* One-line availability summary (no per-day list) */}
         <View className="flex-row items-center gap-2 px-0.5">
           <CalendarRange size={14} color={PARADE_GREEN} strokeWidth={2} />
-          <Text className="font-sans text-[13px] text-muted-foreground">
-            {freeWeekendCount} of {weekendDays.length} weekend days free over the next {range.label}
-          </Text>
+          <Text className="font-sans text-[13px] text-muted-foreground">{summary}</Text>
         </View>
 
         {/* Prominent share card — the link + channels are the focus */}
@@ -248,13 +275,10 @@ export default function ShareAvailabilityScreen() {
             title="My availability"
           />
 
-          {/* Preview: opens the exact page the recipient sees */}
+          {/* Preview: in-app, adapts to the selected range (XPE-312) */}
           <Pressable
-            onPress={handlePreview}
-            disabled={!shareUrl}
-            className={`flex-row items-center justify-center gap-2 rounded-xl border py-2.5 active:opacity-70 ${
-              shareUrl ? 'border-primary/30 bg-primary/5' : 'border-border/30 bg-muted/40'
-            }`}
+            onPress={openPreview}
+            className="flex-row items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/5 py-2.5 active:opacity-70"
           >
             <Eye size={15} color={PARADE_GREEN} strokeWidth={2} />
             <Text className="font-sans text-sm font-semibold text-primary">
@@ -355,6 +379,55 @@ export default function ShareAvailabilityScreen() {
                   : `Send to ${selectedIds.size} ${selectedIds.size === 1 ? 'friend' : 'friends'}`}
             </Text>
           </Pressable>
+        </View>
+      )}
+
+      {/* Full-screen in-app preview — "what friends will see" at the range's
+          granularity. An absolute overlay (not RN <Modal>) to stay inside the
+          nav tree, matching BugReportButton (XPE-312). */}
+      {previewOpen && (
+        <View className="absolute inset-0 bg-chalk" style={{ zIndex: 50 }}>
+          <SafeAreaView className="flex-1" edges={['top']}>
+            <View className="flex-row items-center justify-between px-3 py-2 border-b border-border/20">
+              <Pressable
+                onPress={() => setPreviewOpen(false)}
+                hitSlop={8}
+                accessibilityLabel="Close preview"
+                className="w-9 h-9 rounded-full items-center justify-center active:opacity-70"
+              >
+                <X size={20} color={TC.icon} strokeWidth={2} />
+              </Pressable>
+              <View className="items-center">
+                <Text className="font-display text-lg text-foreground">What friends will see</Text>
+                <Text className="font-sans text-[11px] text-muted-foreground">
+                  {range.label} · {range.grain}
+                </Text>
+              </View>
+              <View className="w-9 h-9" />
+            </View>
+
+            <ScrollView className="flex-1" contentContainerClassName="px-5 py-5 gap-3 pb-10">
+              <AvailabilityPreview
+                view={view}
+                availabilityMap={availabilityMap}
+                defaultSettings={defaultSettings}
+                plans={plans}
+              />
+
+              {/* Secondary: the exact public web page recipients open */}
+              {shareUrl && (
+                <Pressable
+                  onPress={openWebPreview}
+                  className="flex-row items-center justify-center gap-2 rounded-xl border border-border/40 bg-card py-2.5 mt-2 active:opacity-70"
+                >
+                  <Globe size={15} color={ELEPHANT} strokeWidth={2} />
+                  <Text className="font-sans text-sm font-semibold text-muted-foreground">
+                    Open web version
+                  </Text>
+                </Pressable>
+              )}
+            </ScrollView>
+          </SafeAreaView>
         </View>
       )}
     </SafeAreaView>
