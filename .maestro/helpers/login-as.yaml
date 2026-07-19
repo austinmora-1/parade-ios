@@ -1,0 +1,42 @@
+appId: app.parade.ios
+---
+# Reusable phone-OTP login subflow.
+#
+# ⚠️  REQUIRES FIXTURES: this only works once the four test phone numbers are
+#     registered as static-OTP test numbers in Supabase Auth AND each fixture
+#     account has been signed in once so its auth user + profile exist.
+#     See docs/E2E_SETUP.md. Without those, `Send code` will hit real SMS/rate
+#     limits and the flow will fail.
+#
+# Parameterized via env — callers pass PHONE + OTP through `runFlow`:
+#   - runFlow:
+#       file: ../helpers/login-as.yaml
+#       env:
+#         PHONE: "+15005550001"   # Olivia (see the persona table in E2E_SETUP.md)
+#         OTP: "123456"
+#
+# Test numbers (static OTP 123456): +15005550001 Olivia · +15005550002 Ravi
+#                                    +15005550003 Nora   · +15005550004 Liam
+#
+# clearState + clearKeychain guarantee a signed-out start: Supabase persists the
+# session in secure storage (keychain), so clearing app data alone is not enough
+# to force the login screen.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+- tapOn:
+    id: "login.phone-input"
+- inputText: ${PHONE}
+- tapOn:
+    id: "login.send-code"
+- tapOn:
+    id: "login.otp-input"
+- inputText: ${OTP}
+- tapOn:
+    id: "login.verify"
+# Login is done when the verify control is gone (redirected into the app).
+# The caller asserts the specific landing screen.
+- extendedWaitUntil:
+    notVisible:
+      id: "login.verify"
+    timeout: 20000

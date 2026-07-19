@@ -1,0 +1,47 @@
+appId: app.parade.ios
+---
+# Journey (Olivia, organizer): create a quick plan end-to-end.
+#
+# ⚠️  REQUIRES FIXTURES + SEED: fixture accounts with static OTPs must exist and
+#     `node scripts/test-seed.mjs reset --go && node scripts/test-seed.mjs seed --go`
+#     should have been run first (see docs/E2E_SETUP.md). Ready to run as-is once
+#     those are in place.
+#
+# Path: login-as Olivia → tap the create FAB (tabs.create) → the "+" menu
+# (what-planning.quick-plan) → fill the quick-plan form → submit → assert the
+# new plan's title shows on the plan-detail screen.
+#
+# NOTE: only login, the tab bar, and the what-planning menu carry testIDs so
+# far. The quick-plan creation form itself has none yet (out of scope for this
+# pass), so its fields are driven by visible text as a documented stopgap —
+# swap these for `id:` selectors when quick-plan.tsx gets testIDs.
+- runFlow:
+    file: ../helpers/login-as.yaml
+    env:
+      PHONE: "+15005550001"
+      OTP: "123456"
+# Olivia lands on Home; the floating create FAB is visible.
+- tapOn:
+    id: "tabs.create"
+- tapOn:
+    id: "what-planning.quick-plan"
+# Quick-plan opens in log mode (?mode=log). Give the plan a distinctive title.
+- scrollUntilVisible:
+    element:
+      text: "What are we doing?"
+    direction: DOWN
+- tapOn: "What are we doing?"
+- inputText: "E2E Quick Plan"
+- hideKeyboard
+# Submit — log-mode CTA is "Make it happen!".
+- scrollUntilVisible:
+    element:
+      text: "Make it happen!"
+    direction: DOWN
+- tapOn: "Make it happen!"
+# On success the app routes to /plan/<id>; the title we typed should render.
+- extendedWaitUntil:
+    visible:
+      text: "E2E Quick Plan"
+    timeout: 20000
+- takeScreenshot: create-plan-done

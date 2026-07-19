@@ -1,0 +1,20 @@
+appId: app.parade.ios
+---
+# Smoke: cold launch reaches a stable screen.
+#
+# This flow is intentionally build-agnostic: it does NOT depend on the new
+# testIDs and does NOT require being logged in. It only proves the app boots
+# past the splash / auth-init spinner and renders a real screen (login when
+# signed out, Home when a session is restored) without crashing. Run it against
+# ANY dev-client or TestFlight build as the first sanity check.
+#
+# The assertion matches stable copy from EITHER state via a regex:
+#   • signed out → login wordmark tagline "Plans worth keeping." / title "Get started"
+#   • signed in  → the time-of-day greeting or the "Set location" hero pill
+- launchApp
+# extendedWaitUntil rides out the auth-init spinner (up to 5s) plus the redirect.
+- extendedWaitUntil:
+    visible:
+      text: "Plans worth keeping|Get started|Good (morning|afternoon|evening)|Night owl|Set location"
+    timeout: 30000
+- takeScreenshot: launch
