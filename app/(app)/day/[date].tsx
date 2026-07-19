@@ -33,7 +33,7 @@ import {
   Briefcase,
 } from 'lucide-react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { format, parseISO, isToday, addDays } from 'date-fns';
+import { format, parseISO, isToday, addDays, isValid } from 'date-fns';
 import { useState, useCallback, useEffect } from 'react';
 import * as Haptics from 'expo-haptics';
 import { supabase } from '@/integrations/supabase/client';
@@ -168,7 +168,15 @@ function SlotPlanRow({ plan }: { plan: any }) {
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function DayDetailScreen() {
-  const { date } = useLocalSearchParams<{ date: string }>();
+  const { date: dateParam } = useLocalSearchParams<{ date: string }>();
+  // Guard malformed/garbage date params (from a bad deep link or notification
+  // payload, e.g. parade://day/garbage): fall back to today so the screen never
+  // feeds an Invalid Date into format() — which throws "Invalid time value" and
+  // crashes the render. Deriving `date` from the validated Date also keeps the
+  // availability query's date-column comparison from receiving invalid input.
+  const parsedDateRaw = dateParam ? parseISO(dateParam) : new Date();
+  const parsedDate = isValid(parsedDateRaw) ? parsedDateRaw : new Date();
+  const date = format(parsedDate, 'yyyy-MM-dd');
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const setAvailability    = usePlannerStore((s) => s.setAvailability);
@@ -240,7 +248,6 @@ export default function DayDetailScreen() {
     }
   }
 
-  const parsedDate = date ? parseISO(date) : new Date();
   const today = isToday(parsedDate);
 
   // Plans grouped by normalized kebab-case slot

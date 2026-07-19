@@ -9,7 +9,24 @@ import { FirstPlanCelebration } from '@/components/onboarding/FirstPlanCelebrati
 import { BugReportButton } from '@/components/feedback/BugReportButton';
 
 // Protected deep-link landings that should survive the login bounce.
-const PRESERVED_PREFIXES = ['/imessage-plan', '/invite', '/share', '/plan-invite', '/trip-invite'];
+// Added /imsg + /imsg-connect (the iMessage "accept ping" / "connect account"
+// funnels — both files' headers already promise login-survival via
+// pendingDeepLink) and the push-notification targets /plan, /trip,
+// /notifications, /pending-requests, so tapping a push while signed out no
+// longer drops the destination after login.
+const PRESERVED_PREFIXES = [
+  '/imessage-plan',
+  '/imsg',            // also prefix-matches /imsg-connect
+  '/imsg-connect',
+  '/invite',
+  '/share',
+  '/plan-invite',
+  '/trip-invite',
+  '/plan',            // push target plan/[planId] (also matches /plan-invite above)
+  '/trip',            // push target trip/[tripId], trip-proposal/[id]
+  '/notifications',
+  '/pending-requests',
+];
 
 /**
  * Authenticated app shell — stack that contains the tab navigator + all
@@ -22,6 +39,9 @@ function AppLayoutInner({ route }: { route?: string }) {
 
   // Replay a deep link that was stashed during a login bounce (no-op on a
   // normal launch, where nothing was pended).
+  // KNOWN FOLLOW-UP (DLK-60): for a brand-new user (onboarding_completed=false)
+  // this replace can fire over the onboarding redirect and skip the wizard.
+  // Fixing it properly needs the onboarding flag here; tracked separately.
   useEffect(() => {
     const href = consumePendingDeepLink();
     if (href) router.replace(href);
