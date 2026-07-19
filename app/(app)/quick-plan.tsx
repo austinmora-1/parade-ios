@@ -121,15 +121,17 @@ export default function QuickPlanScreen() {
   // (matches new-hang-request).
   const handleSlotChange = useCallback((s: TimeSlot) => {
     setPickedSlot(s);
-    setSpecificTime((on) => {
-      if (on) {
-        const t = defaultTimesForSlot(s);
-        setStartHour(t.start);
-        setEndHour(t.end);
-      }
-      return on;
-    });
-  }, []);
+    if (specificTime) {
+      const t = defaultTimesForSlot(s);
+      setStartHour(t.start);
+      setEndHour(t.end);
+    }
+  }, [specificTime]);
+
+  // The slot the plan will actually occupy: a specific start time re-files it
+  // into whichever slot that clock hour falls in. Drives the friend picker so
+  // it shows friends free in the plan's real slot, not the coarse pill (XPE-302).
+  const effectiveSlot: TimeSlot = specificTime ? slotForHour(startHour) : slot;
 
   const plans = usePlannerStore((s) => s.plans);
 
@@ -154,7 +156,7 @@ export default function QuickPlanScreen() {
       ? friends
           .filter((f) => f.status === 'connected' && f.friendUserId)
           .map((f) => ({ userId: f.friendUserId!, name: f.name, avatar: f.avatar ?? null }))
-      : (friendsBySlot?.[slot] ?? []).map((f) => ({
+      : (friendsBySlot?.[effectiveSlot] ?? []).map((f) => ({
           userId: f.userId,
           name: f.name,
           avatar: f.avatarUrl,
@@ -164,7 +166,7 @@ export default function QuickPlanScreen() {
         (planFrequency[b.userId] ?? 0) - (planFrequency[a.userId] ?? 0) ||
         a.name.localeCompare(b.name),
     );
-  }, [isLogMode, friends, friendsBySlot, slot, planFrequency]);
+  }, [isLogMode, friends, friendsBySlot, effectiveSlot, planFrequency]);
 
   const [selectedFriendIds, setSelectedFriendIds] = useState<Set<string>>(new Set());
   const [friendQuery, setFriendQuery] = useState('');
@@ -227,8 +229,13 @@ export default function QuickPlanScreen() {
       // Custom text rides directly in activity (Plan.activity is
       // ActivityType | string) — same as the PWA dialog.
       const effectiveActivity = customActivity.trim() || activity || 'hanging-out';
+      // Only invite friends still selected AND free in the current slot — a
+      // pick made under a previous slot is hidden from the picker, so it must
+      // not silently ride along on submit (selectedFriends = freeFriends ∩
+      // selection; log mode's freeFriends is every connected friend).
+      const inviteIds = new Set(selectedFriends.map((f) => f.userId));
       const participants = friends
-        .filter((f) => f.friendUserId && selectedFriendIds.has(f.friendUserId))
+        .filter((f) => f.friendUserId && inviteIds.has(f.friendUserId))
         .map((f) => ({
           id: f.id, friendUserId: f.friendUserId, name: f.name,
           avatar: f.avatar, status: 'connected', role: 'participant',
@@ -242,7 +249,7 @@ export default function QuickPlanScreen() {
         date,
         // A specific start time re-files the plan into whichever slot the
         // clock time falls in (same rule as new-hang-request).
-        timeSlot: specificTime ? slotForHour(startHour) : slot,
+        timeSlot: effectiveSlot,
         startTime: specificTime ? hourToTimeString(startHour) : undefined,
         endTime: specificTime ? hourToTimeString(endHour) : undefined,
         duration: 60,
@@ -261,7 +268,7 @@ export default function QuickPlanScreen() {
           .from('plans')
           .select('id')
           .eq('user_id', user.id)
-          .eq('time_slot', specificTime ? slotForHour(startHour) : slot)
+          .eq('time_slot', effectiveSlot)
           .gte('created_at', new Date(Date.now() - 30_000).toISOString())
           .order('created_at', { ascending: false })
           .limit(1)
@@ -283,7 +290,7 @@ export default function QuickPlanScreen() {
     } finally {
       setSaving(false);
     }
-  }, [saving, customActivity, activity, friends, selectedFriendIds, note, title,
+  }, [saving, customActivity, activity, friends, selectedFriends, note, title,
       date, slot, specificTime, startHour, endHour, hasFriends, isLogMode,
       addPlan, forceRefresh, user?.id]);
 

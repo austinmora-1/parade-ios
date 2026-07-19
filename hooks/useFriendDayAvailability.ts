@@ -45,10 +45,13 @@ export function useFriendDayAvailability(date: string | undefined) {
   const myFromStore: MyDayAvail | null = storeDay
     ? { slots: storeDay.slots, locationStatus: storeDay.locationStatus, tripLocation: storeDay.tripLocation ?? null }
     : null;
+  // Sign the key with my-availability CONTENT (not just presence) so editing my
+  // own slots for this date re-derives the friend list instead of serving stale.
+  const mySig = myFromStore ? JSON.stringify(myFromStore) : '';
 
   return useQuery({
     enabled: !!date && !!user?.id && friendUserIds.length > 0,
-    queryKey: ['friend-day-availability', date, user?.id, friendUserIds.join(','), homeAddress ?? '', !!myFromStore],
+    queryKey: ['friend-day-availability', date, user?.id, friendUserIds.join(','), homeAddress ?? '', mySig],
     staleTime: 60_000,
     queryFn: async (): Promise<FriendsBySlot> => {
       const ids = [user!.id, ...friendUserIds];
