@@ -6,7 +6,8 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
- * Format a name as "FirstName L." — falls back to display_name, then "User".
+ * Format a name as "FirstName L." — falls back to display_name, then a
+ * friendly generic ("Someone") for nameless profiles (XPE-307).
  */
 export function formatDisplayName(opts: {
   firstName?: string | null;
@@ -19,7 +20,7 @@ export function formatDisplayName(opts: {
     if (lastName?.trim()) return `${first} ${lastName.trim().charAt(0).toUpperCase()}.`;
     return first;
   }
-  return displayName?.trim() || 'User';
+  return displayName?.trim() || 'Someone';
 }
 
 /** Return the user's initials (up to 2 chars) for avatar fallbacks. */

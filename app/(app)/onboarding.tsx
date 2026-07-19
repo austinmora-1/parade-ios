@@ -452,12 +452,33 @@ export default function OnboardingScreen() {
     dest: 'plan' | 'home',
   ) => {
     if (!user?.id) return;
+
+    // Skipping everything else is fine, but a profile with no name renders
+    // as "User" to every friend it touches (XPE-307) — require at least a
+    // first name before letting onboarding complete.
+    if (skipped && !existing?.first_name && !firstName.trim()) {
+      setStep(0);
+      Alert.alert(
+        'One thing first',
+        'Add your name so friends recognize you — everything else can wait.',
+      );
+      return;
+    }
+
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSaving(true);
     try {
       const updates: Record<string, any> = {
         onboarding_completed: true,
       };
+
+      // Identity persists even on skip — a typed name should never be lost
+      // to the skip path (XPE-307).
+      if (firstName.trim()) updates.first_name = firstName.trim();
+      if (lastName.trim())  updates.last_name  = lastName.trim();
+      if (displayName.trim() && usernameState === 'available') {
+        updates.display_name = displayName.trim();
+      }
 
       // Mirror the verified auth phone into the profile (used by friend
       // text-invites, check_phone_available, search). Don't overwrite an
@@ -468,11 +489,6 @@ export default function OnboardingScreen() {
       }
 
       if (!skipped) {
-        if (firstName.trim()) updates.first_name = firstName.trim();
-        if (lastName.trim())  updates.last_name  = lastName.trim();
-        if (displayName.trim() && usernameState === 'available') {
-          updates.display_name = displayName.trim();
-        }
         updates.default_work_days       = [...workDays];
         updates.default_work_start_hour = workStart;
         updates.default_work_end_hour   = workEnd;
