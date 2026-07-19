@@ -28,10 +28,9 @@ import { X, Calendar, Clock, Send, Search, Check } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlannerStore } from '@/stores/plannerStore';
-import { useFriendDashboardData } from '@/hooks/useFriendDashboardData';
+import { useFriendDayAvailability } from '@/hooks/useFriendDayAvailability';
 import { Avatar } from '@/components/primitives/Avatar';
 import { DatePickerModal } from '@/components/primitives/DatePickerModal';
-import { formatDisplayName } from '@/lib/utils';
 import { StartEndTimePicker, defaultTimesForSlot } from '@/components/new-plan/StartEndTimePicker';
 import { hourToTimeString, slotForHour, fmtHour } from '@/lib/planSlotCoverage';
 import { TIME_SLOT_LABELS, ACTIVITY_CONFIG, type ActivityType, type TimeSlot } from '@/types/planner';
@@ -90,8 +89,6 @@ export default function QuickPlanScreen() {
   const friends = usePlannerStore((s) => s.friends);
   const addPlan = usePlannerStore((s) => s.addPlan);
   const forceRefresh = usePlannerStore((s) => s.forceRefresh);
-  const { data: friendData } = useFriendDashboardData();
-
   const [pickedDate, setPickedDate] = useState<string>(
     dateParam ?? format(new Date(), 'yyyy-MM-dd'),
   );
@@ -102,6 +99,12 @@ export default function QuickPlanScreen() {
   const slot = pickedSlot;
   const date = useMemo(() => parseISO(`${pickedDate}T12:00:00`), [pickedDate]);
   const slotMeta = TIME_SLOT_LABELS[slot];
+
+  // Suggest-mode friend picker: who's mutually free on THIS exact date, per
+  // slot. Date-accurate (not the 7-day dashboard window) so a weekend tapped
+  // from the Open Weekends card resolves the same friends the card showed
+  // (XPE-309). Log mode lists all friends, so it skips this fetch.
+  const { data: friendsBySlot } = useFriendDayAvailability(isLogMode ? undefined : pickedDate);
 
   // Optional specific start/end time (fractional hours) — off by default,
   // the coarse slot covers most quick plans (XPE-302).
@@ -151,25 +154,17 @@ export default function QuickPlanScreen() {
       ? friends
           .filter((f) => f.status === 'connected' && f.friendUserId)
           .map((f) => ({ userId: f.friendUserId!, name: f.name, avatar: f.avatar ?? null }))
-      : (friendData ?? [])
-          .filter((f) =>
-            f.overlapSlots.some((o) => o.date === pickedDate && o.slot === slot),
-          )
-          .map((f) => ({
-            userId: f.userId,
-            name: formatDisplayName({
-              firstName: f.firstName,
-              lastName: f.lastName,
-              displayName: f.displayName ?? '',
-            }) || 'Friend',
-            avatar: f.avatarUrl,
-          }));
+      : (friendsBySlot?.[slot] ?? []).map((f) => ({
+          userId: f.userId,
+          name: f.name,
+          avatar: f.avatarUrl,
+        }));
     return pool.sort(
       (a, b) =>
         (planFrequency[b.userId] ?? 0) - (planFrequency[a.userId] ?? 0) ||
         a.name.localeCompare(b.name),
     );
-  }, [isLogMode, friends, friendData, pickedDate, slot, planFrequency]);
+  }, [isLogMode, friends, friendsBySlot, slot, planFrequency]);
 
   const [selectedFriendIds, setSelectedFriendIds] = useState<Set<string>>(new Set());
   const [friendQuery, setFriendQuery] = useState('');
