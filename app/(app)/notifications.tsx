@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { useCallback, useState, useMemo } from 'react';
+import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatDistanceToNow } from 'date-fns';
 import * as Haptics from 'expo-haptics';
@@ -31,6 +31,7 @@ import {
 } from 'lucide-react-native';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { usePlannerStore } from '@/stores/plannerStore';
 import { ScreenHeader } from '@/components/primitives/ScreenHeader';
 import { TINT } from '@/lib/colors';
 import { resolveNotificationRoute } from '@/lib/notificationRoutes';
@@ -88,13 +89,59 @@ export default function NotificationsScreen() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { data: notifs, isLoading, refetch } = useNotifications(user?.id);
+  const friends = usePlannerStore((s) => s.friends);
   const [refreshing, setRefreshing] = useState(false);
   const [markingAll, setMarkingAll] = useState(false);
 
-  const unreadCount = useMemo(
-    () => (notifs ?? []).filter((n) => !n.read).length,
-    [notifs],
+  // Friends I'm already connected to → their pending friend-request
+  // notification is resolved and should drop off the list (XPE-298).
+  const connectedIds = useMemo(
+    () =>
+      new Set(
+        friends
+          .filter((f) => f.status === 'connected' && f.friendUserId)
+          .map((f) => f.friendUserId!),
+      ),
+    [friends],
   );
+
+  // A friend-request notification is "actioned" once its sender (actor_id) is
+  // now a connected friend. Only friend-requests drop off; informational
+  // notifications (vibe-check, general) stay and simply dim once read.
+  const isResolved = useCallback(
+    (n: any): boolean =>
+      n.type === 'friend-request' && !!n.actor_id && connectedIds.has(n.actor_id),
+    [connectedIds],
+  );
+
+  const visibleNotifs = useMemo(
+    () => (notifs ?? []).filter((n) => !isResolved(n)),
+    [notifs, isResolved],
+  );
+
+  const unreadCount = useMemo(
+    () => visibleNotifs.filter((n) => !n.read).length,
+    [visibleNotifs],
+  );
+
+  // Auto-mark resolved-but-unread friend requests as read so the tab badge
+  // clears too — you've already acted on them. Guarded so it runs once per id.
+  const autoReadIds = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const stale = (notifs ?? []).filter(
+      (n) => !n.read && isResolved(n) && !autoReadIds.current.has(n.id),
+    );
+    if (stale.length === 0) return;
+    stale.forEach((n) => autoReadIds.current.add(n.id));
+    (supabase as any)
+      .from('notifications')
+      .update({ read: true })
+      .in('id', stale.map((n) => n.id))
+      .then(() => {
+        queryClient.invalidateQueries({ queryKey: ['notifications'] });
+        queryClient.invalidateQueries({ queryKey: ['unread-notifications'] });
+      });
+  }, [notifs, isResolved, queryClient]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -179,7 +226,7 @@ export default function NotificationsScreen() {
             />
           }
         >
-          {!notifs || notifs.length === 0 ? (
+          {visibleNotifs.length === 0 ? (
             <View className="items-center justify-center py-20 px-8 gap-3">
               <Bell size={40} color="#929298" strokeWidth={1.5} />
               <Text className="font-sans text-sm text-muted-foreground text-center">
@@ -191,7 +238,7 @@ export default function NotificationsScreen() {
             </View>
           ) : (
             <View className="px-5 gap-2 pt-2">
-              {notifs.map((n: any) => {
+              {visibleNotifs.map((n: any) => {
                 const route = notificationToRoute(n);
                 const tappable = route !== null;
                 const isUnread = !n.read;
