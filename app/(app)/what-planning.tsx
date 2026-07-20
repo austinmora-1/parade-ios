@@ -40,12 +40,14 @@ interface PathProps {
   icon: React.ReactNode;
   title: string;
   onPress: () => void;
+  testID?: string;
 }
 
 /** Compact one-line menu item — icon tile + light title, no subtitle. */
-function PathButton({ icon, title, onPress }: PathProps) {
+function PathButton({ icon, title, onPress, testID }: PathProps) {
   return (
     <Pressable
+      testID={testID}
       onPress={onPress}
       className="flex-row items-center gap-3 px-2 py-2.5 rounded-2xl active:bg-white/10"
     >
@@ -115,16 +117,19 @@ export default function WhatPlanningScreen() {
           {/* ── Make a plan ── */}
           <GroupLabel>Make a plan</GroupLabel>
           <PathButton
+            testID="what-planning.find-time"
             icon={<CalendarCheck size={18} color={GREEN} strokeWidth={2} />}
             title="Find time with friends"
             onPress={() => go('/(app)/find-time')}
           />
           <PathButton
+            testID="what-planning.quick-plan"
             icon={<Zap size={18} color={GREEN} strokeWidth={2} />}
             title="Quick plan"
             onPress={() => go('/(app)/quick-plan?mode=log')}
           />
           <PathButton
+            testID="what-planning.new-trip"
             icon={<Plane size={18} color={GREEN} strokeWidth={2} />}
             title="Visit somewhere"
             onPress={() => go('/(app)/go-somewhere')}
@@ -133,16 +138,19 @@ export default function WhatPlanningScreen() {
           {/* ── Reach out ── */}
           <GroupLabel>Reach out</GroupLabel>
           <PathButton
+            testID="what-planning.vibe-check"
             icon={<Hand size={18} color={MARIGOLD} strokeWidth={2} />}
             title="Vibe check"
             onPress={() => go('/(app)/new-hang-request')}
           />
           <PathButton
+            testID="what-planning.find-people"
             icon={<Megaphone size={18} color={MARIGOLD} strokeWidth={2} />}
             title="Ask friends to join"
             onPress={() => go('/(app)/find-people')}
           />
           <PathButton
+            testID="what-planning.share-availability"
             icon={<CalendarRange size={18} color={MARIGOLD} strokeWidth={2} />}
             title="Share availability"
             onPress={() => go('/(app)/share-availability')}
@@ -151,6 +159,7 @@ export default function WhatPlanningScreen() {
           {/* ── Invite ── */}
           <GroupLabel>Invite</GroupLabel>
           <PathButton
+            testID="what-planning.add-friends"
             icon={<UserPlus size={18} color={EMBER} strokeWidth={2} />}
             title="Add friends"
             onPress={() => go('/(app)/add-friend')}

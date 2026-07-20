@@ -258,6 +258,7 @@ export default function LoginScreen() {
               {mode === 'phone' && (
                 <>
                   <Input
+                    testID="login.phone-input"
                     label="Phone number"
                     placeholder="+1 (555) 123-4567"
                     keyboardType="phone-pad"
@@ -270,6 +271,7 @@ export default function LoginScreen() {
                     <Text className="font-sans text-sm text-destructive">{error}</Text>
                   ) : null}
                   <Button
+                    testID="login.send-code"
                     label="Send code"
                     size="lg"
                     loading={loading}
@@ -309,6 +311,7 @@ export default function LoginScreen() {
                     <View className="flex-1 h-px bg-border" />
                   </View>
                   <AppleAuthentication.AppleAuthenticationButton
+                    testID="login.apple"
                     buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
                     buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
                     cornerRadius={12}
@@ -317,6 +320,7 @@ export default function LoginScreen() {
                   />
 
                   <Pressable
+                    testID="login.other-ways"
                     onPress={() => { setMode('signin'); clearError(); }}
                     hitSlop={6}
                     className="items-center"
@@ -332,6 +336,7 @@ export default function LoginScreen() {
               {mode === 'verify' && (
                 <>
                   <Input
+                    testID="login.otp-input"
                     label="Verification code"
                     placeholder="123456"
                     keyboardType="number-pad"
@@ -345,6 +350,7 @@ export default function LoginScreen() {
                     <Text className="font-sans text-sm text-destructive">{error}</Text>
                   ) : null}
                   <Button
+                    testID="login.verify"
                     label="Verify & continue"
                     size="lg"
                     loading={loading}
@@ -355,6 +361,7 @@ export default function LoginScreen() {
 
                   <View className="flex-row items-center justify-between">
                     <Pressable
+                      testID="login.change-number"
                       onPress={() => { setMode('phone'); clearError(); }}
                       hitSlop={6}
                     >
@@ -362,7 +369,7 @@ export default function LoginScreen() {
                         ← Change number
                       </Text>
                     </Pressable>
-                    <Pressable onPress={handleResend} disabled={resending} hitSlop={6}>
+                    <Pressable testID="login.resend-code" onPress={handleResend} disabled={resending} hitSlop={6}>
                       <Text className="font-sans text-sm text-primary font-medium">
                         {resending ? 'Sending…' : 'Resend code'}
                       </Text>
@@ -379,7 +386,7 @@ export default function LoginScreen() {
                       Check your inbox — we sent a reset link to{' '}
                       <Text className="text-primary font-semibold">{email.trim()}</Text>.
                     </Text>
-                    <Pressable onPress={() => { setMode('signin'); setResetSent(false); }} hitSlop={6}>
+                    <Pressable testID="login.back-to-signin" onPress={() => { setMode('signin'); setResetSent(false); }} hitSlop={6}>
                       <Text className="font-sans text-sm text-primary font-semibold">
                         ← Back to sign in
                       </Text>
@@ -391,6 +398,7 @@ export default function LoginScreen() {
                     <View className="gap-4">
                       {mode === 'signup' && (
                         <Input
+                          testID="login.username-input"
                           label="Username"
                           placeholder="how friends see you"
                           autoCapitalize="none"
@@ -400,6 +408,7 @@ export default function LoginScreen() {
                         />
                       )}
                       <Input
+                        testID="login.email-input"
                         label="Email"
                         placeholder="you@example.com"
                         keyboardType="email-address"
@@ -410,6 +419,7 @@ export default function LoginScreen() {
                       />
                       {mode !== 'forgot' && (
                         <Input
+                          testID="login.password-input"
                           label="Password"
                           placeholder="••••••••"
                           secureTextEntry
@@ -423,6 +433,7 @@ export default function LoginScreen() {
                     {/* Forgot password link (sign-in only) */}
                     {mode === 'signin' && (
                       <Pressable
+                        testID="login.forgot-password"
                         onPress={() => { setMode('forgot'); clearError(); }}
                         hitSlop={6}
                         style={{ marginTop: -4, alignSelf: 'flex-end' }}
@@ -441,6 +452,7 @@ export default function LoginScreen() {
                     {/* Primary CTA */}
                     {mode === 'signin' && (
                       <Button
+                        testID="login.sign-in"
                         label="Sign in"
                         size="lg"
                         loading={loading}
@@ -451,6 +463,7 @@ export default function LoginScreen() {
                     )}
                     {mode === 'signup' && (
                       <Button
+                        testID="login.sign-up"
                         label="Create account"
                         size="lg"
                         loading={loading}
@@ -461,6 +474,7 @@ export default function LoginScreen() {
                     )}
                     {mode === 'forgot' && (
                       <Button
+                        testID="login.send-reset"
                         label="Send reset link"
                         size="lg"
                         loading={loading}
@@ -479,6 +493,7 @@ export default function LoginScreen() {
                           <View className="flex-1 h-px bg-border" />
                         </View>
                         <AppleAuthentication.AppleAuthenticationButton
+                          testID="login.apple"
                           buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
                           buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
                           cornerRadius={12}
@@ -491,6 +506,7 @@ export default function LoginScreen() {
                     {/* Back to phone */}
                     {mode !== 'forgot' && (
                       <Pressable
+                        testID="login.use-phone"
                         onPress={() => { setMode('phone'); clearError(); }}
                         hitSlop={6}
                         className="items-center"
@@ -504,6 +520,7 @@ export default function LoginScreen() {
                     {/* Back link for forgot */}
                     {mode === 'forgot' && (
                       <Pressable
+                        testID="login.back-to-signin"
                         onPress={() => { setMode('signin'); clearError(); }}
                         hitSlop={6}
                         className="items-center"
@@ -517,6 +534,7 @@ export default function LoginScreen() {
                     {/* In-card sign-up toggle */}
                     {mode === 'signup' && (
                       <Pressable
+                        testID="login.to-signin"
                         onPress={() => { setMode('signin'); clearError(); }}
                         hitSlop={6}
                         className="items-center"
@@ -535,6 +553,7 @@ export default function LoginScreen() {
             {/* ── Below-card sign-up toggle (sign-in mode only) ────────── */}
             {mode === 'signin' && (
               <Pressable
+                testID="login.to-signup"
                 onPress={() => { setMode('signup'); clearError(); }}
                 hitSlop={6}
               >

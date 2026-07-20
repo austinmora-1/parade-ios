@@ -34,6 +34,18 @@ const DARK = {
   border:   'rgba(59, 155, 104, 0.18)', // matches the active pill
 };
 
+/**
+ * Stable E2E testIDs per tab, keyed by the expo-router route name. Kept in one
+ * place so the mapping stays obvious; falls back to `tabs.<route>` for any tab
+ * added later. testID is metadata only — it does not affect layout or behavior.
+ */
+const TAB_TEST_IDS: Record<string, string> = {
+  index: 'tabs.home',
+  plans: 'tabs.plans',
+  friends: 'tabs.friends',
+  profile: 'tabs.profile',
+};
+
 const BAR_HEIGHT = 52;
 const SIDE_MARGIN = 20;
 const INNER_PADDING = 6;
@@ -79,6 +91,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
     >
       {/* Standalone create FAB — floats beside the nav pill */}
       <Pressable
+        testID="tabs.create"
         accessibilityRole="button"
         accessibilityLabel="Create"
         onPress={() => router.push('/(app)/what-planning')}
@@ -127,6 +140,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
             return (
               <TabButton
                 key={route.key}
+                testID={TAB_TEST_IDS[route.name] ?? `tabs.${route.name}`}
                 focused={focused}
                 onPress={onPress}
                 onLongPress={onLongPress}
@@ -147,12 +161,14 @@ function TabButton({
   onPress,
   onLongPress,
   accessibilityLabel,
+  testID,
   children,
 }: {
   focused: boolean;
   onPress: () => void;
   onLongPress: () => void;
   accessibilityLabel?: string;
+  testID?: string;
   children: React.ReactNode;
 }) {
   const iconStyle = useAnimatedStyle(() => ({
@@ -161,6 +177,7 @@ function TabButton({
 
   return (
     <Pressable
+      testID={testID}
       accessibilityRole="button"
       accessibilityState={focused ? { selected: true } : {}}
       accessibilityLabel={accessibilityLabel}
