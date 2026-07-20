@@ -147,36 +147,56 @@ async function reset(fx) {
   const ids = Object.values(fx).map((f) => f.id);
   log(`\n🧹 reset ${GO ? '(LIVE)' : '(dry-run — pass --go to execute)'} for: ${labels(fx)}\n`);
 
-  // Plans owned by fixtures → delete children first, then plans.
+  // Plans owned by fixtures → delete grandchildren/children first, then plans.
   const planIds = await ownedIds('plans', 'user_id', ids);
   if (planIds.length) {
-    for (const child of [
+    // proposal votes hang off options (option_id), not plan_id.
+    const optionIds = await ownedIds('plan_proposal_options', 'plan_id', planIds);
+    if (optionIds.length) await delIn('plan_proposal_votes', 'option_id', optionIds);
+    await delIn('plan_proposal_options', 'plan_id', planIds);
+    // change responses hang off change_request_id, not plan_id.
+    const changeReqIds = await ownedIds('plan_change_requests', 'plan_id', planIds);
+    if (changeReqIds.length) await delIn('plan_change_responses', 'change_request_id', changeReqIds);
+    await delIn('plan_change_requests', 'plan_id', planIds);
+    for (const [t, c] of [
       ['plan_participants', 'plan_id'],
       ['plan_invites', 'plan_id'],
       ['plan_comments', 'plan_id'],
-      ['plan_change_requests', 'plan_id'],
-      ['plan_proposal_options', 'plan_id'],
-      ['plan_proposal_votes', 'plan_id'],
       ['plan_photos', 'plan_id'],
       ['plan_participant_requests', 'plan_id'],
-    ]) {
-      await delIn(child[0], child[1], planIds);
-    }
+    ]) await delIn(t, c, planIds);
   }
-  // Rows where a fixture is a participant/commenter on someone else's plan.
+  // Rows where a fixture participates/votes/comments on someone else's plan.
   await delIn('plan_participants', 'friend_id', ids);
   await delIn('plan_comments', 'user_id', ids);
+  await delIn('plan_proposal_votes', 'user_id', ids);
+  await delIn('recurring_plans', 'user_id', ids);
   await delIn('plans', 'user_id', ids);
 
-  // Trips owned by fixtures → children then trips.
+  // Trips owned by fixtures → participants then trips.
   const tripIds = await ownedIds('trips', 'user_id', ids);
-  if (tripIds.length) {
-    await delIn('trip_participants', 'trip_id', tripIds);
-    await delIn('trip_activity_suggestions', 'trip_id', tripIds);
-    await delIn('trip_activity_votes', 'trip_id', tripIds);
-  }
-  await delIn('trip_participants', 'user_id', ids);
+  if (tripIds.length) await delIn('trip_participants', 'trip_id', tripIds);
+  await delIn('trip_participants', 'friend_user_id', ids); // fixture in someone else's trip
   await delIn('trips', 'user_id', ids);
+
+  // Trip proposals created by fixtures → votes/suggestions/dates/invites/participants then proposals.
+  const propIds = await ownedIds('trip_proposals', 'created_by', ids);
+  if (propIds.length) {
+    const dateIds = await ownedIds('trip_proposal_dates', 'proposal_id', propIds);
+    if (dateIds.length) await delIn('trip_proposal_votes', 'date_id', dateIds);
+    await delIn('trip_proposal_dates', 'proposal_id', propIds);
+    const suggIds = await ownedIds('trip_activity_suggestions', 'proposal_id', propIds);
+    if (suggIds.length) await delIn('trip_activity_votes', 'suggestion_id', suggIds);
+    await delIn('trip_activity_suggestions', 'proposal_id', propIds);
+    await delIn('trip_proposal_invites', 'proposal_id', propIds);
+    await delIn('trip_proposal_participants', 'proposal_id', propIds);
+    await delIn('trip_proposals', 'id', propIds);
+  }
+  // Fixture's votes/suggestions/participation on someone else's proposal.
+  await delIn('trip_proposal_votes', 'user_id', ids);
+  await delIn('trip_activity_votes', 'user_id', ids);
+  await delIn('trip_activity_suggestions', 'suggested_by', ids);
+  await delIn('trip_proposal_participants', 'user_id', ids);
 
   // Open invites owned by fixtures → responses then invites.
   const openIds = await ownedIds('open_invites', 'user_id', ids);
@@ -187,15 +207,14 @@ async function reset(fx) {
   // Pods owned by fixtures → members then pods.
   const podIds = await ownedIds('pods', 'user_id', ids);
   if (podIds.length) await delIn('pod_members', 'pod_id', podIds);
-  await delIn('pod_members', 'user_id', ids);
+  await delIn('pod_members', 'friend_user_id', ids); // fixture as a member of someone else's pod
   await delIn('pods', 'user_id', ids);
 
   // Standalone social rows.
   await delIn('hang_requests', 'sender_id', ids);
   await delIn('hang_requests', 'user_id', ids);
   await delIn('friendships', 'user_id', ids);
-  await delIn('friendships', 'friend_id', ids);
-  await delIn('trip_proposal_participants', 'user_id', ids);
+  await delIn('friendships', 'friend_user_id', ids);
   await delIn('weekly_intentions', 'user_id', ids);
   await delIn('notifications', 'user_id', ids);
 
@@ -245,14 +264,25 @@ async function seed(fx) {
   const need = ['olivia', 'ravi'];
   for (const k of need) if (!fx[k]) die(`seed needs fixture "${k}" to exist — create + sign in that account first.`);
 
-  // Olivia ↔ Ravi friendship (connected, both directions).
-  await upsert('friendships',
-    [
-      { user_id: fx.olivia.id, friend_id: fx.ravi.id, status: 'connected' },
-      { user_id: fx.ravi.id, friend_id: fx.olivia.id, status: 'connected' },
-    ],
-    'user_id,friend_id',
-  );
+  // Friendships (column is friend_user_id, not friend_id). The unique index is
+  // PARTIAL (WHERE friend_user_id IS NOT NULL), which upsert(onConflict) can't
+  // target — so delete the fixtures' outgoing rows first, then insert. Idempotent
+  // without relying on ON CONFLICT.
+  //   Olivia ↔ Ravi connected (both directions); Liam → Olivia pending (incoming-request flow).
+  const friendRows = [
+    { user_id: fx.olivia.id, friend_user_id: fx.ravi.id, status: 'connected' },
+    { user_id: fx.ravi.id, friend_user_id: fx.olivia.id, status: 'connected' },
+  ];
+  if (fx.liam) friendRows.push({ user_id: fx.liam.id, friend_user_id: fx.olivia.id, status: 'pending' });
+  const friendUserIds = [...new Set(friendRows.map((r) => r.user_id))];
+  if (!GO) {
+    log(`   [dry] would clear + insert ${friendRows.length} friendships for fixtures`);
+  } else {
+    const { error: delErr } = await supabase.from('friendships').delete().in('user_id', friendUserIds);
+    if (delErr) log(`   ⚠️  friendships clear: ${delErr.message}`);
+    const { error: insErr } = await supabase.from('friendships').insert(friendRows);
+    log(insErr ? `   ⚠️  friendships: ${insErr.message}` : `   ✓ inserted ${friendRows.length} friendships`);
+  }
 
   // Ravi free next Saturday afternoon (known window for overlap tests).
   const sat = nextSaturdayISO();
@@ -265,14 +295,6 @@ async function seed(fx) {
     }],
     'user_id,date',
   );
-
-  // Liam → Olivia pending friend request (for the incoming-request flow).
-  if (fx.liam) {
-    await upsert('friendships',
-      [{ user_id: fx.liam.id, friend_id: fx.olivia.id, status: 'pending' }],
-      'user_id,friend_id',
-    );
-  }
 
   log(`\n${GO ? '✅ seed complete.' : 'ℹ️  dry-run only. Re-run with --go to apply.'}\n`);
   log('   NOTE: extend seed() with the plan/trip fixtures your journeys need.');
