@@ -26,7 +26,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { addDays, format, isSaturday, isSunday } from 'date-fns';
+import { addDays, format, isSaturday, isSunday, differenceInCalendarDays, startOfDay } from 'date-fns';
 import * as Haptics from 'expo-haptics';
 import * as WebBrowser from 'expo-web-browser';
 import { useQuery } from '@tanstack/react-query';
@@ -35,12 +35,18 @@ import {
   Send,
   Check,
   CalendarRange,
+  Calendar,
   Users,
   Eye,
   Globe,
 } from 'lucide-react-native';
 import { ShareChannelGrid } from '@/components/share/ShareChannelGrid';
-import { AvailabilityPreview } from '@/components/share/AvailabilityPreview';
+import {
+  AvailabilityPreview,
+  grainForSpan,
+  GRAIN_HINT,
+} from '@/components/share/AvailabilityPreview';
+import { DatePickerModal } from '@/components/primitives/DatePickerModal';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlannerStore } from '@/stores/plannerStore';
@@ -52,12 +58,12 @@ import { PARADE_GREEN, ELEPHANT } from '@/lib/colors';
 
 const SHARE_DOMAIN = 'https://helloparade.app';
 
-/** Range options — view keys match the PWA share page's ?view= param. Each
- *  range shares availability at a different granularity (XPE-312). */
+/** Preset ranges — view keys match the PWA share page's ?view= param. Their
+ *  share granularity is derived from the span, same as a custom range. */
 const RANGES = [
-  { view: '1w', label: '1 week', days: 7, grain: 'time slots' },
-  { view: '1m', label: '4 weeks', days: 28, grain: 'open days' },
-  { view: '3m', label: '3 months', days: 91, grain: 'open weekends' },
+  { view: '1w', label: '1 week', days: 7 },
+  { view: '1m', label: '4 weeks', days: 28 },
+  { view: '3m', label: '3 months', days: 91 },
 ] as const;
 type RangeView = (typeof RANGES)[number]['view'];
 
@@ -69,16 +75,51 @@ export default function ShareAvailabilityScreen() {
   const defaultSettings = useAvailabilityStore((s) => s.defaultSettings);
   const loadAvailabilityForRange = useAvailabilityStore((s) => s.loadAvailabilityForRange);
 
-  const [view, setView] = useState<RangeView>('3m');
+  const today = useMemo(() => startOfDay(new Date()), []);
+  const [view, setView] = useState<RangeView | 'custom'>('3m');
   const [previewOpen, setPreviewOpen] = useState(false);
-  const range = RANGES.find((r) => r.view === view)!;
+  const [customStart, setCustomStart] = useState<Date>(today);
+  const [customEnd, setCustomEnd] = useState<Date>(() => addDays(today, 13));
+  const [picker, setPicker] = useState<null | 'start' | 'end'>(null);
 
-  // Make sure real availability rows for the full 3-month horizon are loaded so
-  // the in-app preview wheels aren't all schedule-derived defaults (XPE-312).
+  // Resolve the selection (preset or custom) into a concrete range + share
+  // granularity. Granularity auto-derives from the span (XPE-312): a week →
+  // time slots, up to a month → open days, longer → open weekends.
+  const resolved = useMemo(() => {
+    if (view === 'custom') {
+      const start = customStart;
+      const end = customEnd >= customStart ? customEnd : customStart;
+      const span = differenceInCalendarDays(end, start) + 1;
+      return {
+        custom: true as const,
+        grain: grainForSpan(span),
+        start,
+        end,
+        label: `${format(start, 'MMM d')} – ${format(end, 'MMM d')}`,
+      };
+    }
+    const preset = RANGES.find((r) => r.view === view)!;
+    return {
+      custom: false as const,
+      grain: grainForSpan(preset.days),
+      start: today,
+      end: addDays(today, preset.days - 1),
+      label: preset.label,
+    };
+  }, [view, customStart, customEnd, today]);
+
+  /** Human phrase for messages: "over the next 4 weeks" / "for Jul 21 – Aug 3". */
+  const rangePhrase = resolved.custom ? `for ${resolved.label}` : `over the next ${resolved.label}`;
+
+  // Load real availability rows across the visible horizon so preview wheels
+  // aren't all schedule-derived defaults — covers custom ranges that reach
+  // past the default 3-month window too.
   useEffect(() => {
     if (!user?.id) return;
-    loadAvailabilityForRange(new Date(), addDays(new Date(), 92), user.id).catch(() => {});
-  }, [user?.id, loadAvailabilityForRange]);
+    const horizon = addDays(today, 92);
+    const end = resolved.end > horizon ? resolved.end : horizon;
+    loadAvailabilityForRange(today, end, user.id).catch(() => {});
+  }, [user?.id, resolved.end, today, loadAvailabilityForRange]);
 
   // share_code + display name for the link and the notification copy
   const { data: me } = useQuery({
@@ -95,19 +136,25 @@ export default function ShareAvailabilityScreen() {
     },
   });
   const myName = me?.first_name || me?.display_name || 'Your friend';
+  // Preset ranges pass ?view=1w|1m|3m; a custom range passes explicit dates so
+  // the web page can render the exact same window.
+  const viewParam = resolved.custom
+    ? `custom&start=${format(resolved.start, 'yyyy-MM-dd')}&end=${format(resolved.end, 'yyyy-MM-dd')}`
+    : view;
   const shareUrl = me?.share_code
-    ? `${SHARE_DOMAIN}/share/${me.share_code}?view=${view}&src=ios`
+    ? `${SHARE_DOMAIN}/share/${me.share_code}?view=${viewParam}&src=ios`
     : null;
 
   // One-line availability summary matched to the range's granularity (XPE-312):
-  // weekends for 3 months, all days otherwise. A day counts as free when any
-  // slot is open; days without a row fall back to the schedule-derived default.
+  // weekend days when sharing weekends, all days otherwise. A day counts as
+  // free when any slot is open; days without a row use the schedule default.
   const summary = useMemo(() => {
-    const weekendsOnly = view === '3m';
+    const weekendsOnly = resolved.grain === 'weekends';
     let free = 0;
     let total = 0;
-    for (let i = 0; i < range.days; i++) {
-      const d = addDays(new Date(), i);
+    const n = differenceInCalendarDays(resolved.end, resolved.start) + 1;
+    for (let i = 0; i < n && i < 400; i++) {
+      const d = addDays(resolved.start, i);
       if (weekendsOnly && !isSaturday(d) && !isSunday(d)) continue;
       const dateStr = format(d, 'yyyy-MM-dd');
       const day = availabilityMap[dateStr] ?? createDefaultAvailability(d, defaultSettings);
@@ -115,11 +162,11 @@ export default function ShareAvailabilityScreen() {
       if (Object.values(day.slots).some(Boolean)) free += 1;
     }
     const noun = weekendsOnly ? 'weekend days' : 'days';
-    return `${free} of ${total} ${noun} free over the next ${range.label}`;
-  }, [view, range.days, range.label, availabilityMap, defaultSettings]);
+    return `${free} of ${total} ${noun} free ${rangePhrase}`;
+  }, [resolved, rangePhrase, availabilityMap, defaultSettings]);
 
   // ── Path 1: omni-channel link sharing (channel grid below) ────────────────
-  const shareMessage = `Here's when I'm free over the next ${range.label} — let's make a plan!`;
+  const shareMessage = `Here's when I'm free ${rangePhrase} — let's make a plan!`;
   const emailSubject = `${myName} shared their Parade availability`;
 
   // In-app preview — the granularity-adaptive view of my availability (XPE-312).
@@ -167,7 +214,7 @@ export default function ShareAvailabilityScreen() {
     try {
       const targets = [...selectedIds];
       const title = `📅 ${myName} shared their availability`;
-      const body = `See when ${myName} is free over the next ${range.label} and make a plan.`;
+      const body = `See when ${myName} is free ${rangePhrase} and make a plan.`;
       // The edge function writes the in-app notifications row per recipient
       // (recipient's notifications screen routes /friends/<id> urls to the
       // friend profile = my availability) AND delivers the device push —
@@ -179,7 +226,12 @@ export default function ShareAvailabilityScreen() {
           body,
           url: `/friends/${user.id}`,
           type: 'availability-share',
-          data: { share_code: me?.share_code ?? null, view },
+          data: {
+            share_code: me?.share_code ?? null,
+            view: resolved.custom ? 'custom' : view,
+            start: format(resolved.start, 'yyyy-MM-dd'),
+            end: format(resolved.end, 'yyyy-MM-dd'),
+          },
         },
       });
       if (error) throw error;
@@ -197,7 +249,7 @@ export default function ShareAvailabilityScreen() {
     } finally {
       setSending(false);
     }
-  }, [user?.id, selectedIds, sending, myName, range.label, me?.share_code, view]);
+  }, [user?.id, selectedIds, sending, myName, rangePhrase, me?.share_code, view, resolved]);
 
   return (
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
@@ -244,12 +296,55 @@ export default function ShareAvailabilityScreen() {
                       selected ? 'text-white/80' : 'text-muted-foreground'
                     }`}
                   >
-                    {r.grain}
+                    {GRAIN_HINT[grainForSpan(r.days)]}
                   </Text>
                 </Pressable>
               );
             })}
           </View>
+
+          {/* Custom range — granularity still auto-adapts to the span (XPE-312) */}
+          <Pressable
+            onPress={() => { Haptics.selectionAsync(); setView('custom'); }}
+            className={`mt-2 flex-row items-center justify-center gap-2 rounded-xl border px-3 py-2.5 active:opacity-70 ${
+              view === 'custom' ? 'bg-primary border-primary' : 'bg-card border-border/40'
+            }`}
+          >
+            <Calendar size={14} color={view === 'custom' ? '#FFFFFF' : PARADE_GREEN} strokeWidth={2} />
+            <Text
+              className={`font-sans text-[14px] font-semibold ${
+                view === 'custom' ? 'text-white' : 'text-foreground'
+              }`}
+            >
+              Custom dates
+            </Text>
+            {view === 'custom' && (
+              <Text className="font-sans text-[11px] text-white/80">· {GRAIN_HINT[resolved.grain]}</Text>
+            )}
+          </Pressable>
+
+          {/* Custom start / end pickers */}
+          {view === 'custom' && (
+            <View className="flex-row gap-2 mt-2">
+              {([
+                { key: 'start' as const, label: 'Start', date: resolved.start },
+                { key: 'end' as const, label: 'End', date: resolved.end },
+              ]).map((f) => (
+                <Pressable
+                  key={f.key}
+                  onPress={() => { Haptics.selectionAsync(); setPicker(f.key); }}
+                  className="flex-1 rounded-xl border border-border/40 bg-card px-3 py-2.5 active:opacity-70"
+                >
+                  <Text className="font-sans text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    {f.label}
+                  </Text>
+                  <Text className="font-sans text-[15px] font-semibold text-foreground mt-0.5">
+                    {format(f.date, 'EEE, MMM d')}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
         </View>
 
         {/* One-line availability summary (no per-day list) */}
@@ -400,7 +495,7 @@ export default function ShareAvailabilityScreen() {
               <View className="items-center">
                 <Text className="font-display text-lg text-foreground">What friends will see</Text>
                 <Text className="font-sans text-[11px] text-muted-foreground">
-                  {range.label} · {range.grain}
+                  {resolved.label} · {GRAIN_HINT[resolved.grain]}
                 </Text>
               </View>
               <View className="w-9 h-9" />
@@ -408,7 +503,9 @@ export default function ShareAvailabilityScreen() {
 
             <ScrollView className="flex-1" contentContainerClassName="px-5 py-5 gap-3 pb-10">
               <AvailabilityPreview
-                view={view}
+                grain={resolved.grain}
+                start={resolved.start}
+                end={resolved.end}
                 availabilityMap={availabilityMap}
                 defaultSettings={defaultSettings}
                 plans={plans}
@@ -430,6 +527,24 @@ export default function ShareAvailabilityScreen() {
           </SafeAreaView>
         </View>
       )}
+
+      {/* Custom-range date picker (start / end), clamped so end ≥ start */}
+      <DatePickerModal
+        visible={picker !== null}
+        onClose={() => setPicker(null)}
+        selected={picker === 'end' ? customEnd : customStart}
+        onSelect={(day) => {
+          const d = startOfDay(day);
+          if (picker === 'start') {
+            setCustomStart(d);
+            if (customEnd < d) setCustomEnd(d);
+          } else if (picker === 'end') {
+            setCustomEnd(d);
+            if (d < customStart) setCustomStart(d);
+          }
+          setPicker(null);
+        }}
+      />
     </SafeAreaView>
   );
 }

@@ -1,17 +1,24 @@
 /**
  * AvailabilityPreview — the granularity-adaptive view of MY availability that
  * a recipient sees, rendered in-app so the sharer can preview it before sending
- * (XPE-312). The detail level tracks the chosen range, matching the reporter's
- * spec:
- *   • 1 week   → per-day DateDial wheels + the exact free time slots
- *   • 4 weeks  → open days: a week-by-week grid of day wheels (no slot detail)
- *   • 3 months → open weekends: one card per weekend with Sat/Sun wheels
+ * (XPE-312). The detail level tracks the span of the chosen range:
+ *   • ≤ 1 week   → 'slots'   : per-day DateDial wheels + the exact free slots
+ *   • ≤ 1 month  → 'days'    : week-by-week grid of day wheels (no slot detail)
+ *   • longer     → 'weekends': one card per weekend with Sat/Sun wheels
  *
- * Wheels reuse computeDayWheel/DateDial so the colors and "open/mostly open/
+ * Range-driven (start/end) so it serves both the presets and a custom date
+ * range. Wheels reuse computeDayWheel/DateDial so colors and "open/mostly open/
  * booked" semantics are identical to the Plans tab.
  */
 import { View, Text } from 'react-native';
-import { addDays, format, startOfWeek, isSameMonth } from 'date-fns';
+import {
+  addDays,
+  format,
+  startOfWeek,
+  isSameMonth,
+  differenceInCalendarDays,
+  isSaturday,
+} from 'date-fns';
 import { DateDial, computeDayWheel, type DayWheel } from '@/components/plans/DateDial';
 import { createDefaultAvailability } from '@/stores/helpers/mapAvailability';
 import { SLOT_OPTIONS, isSocialSlot } from '@/lib/socialSlots';
@@ -19,35 +26,54 @@ import { PARADE_GREEN, TINT } from '@/lib/colors';
 import type { DayAvailability, TimeSlot, Plan } from '@/types/planner';
 import type { DefaultAvailabilitySettings } from '@/stores/helpers/types';
 
-export type ShareRangeView = '1w' | '1m' | '3m';
+export type ShareGrain = 'slots' | 'days' | 'weekends';
+
+/**
+ * Pick the sharing granularity from a span length (inclusive day count), per
+ * the XPE-312 spec: a week shares time slots, up to a month shares open days,
+ * anything longer shares open weekends.
+ */
+export function grainForSpan(days: number): ShareGrain {
+  if (days <= 7) return 'slots';
+  if (days <= 31) return 'days';
+  return 'weekends';
+}
+
+export const GRAIN_HINT: Record<ShareGrain, string> = {
+  slots: 'time slots',
+  days: 'open days',
+  weekends: 'open weekends',
+};
 
 interface PreviewProps {
-  view: ShareRangeView;
+  grain: ShareGrain;
+  /** Inclusive range. */
+  start: Date;
+  end: Date;
   availabilityMap: Record<string, DayAvailability>;
   defaultSettings: DefaultAvailabilitySettings | null;
   plans: Plan[];
 }
+type Ctx = Pick<PreviewProps, 'availabilityMap' | 'defaultSettings' | 'plans'>;
 
-/** Resolve one day's DayAvailability (real row, else schedule-derived default). */
-function dayAvailFor(
-  date: Date,
-  map: Record<string, DayAvailability>,
-  settings: DefaultAvailabilitySettings | null,
-): DayAvailability {
-  const key = format(date, 'yyyy-MM-dd');
-  return map[key] ?? createDefaultAvailability(date, settings ?? undefined);
+/** Midnight-anchored day list for an inclusive range (capped for safety). */
+function eachDay(start: Date, end: Date): Date[] {
+  const out: Date[] = [];
+  let cur = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const last = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+  while (cur <= last && out.length < 400) {
+    out.push(cur);
+    cur = addDays(cur, 1);
+  }
+  return out;
 }
 
 /** Build the DateDial wheel for a day, mirroring the Plans-tab computation. */
-function wheelFor(
-  date: Date,
-  map: Record<string, DayAvailability>,
-  settings: DefaultAvailabilitySettings | null,
-  plans: Plan[],
-): { wheel: DayWheel; dayAvail: DayAvailability } {
+function wheelFor(date: Date, ctx: Ctx): { wheel: DayWheel; dayAvail: DayAvailability } {
   const key = format(date, 'yyyy-MM-dd');
-  const dayAvail = dayAvailFor(date, map, settings);
-  const dayPlans = plans
+  const dayAvail =
+    ctx.availabilityMap[key] ?? createDefaultAvailability(date, ctx.defaultSettings ?? undefined);
+  const dayPlans = ctx.plans
     .filter((p) => {
       const d = p.date instanceof Date ? p.date : new Date(p.date);
       return format(d, 'yyyy-MM-dd') === key && p.blocksAvailability !== false;
@@ -56,31 +82,28 @@ function wheelFor(
   const wheel = computeDayWheel({
     date,
     dayAvail,
-    settings,
+    settings: ctx.defaultSettings,
     dayPlans,
-    // Away/travel coloring depends only on the explicit location flag here —
-    // trip-day city resolution lives on the Plans tab and isn't needed for a
-    // read-only availability preview.
+    // Away/travel coloring uses only the explicit location flag here — trip-day
+    // city resolution lives on the Plans tab and isn't needed for a read-only
+    // availability preview.
     away: dayAvail.locationStatus === 'away',
   });
   return { wheel, dayAvail };
 }
 
-/** The free social slots for a day, in chronological order. */
+/** The free social slots for a day, chronological. */
 function freeSocialSlots(date: Date, dayAvail: DayAvailability): TimeSlot[] {
-  return SLOT_OPTIONS
-    .filter((o) => dayAvail.slots[o.id] && isSocialSlot(date, o.id))
-    .map((o) => o.id);
+  return SLOT_OPTIONS.filter((o) => dayAvail.slots[o.id] && isSocialSlot(date, o.id)).map((o) => o.id);
 }
 
-// ── 1 week: day rows with wheel + free-slot chips ─────────────────────────────
+// ── slots: day rows with wheel + free-slot chips ──────────────────────────────
 
-function WeekSlotsView({ availabilityMap, defaultSettings, plans }: Omit<PreviewProps, 'view'>) {
-  const days = Array.from({ length: 7 }, (_, i) => addDays(new Date(), i));
+function SlotsView({ start, end, ...ctx }: { start: Date; end: Date } & Ctx) {
   return (
     <View className="gap-2.5">
-      {days.map((day) => {
-        const { wheel, dayAvail } = wheelFor(day, availabilityMap, defaultSettings, plans);
+      {eachDay(start, end).map((day) => {
+        const { wheel, dayAvail } = wheelFor(day, ctx);
         const free = freeSocialSlots(day, dayAvail);
         return (
           <View
@@ -123,14 +146,16 @@ function WeekSlotsView({ availabilityMap, defaultSettings, plans }: Omit<Preview
   );
 }
 
-// ── 4 weeks: open days, a wheel grid per week ─────────────────────────────────
+// ── days: open days, a wheel grid per week ────────────────────────────────────
 
-function OpenDaysView({ availabilityMap, defaultSettings, plans }: Omit<PreviewProps, 'view'>) {
-  const today = new Date();
-  const firstWeekStart = startOfWeek(today, { weekStartsOn: 1 }); // Monday
-  const weeks = Array.from({ length: 4 }, (_, w) =>
+function DaysView({ start, end, ...ctx }: { start: Date; end: Date } & Ctx) {
+  const firstWeekStart = startOfWeek(start, { weekStartsOn: 1 }); // Monday
+  const weekCount = Math.ceil((differenceInCalendarDays(end, firstWeekStart) + 1) / 7);
+  const weeks = Array.from({ length: Math.max(1, weekCount) }, (_, w) =>
     Array.from({ length: 7 }, (_, d) => addDays(firstWeekStart, w * 7 + d)),
   );
+  const startKey = format(start, 'yyyy-MM-dd');
+  const endKey = format(end, 'yyyy-MM-dd');
   return (
     <View className="gap-3">
       {weeks.map((week, wi) => (
@@ -140,10 +165,11 @@ function OpenDaysView({ availabilityMap, defaultSettings, plans }: Omit<PreviewP
           </Text>
           <View className="flex-row justify-between">
             {week.map((day) => {
-              const past = day < today && format(day, 'yyyy-MM-dd') !== format(today, 'yyyy-MM-dd');
-              const { wheel } = wheelFor(day, availabilityMap, defaultSettings, plans);
+              const key = format(day, 'yyyy-MM-dd');
+              const outside = key < startKey || key > endKey;
+              const { wheel } = wheelFor(day, ctx);
               return (
-                <View key={format(day, 'yyyy-MM-dd')} style={{ opacity: past ? 0.3 : 1 }}>
+                <View key={key} style={{ opacity: outside ? 0.28 : 1 }}>
                   <DateDial
                     status={wheel.status}
                     fill={wheel.fill}
@@ -162,22 +188,24 @@ function OpenDaysView({ availabilityMap, defaultSettings, plans }: Omit<PreviewP
   );
 }
 
-// ── 3 months: open weekends, one card per weekend ─────────────────────────────
+// ── weekends: one card per weekend ────────────────────────────────────────────
 
-function OpenWeekendsView({ availabilityMap, defaultSettings, plans }: Omit<PreviewProps, 'view'>) {
-  const today = new Date();
-  // This weekend's Saturday, then every following weekend for ~3 months.
-  const firstSat = startOfWeek(today, { weekStartsOn: 6 }); // Sat of the current week
-  const weekends = Array.from({ length: 13 }, (_, i) => {
+function WeekendsView({ start, end, ...ctx }: { start: Date; end: Date } & Ctx) {
+  // First Saturday on or before the start, then every following weekend that
+  // still intersects [start, end].
+  const firstSat = startOfWeek(start, { weekStartsOn: 6 });
+  const weekends: { sat: Date; sun: Date }[] = [];
+  for (let i = 0; i < 60; i++) {
     const sat = addDays(firstSat, i * 7);
-    return { sat, sun: addDays(sat, 1) };
-  }).filter((w) => w.sun >= today); // drop a weekend already fully past
-
+    const sun = addDays(sat, 1);
+    if (sat > end) break;
+    if (sun >= start) weekends.push({ sat, sun });
+  }
   return (
     <View className="gap-2.5">
       {weekends.map(({ sat, sun }) => {
-        const s = wheelFor(sat, availabilityMap, defaultSettings, plans);
-        const u = wheelFor(sun, availabilityMap, defaultSettings, plans);
+        const s = wheelFor(sat, ctx);
+        const u = wheelFor(sun, ctx);
         const anyFree = s.wheel.free > 0 || u.wheel.free > 0;
         return (
           <View
@@ -204,10 +232,7 @@ function OpenWeekendsView({ availabilityMap, defaultSettings, plans }: Omit<Prev
                   ? `${format(sat, 'MMM d')}–${format(sun, 'd')}`
                   : `${format(sat, 'MMM d')} – ${format(sun, 'MMM d')}`}
               </Text>
-              <Text
-                className="font-sans text-xs"
-                style={{ color: anyFree ? PARADE_GREEN : '#929298' }}
-              >
+              <Text className="font-sans text-xs" style={{ color: anyFree ? PARADE_GREEN : '#929298' }}>
                 {anyFree ? 'Open this weekend' : 'Booked'}
               </Text>
             </View>
@@ -218,8 +243,8 @@ function OpenWeekendsView({ availabilityMap, defaultSettings, plans }: Omit<Prev
   );
 }
 
-export function AvailabilityPreview({ view, ...rest }: PreviewProps) {
-  if (view === '1w') return <WeekSlotsView {...rest} />;
-  if (view === '1m') return <OpenDaysView {...rest} />;
-  return <OpenWeekendsView {...rest} />;
+export function AvailabilityPreview({ grain, start, end, ...ctx }: PreviewProps) {
+  if (grain === 'slots') return <SlotsView start={start} end={end} {...ctx} />;
+  if (grain === 'days') return <DaysView start={start} end={end} {...ctx} />;
+  return <WeekendsView start={start} end={end} {...ctx} />;
 }
