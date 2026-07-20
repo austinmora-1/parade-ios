@@ -19,5 +19,7 @@ export function formatDisplayName(
     return first;
   }
 
-  return displayName?.trim() || 'User';
+  // A nameless profile (e.g. a phone signup that skipped identity) should read
+  // as intentional, not a raw "User" placeholder (XPE-307).
+  return displayName?.trim() || 'Someone';
 }

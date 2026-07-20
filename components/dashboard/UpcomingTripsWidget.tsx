@@ -1,13 +1,14 @@
 /**
  * UpcomingTripsWidget — "Upcoming Trips"
- * Vertical list of the user's confirmed trips/visits in the next two months
+ * Vertical list of the user's confirmed trips/visits in the next 60 days
+ * (XPE-294: farther-out trips aren't actionable yet, so the card hides)
  * (mirrors PWA UpcomingTripsAndVisits). Left accent + icon follow the
  * visit-vs-trip rule: destination in your home city = visit (green/Home),
  * anywhere else = trip (ember/Plane). Tap → trip detail.
  */
 import { View, Text, Pressable } from 'react-native';
 import { router } from 'expo-router';
-import { format, addMonths, parseISO } from 'date-fns';
+import { format, addDays, parseISO } from 'date-fns';
 import { useQuery } from '@tanstack/react-query';
 import { Plane, Home, Clock } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
@@ -41,7 +42,7 @@ function useUpcomingTrips(userId: string | undefined) {
         .select('id, name, location, start_date, end_date, priority_friend_ids')
         .eq('user_id', userId!)
         .gte('end_date', format(now, 'yyyy-MM-dd'))
-        .lte('start_date', format(addMonths(now, 2), 'yyyy-MM-dd'))
+        .lte('start_date', format(addDays(now, 60), 'yyyy-MM-dd'))
         .order('start_date', { ascending: true });
 
       if (!trips?.length) return [];

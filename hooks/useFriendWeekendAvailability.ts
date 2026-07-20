@@ -16,25 +16,9 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlannerStore } from '@/stores/plannerStore';
 import { useAvailabilityStore } from '@/stores/availabilityStore';
-import { resolveEffectiveCity, isFriendInMyCity } from '@/lib/effectiveCity';
-import { isSocialSlot } from '@/lib/socialSlots';
-import { formatDisplayName } from '@/lib/utils';
-import type { TimeSlot } from '@/types/planner';
+import { computeMutualFreeFriends, type FriendLite } from '@/lib/friendAvailability';
 
-const SLOT_KEYS: { col: string; slot: TimeSlot }[] = [
-  { col: 'early_morning',   slot: 'early-morning'   },
-  { col: 'late_morning',    slot: 'late-morning'    },
-  { col: 'early_afternoon', slot: 'early-afternoon' },
-  { col: 'late_afternoon',  slot: 'late-afternoon'  },
-  { col: 'evening',         slot: 'evening'         },
-  { col: 'late_night',      slot: 'late-night'      },
-];
-
-export interface FriendLite {
-  userId: string;
-  name: string;
-  avatarUrl: string | null;
-}
+export type { FriendLite };
 
 /** Map of yyyy-MM-dd → friends free (mutual social slot, same city) that day. */
 export type FriendsByDate = Record<string, FriendLite[]>;
@@ -78,60 +62,20 @@ export function useFriendWeekendAvailability(weekendDates: string[]) {
 
       for (const date of weekendDates) {
         const myDay = availabilityMap[date];
-        const mySlots = myDay?.slots ?? null;
-        const myCity = resolveEffectiveCity({
+        // Shared predicate (lib/friendAvailability) — same rule quick-plan uses,
+        // so the card's friend count and quick-plan can't diverge (XPE-309).
+        const mutual = computeMutualFreeFriends({
           date,
-          availability: myDay
-            ? { date, location_status: myDay.locationStatus, trip_location: myDay.tripLocation ?? null }
+          friendUserIds,
+          availByUserDate,
+          profById,
+          myAvail: myDay
+            ? { slots: myDay.slots, locationStatus: myDay.locationStatus, tripLocation: myDay.tripLocation ?? null }
             : null,
           homeAddress,
         });
-        // Need my city + my slot data to compute any overlap.
-        if (!myCity || !mySlots) {
-          result[date] = [];
-          continue;
-        }
-
-        const dObj = new Date(`${date}T12:00:00`);
-        const friendsHere: FriendLite[] = [];
-
-        for (const fid of friendUserIds) {
-          const avRow = availByUserDate.get(`${fid}|${date}`);
-          if (!avRow) continue; // no row → can't confirm the friend is free
-          const p = profById.get(fid);
-
-          const sameCity = isFriendInMyCity({
-            date,
-            myAvailability: { date, location_status: myDay?.locationStatus ?? 'home', trip_location: myDay?.tripLocation ?? null },
-            myHomeAddress: homeAddress,
-            friendAvailability: { date, location_status: avRow.location_status, trip_location: avRow.trip_location },
-            friendHomeAddress: p?.home_address ?? null,
-          });
-          if (!sameCity) continue;
-
-          let mutual = false;
-          for (const { col, slot } of SLOT_KEYS) {
-            if (!avRow[col]) continue;        // friend free in this slot
-            if (!mySlots[slot]) continue;     // I'm free too
-            if (!isSocialSlot(dObj, slot)) continue;
-            mutual = true;
-            break;
-          }
-          if (mutual && p) {
-            friendsHere.push({
-              userId: fid,
-              name:
-                formatDisplayName({
-                  firstName: p.first_name,
-                  lastName: p.last_name,
-                  displayName: p.display_name ?? '',
-                }) || 'Friend',
-              avatarUrl: p.avatar_url ?? null,
-            });
-          }
-        }
-
-        result[date] = friendsHere;
+        // This card shows friends free in ANY social slot that day.
+        result[date] = mutual.map((m) => m.friend);
       }
 
       return result;

@@ -455,7 +455,9 @@ export default function FriendProfileScreen() {
               {/* Action row: Vibe check + Plan with X */}
               <View className="flex-row gap-2 mt-4">
                 <Pressable
-                  onPress={() => router.push(`/(app)/new-plan?preInvite=${userId}`)}
+                  // Overlap-first: open find-time on the When step with this
+                  // friend pre-selected, not a blank plan form (XPE-310).
+                  onPress={() => router.push(`/(app)/find-time?preFriend=${userId}`)}
                   className="flex-1 flex-row items-center justify-center gap-1.5 bg-primary rounded-xl px-4 py-2.5 active:opacity-80"
                 >
                   <Text style={{ fontSize: 14 }}>📅</Text>

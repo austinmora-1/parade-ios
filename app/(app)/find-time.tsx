@@ -73,11 +73,13 @@ export default function FindTimeScreen() {
     [friends],
   );
 
-  const [step, setStep] = useState<1 | 2 | 3>(1);
-
   // Optional pre-selected friend(s) by friendUserId — e.g. opened from an
-  // iMessage "find time" bubble carrying the sender as ?preFriend=.
+  // iMessage "find time" bubble or a friend profile's "Plan with X" CTA.
   const { preFriend } = useLocalSearchParams<{ preFriend?: string }>();
+
+  // With a friend pre-selected, land straight on the overlap step — the caller
+  // already knows who; show them when (XPE-310). Back still reaches step 1.
+  const [step, setStep] = useState<1 | 2 | 3>(preFriend ? 2 : 1);
 
   // Step 1
   const [selectedFriendIds, setSelectedFriendIds] = useState<Set<string>>(

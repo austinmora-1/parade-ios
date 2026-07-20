@@ -163,7 +163,11 @@ function AppLayoutInner({ route }: { route?: string }) {
       <Stack.Screen name="share/[code]" options={{ animation: 'none' }} />
     </Stack>
     <FirstPlanCelebration />
-    <BugReportButton route={route} />
+    {/* Hidden during onboarding/welcome — the floating launcher sits exactly
+        over the bottom-right day chips there (XPE-299/305). */}
+    {!route?.startsWith('/onboarding') && !route?.startsWith('/welcome') && (
+      <BugReportButton route={route} />
+    )}
     </View>
   );
 }

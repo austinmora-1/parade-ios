@@ -28,10 +28,11 @@ import { X, Calendar, Clock, Send, Search, Check } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlannerStore } from '@/stores/plannerStore';
-import { useFriendDashboardData } from '@/hooks/useFriendDashboardData';
+import { useFriendDayAvailability } from '@/hooks/useFriendDayAvailability';
 import { Avatar } from '@/components/primitives/Avatar';
 import { DatePickerModal } from '@/components/primitives/DatePickerModal';
-import { formatDisplayName } from '@/lib/utils';
+import { StartEndTimePicker, defaultTimesForSlot } from '@/components/new-plan/StartEndTimePicker';
+import { hourToTimeString, slotForHour, fmtHour } from '@/lib/planSlotCoverage';
 import { TIME_SLOT_LABELS, ACTIVITY_CONFIG, type ActivityType, type TimeSlot } from '@/types/planner';
 import { TC } from '@/lib/theme';
 import { PARADE_GREEN, ELEPHANT } from '@/lib/colors';
@@ -88,8 +89,6 @@ export default function QuickPlanScreen() {
   const friends = usePlannerStore((s) => s.friends);
   const addPlan = usePlannerStore((s) => s.addPlan);
   const forceRefresh = usePlannerStore((s) => s.forceRefresh);
-  const { data: friendData } = useFriendDashboardData();
-
   const [pickedDate, setPickedDate] = useState<string>(
     dateParam ?? format(new Date(), 'yyyy-MM-dd'),
   );
@@ -100,6 +99,39 @@ export default function QuickPlanScreen() {
   const slot = pickedSlot;
   const date = useMemo(() => parseISO(`${pickedDate}T12:00:00`), [pickedDate]);
   const slotMeta = TIME_SLOT_LABELS[slot];
+
+  // Suggest-mode friend picker: who's mutually free on THIS exact date, per
+  // slot. Date-accurate (not the 7-day dashboard window) so a weekend tapped
+  // from the Open Weekends card resolves the same friends the card showed
+  // (XPE-309). Log mode lists all friends, so it skips this fetch.
+  const { data: friendsBySlot } = useFriendDayAvailability(isLogMode ? undefined : pickedDate);
+
+  // Optional specific start/end time (fractional hours) — off by default,
+  // the coarse slot covers most quick plans (XPE-302).
+  const [specificTime, setSpecificTime] = useState(false);
+  const [startHour, setStartHour] = useState(0);
+  const [endHour, setEndHour] = useState(0);
+  const enableSpecificTime = useCallback(() => {
+    const t = defaultTimesForSlot(pickedSlot);
+    setStartHour(t.start);
+    setEndHour(t.end);
+    setSpecificTime(true);
+  }, [pickedSlot]);
+  // Slot change while the picker is open re-anchors the times to the new slot
+  // (matches new-hang-request).
+  const handleSlotChange = useCallback((s: TimeSlot) => {
+    setPickedSlot(s);
+    if (specificTime) {
+      const t = defaultTimesForSlot(s);
+      setStartHour(t.start);
+      setEndHour(t.end);
+    }
+  }, [specificTime]);
+
+  // The slot the plan will actually occupy: a specific start time re-files it
+  // into whichever slot that clock hour falls in. Drives the friend picker so
+  // it shows friends free in the plan's real slot, not the coarse pill (XPE-302).
+  const effectiveSlot: TimeSlot = specificTime ? slotForHour(startHour) : slot;
 
   const plans = usePlannerStore((s) => s.plans);
 
@@ -124,25 +156,17 @@ export default function QuickPlanScreen() {
       ? friends
           .filter((f) => f.status === 'connected' && f.friendUserId)
           .map((f) => ({ userId: f.friendUserId!, name: f.name, avatar: f.avatar ?? null }))
-      : (friendData ?? [])
-          .filter((f) =>
-            f.overlapSlots.some((o) => o.date === pickedDate && o.slot === slot),
-          )
-          .map((f) => ({
-            userId: f.userId,
-            name: formatDisplayName({
-              firstName: f.firstName,
-              lastName: f.lastName,
-              displayName: f.displayName ?? '',
-            }) || 'Friend',
-            avatar: f.avatarUrl,
-          }));
+      : (friendsBySlot?.[effectiveSlot] ?? []).map((f) => ({
+          userId: f.userId,
+          name: f.name,
+          avatar: f.avatarUrl,
+        }));
     return pool.sort(
       (a, b) =>
         (planFrequency[b.userId] ?? 0) - (planFrequency[a.userId] ?? 0) ||
         a.name.localeCompare(b.name),
     );
-  }, [isLogMode, friends, friendData, pickedDate, slot, planFrequency]);
+  }, [isLogMode, friends, friendsBySlot, effectiveSlot, planFrequency]);
 
   const [selectedFriendIds, setSelectedFriendIds] = useState<Set<string>>(new Set());
   const [friendQuery, setFriendQuery] = useState('');
@@ -205,8 +229,13 @@ export default function QuickPlanScreen() {
       // Custom text rides directly in activity (Plan.activity is
       // ActivityType | string) — same as the PWA dialog.
       const effectiveActivity = customActivity.trim() || activity || 'hanging-out';
+      // Only invite friends still selected AND free in the current slot — a
+      // pick made under a previous slot is hidden from the picker, so it must
+      // not silently ride along on submit (selectedFriends = freeFriends ∩
+      // selection; log mode's freeFriends is every connected friend).
+      const inviteIds = new Set(selectedFriends.map((f) => f.userId));
       const participants = friends
-        .filter((f) => f.friendUserId && selectedFriendIds.has(f.friendUserId))
+        .filter((f) => f.friendUserId && inviteIds.has(f.friendUserId))
         .map((f) => ({
           id: f.id, friendUserId: f.friendUserId, name: f.name,
           avatar: f.avatar, status: 'connected', role: 'participant',
@@ -218,7 +247,11 @@ export default function QuickPlanScreen() {
         title: title.trim() || `Open hang — ${dayLabel(date)}`,
         activity: effectiveActivity as any,
         date,
-        timeSlot: slot,
+        // A specific start time re-files the plan into whichever slot the
+        // clock time falls in (same rule as new-hang-request).
+        timeSlot: effectiveSlot,
+        startTime: specificTime ? hourToTimeString(startHour) : undefined,
+        endTime: specificTime ? hourToTimeString(endHour) : undefined,
         duration: 60,
         notes: note.trim() || undefined,
         participants: participants as any,
@@ -235,7 +268,7 @@ export default function QuickPlanScreen() {
           .from('plans')
           .select('id')
           .eq('user_id', user.id)
-          .eq('time_slot', slot)
+          .eq('time_slot', effectiveSlot)
           .gte('created_at', new Date(Date.now() - 30_000).toISOString())
           .order('created_at', { ascending: false })
           .limit(1)
@@ -257,8 +290,35 @@ export default function QuickPlanScreen() {
     } finally {
       setSaving(false);
     }
-  }, [saving, customActivity, activity, friends, selectedFriendIds, note, title,
-      date, slot, hasFriends, isLogMode, addPlan, forceRefresh, user?.id]);
+  }, [saving, customActivity, activity, friends, selectedFriends, note, title,
+      date, slot, specificTime, startHour, endHour, hasFriends, isLogMode,
+      addPlan, forceRefresh, user?.id]);
+
+  // Optional exact-time affordance shown under the slot pills in both modes.
+  const specificTimeBlock = !specificTime ? (
+    <Pressable
+      onPress={() => { Haptics.selectionAsync(); enableSpecificTime(); }}
+      className="flex-row items-center gap-2 self-start rounded-xl border border-border/40 bg-card px-3.5 py-2.5 mt-2.5 active:opacity-70"
+    >
+      <Clock size={15} color={PARADE_GREEN} strokeWidth={2} />
+      <Text className="font-sans text-[13px] font-semibold text-primary">
+        Set a specific time
+      </Text>
+    </Pressable>
+  ) : (
+    <View className="gap-2 mt-2.5">
+      <StartEndTimePicker
+        startHour={startHour}
+        endHour={endHour}
+        onChange={(s, e) => { setStartHour(s); setEndHour(e); }}
+      />
+      <Pressable onPress={() => setSpecificTime(false)} hitSlop={6} className="self-start active:opacity-60">
+        <Text className="font-sans text-xs font-medium text-muted-foreground">
+          Use the time slot instead
+        </Text>
+      </Pressable>
+    </View>
+  );
 
   return (
     <SafeAreaView className="flex-1 bg-chalk" edges={['top']}>
@@ -324,7 +384,8 @@ export default function QuickPlanScreen() {
                 <Text className="font-sans text-[13px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
                   Time
                 </Text>
-                <TimeSlotPills value={pickedSlot} onChange={setPickedSlot} />
+                <TimeSlotPills value={pickedSlot} onChange={handleSlotChange} />
+                {specificTimeBlock}
               </View>
             </View>
           )}
@@ -350,7 +411,9 @@ export default function QuickPlanScreen() {
               <View className="flex-row items-center gap-1.5">
                 <Clock size={14} color={PARADE_GREEN} strokeWidth={2} />
                 <Text className="font-sans text-[14px] text-muted-foreground">
-                  {slotMeta?.time} · {slotMeta?.label}
+                  {specificTime
+                    ? `${fmtHour(startHour)} – ${fmtHour(endHour)}`
+                    : `${slotMeta?.time} · ${slotMeta?.label}`}
                 </Text>
               </View>
             </View>
@@ -364,7 +427,8 @@ export default function QuickPlanScreen() {
               <Text className="font-sans text-[13px] font-semibold uppercase tracking-widest text-muted-foreground px-0.5 mb-2">
                 Time
               </Text>
-              <TimeSlotPills value={pickedSlot} onChange={setPickedSlot} />
+              <TimeSlotPills value={pickedSlot} onChange={handleSlotChange} />
+              {specificTimeBlock}
             </View>
           )}
 
