@@ -205,7 +205,10 @@ export default function HomeTab() {
     return { upcomingCount, friendsFreeWeekend };
   }, [plans, friendData]);
 
-  // Upcoming trip/visit reminder label
+  // Upcoming trip/visit reminder label. Only surfaces a trip that's in
+  // progress now or starts within the next 2 weeks (14 days); anything
+  // further out returns null so the banner stays hidden until it's near.
+  // (XPE-294)
   const tripLabel = useMemo(() => {
     if (!nextTrip) return null;
     const today = new Date();
@@ -218,7 +221,7 @@ export default function HomeTab() {
     if (days <= 0) return `${city} soon`;
     if (days === 1) return `${city} tomorrow`;
     if (days <= 14) return `${city} in ${days} days`;
-    return `${city} · ${format(start, 'MMM d')}`;
+    return null; // starts more than 2 weeks out — hold the banner until closer
   }, [nextTrip]);
 
   // Time-of-day greeting + tint (no username — matches PWA GreetingHeader)
