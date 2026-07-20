@@ -76,11 +76,13 @@ export default function ShareAvailabilityScreen() {
   const loadAvailabilityForRange = useAvailabilityStore((s) => s.loadAvailabilityForRange);
 
   const today = useMemo(() => startOfDay(new Date()), []);
-  const [view, setView] = useState<RangeView | 'custom'>('3m');
+  // Default to the 1-week range — the most common share and the least
+  // overwhelming to scan; longer spans are a tap away.
+  const [view, setView] = useState<RangeView | 'custom'>('1w');
   const [previewOpen, setPreviewOpen] = useState(false);
   const [customStart, setCustomStart] = useState<Date>(today);
   const [customEnd, setCustomEnd] = useState<Date>(() => addDays(today, 13));
-  const [picker, setPicker] = useState<null | 'start' | 'end'>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   // Resolve the selection (preset or custom) into a concrete range + share
   // granularity. Granularity auto-derives from the span (XPE-312): a week →
@@ -332,7 +334,7 @@ export default function ShareAvailabilityScreen() {
               ]).map((f) => (
                 <Pressable
                   key={f.key}
-                  onPress={() => { Haptics.selectionAsync(); setPicker(f.key); }}
+                  onPress={() => { Haptics.selectionAsync(); setPickerOpen(true); }}
                   className="flex-1 rounded-xl border border-border/40 bg-card px-3 py-2.5 active:opacity-70"
                 >
                   <Text className="font-sans text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
@@ -530,19 +532,15 @@ export default function ShareAvailabilityScreen() {
 
       {/* Custom-range date picker (start / end), clamped so end ≥ start */}
       <DatePickerModal
-        visible={picker !== null}
-        onClose={() => setPicker(null)}
-        selected={picker === 'end' ? customEnd : customStart}
-        onSelect={(day) => {
-          const d = startOfDay(day);
-          if (picker === 'start') {
-            setCustomStart(d);
-            if (customEnd < d) setCustomEnd(d);
-          } else if (picker === 'end') {
-            setCustomEnd(d);
-            if (d < customStart) setCustomStart(d);
-          }
-          setPicker(null);
+        visible={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        mode="range"
+        rangeStart={customStart}
+        rangeEnd={customEnd}
+        onRangeChange={(start, end) => {
+          setCustomStart(startOfDay(start));
+          setCustomEnd(startOfDay(end));
+          setPickerOpen(false);
         }}
       />
     </SafeAreaView>

@@ -1,8 +1,16 @@
 /**
- * DatePickerModal — month calendar pop-up for picking a single day.
- * Same visual language as WeekPickerModal (which selects whole weeks);
- * this one selects one date. Selected day fills parade green; today is
- * ring-outlined when not selected.
+ * DatePickerModal — month calendar pop-up for picking a single day (default),
+ * or a start→end date RANGE in one calendar (mode="range").
+ *
+ * Single mode: pass `selected` + `onSelect`; the caller closes the modal.
+ * Range mode: pass `rangeStart`/`rangeEnd` + `onRangeChange`. Tap a first day
+ * to set the start, then a second day to set the end — the range highlights
+ * between them and `onRangeChange(start, end)` fires (the caller closes).
+ * Tapping a day before the current start restarts the selection; "Done"
+ * applies the pending selection (a lone start becomes a single day).
+ *
+ * Same visual language as WeekPickerModal. Selected/endpoint days fill parade
+ * green; today is ring-outlined when not selected; in-range days get a tint.
  */
 import { Modal, View, Text, Pressable } from 'react-native';
 import { useState, useEffect } from 'react';
@@ -10,6 +18,7 @@ import {
   format,
   startOfMonth,
   startOfWeek,
+  startOfDay,
   addDays,
   addMonths,
   isSameMonth,
@@ -28,18 +37,43 @@ export function DatePickerModal({
   onClose,
   selected,
   onSelect,
+  mode = 'single',
+  rangeStart,
+  rangeEnd,
+  onRangeChange,
 }: {
   visible: boolean;
   onClose: () => void;
-  selected: Date;
-  /** Called with the picked day; caller closes the modal. */
-  onSelect: (day: Date) => void;
+  /** Single mode: the currently selected day. */
+  selected?: Date;
+  /** Single mode: called with the picked day; caller closes the modal. */
+  onSelect?: (day: Date) => void;
+  /** 'single' (default) picks one date; 'range' picks a start→end span. */
+  mode?: 'single' | 'range';
+  /** Range mode: current start of the range (seeds the pending selection). */
+  rangeStart?: Date;
+  /** Range mode: current end of the range. */
+  rangeEnd?: Date;
+  /** Range mode: called with (start, end) once both are chosen; caller closes. */
+  onRangeChange?: (start: Date, end: Date) => void;
 }) {
-  const [viewMonth, setViewMonth] = useState(startOfMonth(selected));
+  const isRange = mode === 'range';
+  const anchor = (isRange ? rangeStart : selected) ?? new Date();
 
-  // Re-center on the selected day each time the picker opens
+  const [viewMonth, setViewMonth] = useState(startOfMonth(anchor));
+  // Pending range selection (range mode only). null end = mid-selection.
+  const [pendingStart, setPendingStart] = useState<Date | null>(rangeStart ?? null);
+  const [pendingEnd, setPendingEnd] = useState<Date | null>(rangeEnd ?? null);
+
+  // Re-center + reseed the pending range each time the picker opens.
   useEffect(() => {
-    if (visible) setViewMonth(startOfMonth(selected));
+    if (!visible) return;
+    setViewMonth(startOfMonth(anchor));
+    if (isRange) {
+      setPendingStart(rangeStart ?? null);
+      setPendingEnd(rangeEnd ?? null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
   const gridStart = startOfWeek(startOfMonth(viewMonth), { weekStartsOn: 1 });
@@ -47,9 +81,45 @@ export function DatePickerModal({
     Array.from({ length: 7 }, (_, d) => addDays(gridStart, w * 7 + d)),
   );
 
-  const pick = (day: Date) => {
+  const pick = (rawDay: Date) => {
     Haptics.selectionAsync();
-    onSelect(day);
+    const day = startOfDay(rawDay);
+
+    if (!isRange) {
+      onSelect?.(day);
+      return;
+    }
+
+    // Range mode: first tap (or tap after a complete range) starts fresh;
+    // a second tap sets the end (or restarts if it's before the start).
+    if (!pendingStart || (pendingStart && pendingEnd)) {
+      setPendingStart(day);
+      setPendingEnd(null);
+      return;
+    }
+    if (+day < +pendingStart) {
+      setPendingStart(day);
+      setPendingEnd(null);
+      return;
+    }
+    setPendingEnd(day);
+    onRangeChange?.(pendingStart, day);
+  };
+
+  const applyPending = () => {
+    if (!pendingStart) return;
+    Haptics.selectionAsync();
+    onRangeChange?.(pendingStart, pendingEnd ?? pendingStart);
+  };
+
+  /** Range highlight state for a given grid day. */
+  const rangeState = (day: Date) => {
+    if (!isRange || !pendingStart) return { isStart: false, isEnd: false, inRange: false };
+    const isStart = isSameDay(day, pendingStart);
+    const isEnd = !!pendingEnd && isSameDay(day, pendingEnd);
+    const inRange =
+      !!pendingEnd && +day > +startOfDay(pendingStart) && +day < +startOfDay(pendingEnd);
+    return { isStart, isEnd, inRange };
   };
 
   return (
@@ -104,58 +174,96 @@ export function DatePickerModal({
               <View key={wi} className="flex-row">
                 {week.map((day) => {
                   const inMonth = isSameMonth(day, viewMonth);
-                  const isSel = isSameDay(day, selected);
                   const today = isToday(day);
+                  const { isStart, isEnd, inRange } = rangeState(day);
+                  const isSel = isRange ? isStart || isEnd : isSameDay(day, selected ?? anchor);
+                  const filled = isSel;
                   return (
-                    <Pressable
+                    <View
                       key={day.toISOString()}
-                      onPress={() => pick(day)}
-                      className="flex-1 items-center py-1.5 active:opacity-70"
+                      className="flex-1 items-center"
+                      // Continuous band behind in-range days (endpoints tinted too)
+                      style={
+                        isRange && (inRange || isStart || isEnd)
+                          ? { backgroundColor: TINT.primarySubtle }
+                          : undefined
+                      }
                     >
-                      <View
-                        className="w-8 h-8 rounded-full items-center justify-center"
-                        style={
-                          isSel
-                            ? { backgroundColor: PARADE_GREEN }
-                            : today
-                              ? { borderWidth: 1.5, borderColor: PARADE_GREEN }
-                              : undefined
-                        }
+                      <Pressable
+                        onPress={() => pick(day)}
+                        className="w-full items-center py-1.5 active:opacity-70"
                       >
-                        <Text
-                          className="font-sans text-sm"
-                          style={{
-                            color: isSel
-                              ? '#FFFFFF'
+                        <View
+                          className="w-8 h-8 rounded-full items-center justify-center"
+                          style={
+                            filled
+                              ? { backgroundColor: PARADE_GREEN }
                               : today
-                                ? PARADE_GREEN
-                                : inMonth
-                                  ? TC.icon
-                                  : TINT.graySolid,
-                            fontFamily:
-                              isSel || today ? 'Inter_600SemiBold' : 'Inter_400Regular',
-                          }}
+                                ? { borderWidth: 1.5, borderColor: PARADE_GREEN }
+                                : undefined
+                          }
                         >
-                          {format(day, 'd')}
-                        </Text>
-                      </View>
-                    </Pressable>
+                          <Text
+                            className="font-sans text-sm"
+                            style={{
+                              color: filled
+                                ? '#FFFFFF'
+                                : today
+                                  ? PARADE_GREEN
+                                  : inMonth
+                                    ? TC.icon
+                                    : TINT.graySolid,
+                              fontFamily:
+                                filled || today ? 'Inter_600SemiBold' : 'Inter_400Regular',
+                            }}
+                          >
+                            {format(day, 'd')}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    </View>
                   );
                 })}
               </View>
             ))}
           </View>
 
-          {/* Jump back to today */}
-          <Pressable
-            onPress={() => pick(new Date())}
-            className="rounded-xl items-center py-2.5 active:opacity-70"
-            style={{ backgroundColor: TINT.primarySubtle }}
-          >
-            <Text className="font-sans text-sm font-semibold" style={{ color: PARADE_GREEN }}>
-              Today
-            </Text>
-          </Pressable>
+          {isRange ? (
+            <View className="gap-2">
+              {/* Live selection summary / next-step hint */}
+              <Text className="font-sans text-[13px] text-center text-muted-foreground">
+                {pendingStart && pendingEnd
+                  ? `${format(pendingStart, 'MMM d')} – ${format(pendingEnd, 'MMM d')}`
+                  : pendingStart
+                    ? 'Select an end date'
+                    : 'Select a start date'}
+              </Text>
+              <Pressable
+                onPress={applyPending}
+                disabled={!pendingStart}
+                className="rounded-xl items-center py-2.5 active:opacity-70"
+                style={{ backgroundColor: pendingStart ? PARADE_GREEN : TINT.grayFaint }}
+              >
+                <Text
+                  className="font-sans text-sm font-semibold"
+                  style={{ color: pendingStart ? '#FFFFFF' : ELEPHANT }}
+                >
+                  Done
+                </Text>
+              </Pressable>
+            </View>
+          ) : (
+            /* Jump back to today */
+            <Pressable
+              onPress={() => pick(new Date())}
+              className="rounded-xl items-center py-2.5 active:opacity-70"
+              style={{ backgroundColor: TINT.primarySubtle }}
+            >
+              <Text className="font-sans text-sm font-semibold" style={{ color: PARADE_GREEN }}>
+                Today
+              </Text>
+            </Pressable>
+          )}
         </Pressable>
       </Pressable>
     </Modal>
