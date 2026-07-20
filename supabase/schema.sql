@@ -18,6 +18,27 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA extensions;
 
 -- ============================================================
 -- Tables
+CREATE TABLE public.account_claim_challenges (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  requester_id uuid NOT NULL,
+  target_email text NOT NULL,
+  target_user_id uuid NOT NULL,
+  code_hash text NOT NULL,
+  expires_at timestamp with time zone NOT NULL,
+  attempts integer DEFAULT 0 NOT NULL,
+  consumed_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public.account_merge_log (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  merge_from uuid NOT NULL,
+  merge_into uuid NOT NULL,
+  merged_email text,
+  counts jsonb,
+  created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
 CREATE TABLE public.availability (
   id uuid DEFAULT gen_random_uuid() NOT NULL,
   user_id uuid NOT NULL,
@@ -621,6 +642,8 @@ CREATE TABLE public.weekly_intentions (
 
 -- ============================================================
 -- Constraints
+ALTER TABLE public.account_claim_challenges ADD CONSTRAINT account_claim_challenges_pkey PRIMARY KEY (id);
+ALTER TABLE public.account_merge_log ADD CONSTRAINT account_merge_log_pkey PRIMARY KEY (id);
 ALTER TABLE public.availability ADD CONSTRAINT availability_pkey PRIMARY KEY (id);
 ALTER TABLE public.calendar_connections ADD CONSTRAINT calendar_connections_pkey PRIMARY KEY (id);
 ALTER TABLE public.chat_messages ADD CONSTRAINT chat_messages_pkey PRIMARY KEY (id);
@@ -746,6 +769,7 @@ ALTER TABLE public.vibe_send_recipients ADD CONSTRAINT vibe_send_recipients_vibe
 
 -- ============================================================
 -- Indexes
+CREATE INDEX idx_account_claim_challenges_lookup ON public.account_claim_challenges USING btree (requester_id, lower(target_email), created_at DESC);
 CREATE INDEX idx_availability_trip_id ON public.availability USING btree (trip_id);
 CREATE INDEX idx_availability_user_date_loc ON public.availability USING btree (user_id, date, location_status);
 CREATE INDEX idx_availability_user_id_date ON public.availability USING btree (user_id, date);
@@ -3039,6 +3063,438 @@ END;
 $function$
 ;
 
+-- ── Account linking (see migration 20260719120000_account_linking.sql) ───────
+-- These three are SECURITY DEFINER and revoked from anon/authenticated; only the
+-- service-role edge functions may call them.
+CREATE OR REPLACE FUNCTION public.find_claimable_account(p_email text, p_requester uuid)
+ RETURNS uuid
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  SELECT u.id
+  FROM auth.users u
+  WHERE lower(u.email) = lower(p_email)
+    AND u.id <> p_requester
+    AND NOT EXISTS (
+      SELECT 1 FROM auth.identities i WHERE i.user_id = u.id
+    )
+  ORDER BY u.created_at ASC
+  LIMIT 1;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.preview_account_merge(merge_from uuid, merge_into uuid)
+ RETURNS TABLE (table_name text, action text, rows_affected bigint)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  SELECT 'plans'::text, 'MOVE'::text, count(*)::bigint
+    FROM plans
+    WHERE user_id = merge_from
+      AND (source IS NULL OR lower(source) NOT IN
+           ('google','gcal','ical','apple','nylas','outlook'))
+  UNION ALL
+  SELECT 'plans', 'DELETE (calendar import)', count(*)::bigint
+    FROM plans
+    WHERE user_id = merge_from
+      AND source IS NOT NULL
+      AND lower(source) IN ('google','gcal','ical','apple','nylas','outlook')
+  UNION ALL
+  SELECT 'plan_participants', 'DEDUP+MOVE', count(*)::bigint
+    FROM plan_participants WHERE friend_id = merge_from
+  UNION ALL
+  SELECT 'friendships', 'REPOINT (both directions)', count(*)::bigint
+    FROM friendships WHERE user_id = merge_from OR friend_user_id = merge_from
+  UNION ALL
+  SELECT 'trips', 'MOVE', count(*)::bigint
+    FROM trips WHERE user_id = merge_from
+  UNION ALL
+  SELECT 'pods', 'MOVE', count(*)::bigint
+    FROM pods WHERE user_id = merge_from
+  UNION ALL
+  SELECT 'pod_members', 'COLLIDE-MOVE', count(*)::bigint
+    FROM pod_members WHERE friend_user_id = merge_from
+  UNION ALL
+  SELECT 'recurring_plans', 'MOVE', count(*)::bigint
+    FROM recurring_plans WHERE user_id = merge_from
+  UNION ALL
+  SELECT 'conversations', 'MOVE', count(*)::bigint
+    FROM conversations WHERE created_by = merge_from
+  UNION ALL
+  SELECT 'conversation_participants', 'COLLIDE-MOVE', count(*)::bigint
+    FROM conversation_participants WHERE user_id = merge_from
+  UNION ALL
+  SELECT 'chat_messages', 'MOVE', count(*)::bigint
+    FROM chat_messages WHERE sender_id = merge_from
+  UNION ALL
+  SELECT 'message_reactions', 'COLLIDE-MOVE', count(*)::bigint
+    FROM message_reactions WHERE user_id = merge_from
+  UNION ALL
+  SELECT 'plan_comments', 'MOVE', count(*)::bigint
+    FROM plan_comments WHERE user_id = merge_from
+  UNION ALL
+  SELECT 'plan_photos', 'MOVE', count(*)::bigint
+    FROM plan_photos WHERE uploaded_by = merge_from
+  UNION ALL
+  SELECT 'plan_invites', 'MOVE', count(*)::bigint
+    FROM plan_invites WHERE invited_by = merge_from OR accepted_by = merge_from
+  UNION ALL
+  SELECT 'plan_participant_requests', 'COLLIDE-MOVE', count(*)::bigint
+    FROM plan_participant_requests WHERE friend_user_id = merge_from OR requested_by = merge_from
+  UNION ALL
+  SELECT 'plan_change_requests', 'MOVE', count(*)::bigint
+    FROM plan_change_requests WHERE proposed_by = merge_from
+  UNION ALL
+  SELECT 'plan_change_responses', 'MOVE', count(*)::bigint
+    FROM plan_change_responses WHERE participant_id = merge_from
+  UNION ALL
+  SELECT 'plan_proposal_votes', 'COLLIDE-MOVE', count(*)::bigint
+    FROM plan_proposal_votes WHERE user_id = merge_from
+  UNION ALL
+  SELECT 'plan_reminders_sent', 'COLLIDE-MOVE', count(*)::bigint
+    FROM plan_reminders_sent WHERE user_id = merge_from
+  UNION ALL
+  SELECT 'open_invites', 'MOVE', count(*)::bigint
+    FROM open_invites WHERE user_id = merge_from
+  UNION ALL
+  SELECT 'open_invite_responses', 'COLLIDE-MOVE', count(*)::bigint
+    FROM open_invite_responses WHERE user_id = merge_from
+  UNION ALL
+  SELECT 'hang_requests', 'MOVE', count(*)::bigint
+    FROM hang_requests WHERE user_id = merge_from OR sender_id = merge_from
+  UNION ALL
+  SELECT 'feedback', 'MOVE', count(*)::bigint
+    FROM feedback WHERE user_id = merge_from
+  UNION ALL
+  SELECT 'notifications', 'MOVE (actor) / CASCADE-DELETE (recipient)', count(*)::bigint
+    FROM notifications WHERE actor_id = merge_from OR user_id = merge_from
+  UNION ALL
+  SELECT 'weekly_intentions', 'COLLIDE-MOVE', count(*)::bigint
+    FROM weekly_intentions WHERE user_id = merge_from
+  UNION ALL
+  SELECT 'trip_participants', 'COLLIDE-MOVE', count(*)::bigint
+    FROM trip_participants WHERE friend_user_id = merge_from
+  UNION ALL
+  SELECT 'trip_proposals', 'MOVE', count(*)::bigint
+    FROM trip_proposals WHERE created_by = merge_from OR host_user_id = merge_from
+  UNION ALL
+  SELECT 'trip_proposal_participants', 'COLLIDE-MOVE', count(*)::bigint
+    FROM trip_proposal_participants WHERE user_id = merge_from
+  UNION ALL
+  SELECT 'trip_proposal_votes', 'COLLIDE-MOVE', count(*)::bigint
+    FROM trip_proposal_votes WHERE user_id = merge_from
+  UNION ALL
+  SELECT 'trip_proposal_invites', 'MOVE', count(*)::bigint
+    FROM trip_proposal_invites WHERE invited_by = merge_from OR accepted_by = merge_from
+  UNION ALL
+  SELECT 'trip_activity_suggestions', 'MOVE', count(*)::bigint
+    FROM trip_activity_suggestions WHERE suggested_by = merge_from
+  UNION ALL
+  SELECT 'trip_activity_votes', 'COLLIDE-MOVE', count(*)::bigint
+    FROM trip_activity_votes WHERE user_id = merge_from
+  UNION ALL
+  SELECT 'vibe_sends', 'MOVE', count(*)::bigint
+    FROM vibe_sends WHERE sender_id = merge_from
+  UNION ALL
+  SELECT 'vibe_comments', 'MOVE', count(*)::bigint
+    FROM vibe_comments WHERE user_id = merge_from
+  UNION ALL
+  SELECT 'vibe_reactions', 'COLLIDE-MOVE', count(*)::bigint
+    FROM vibe_reactions WHERE user_id = merge_from
+  UNION ALL
+  SELECT 'vibe_send_recipients', 'MOVE', count(*)::bigint
+    FROM vibe_send_recipients WHERE recipient_id = merge_from
+  UNION ALL
+  SELECT 'availability', 'DELETE', count(*)::bigint
+    FROM availability WHERE user_id = merge_from
+  UNION ALL
+  SELECT 'calendar_connections', 'DELETE', count(*)::bigint
+    FROM calendar_connections WHERE user_id = merge_from
+  UNION ALL
+  SELECT 'push_subscriptions', 'DELETE', count(*)::bigint
+    FROM push_subscriptions WHERE user_id = merge_from
+  UNION ALL
+  SELECT 'rate_limit_log', 'DELETE', count(*)::bigint
+    FROM rate_limit_log WHERE user_id = merge_from
+  UNION ALL
+  SELECT 'last_hung_out_cache', 'DELETE', count(*)::bigint
+    FROM last_hung_out_cache WHERE user_id = merge_from OR friend_user_id = merge_from
+  UNION ALL
+  SELECT 'smart_nudges', 'DELETE', count(*)::bigint
+    FROM smart_nudges WHERE user_id = merge_from OR friend_user_id = merge_from
+  UNION ALL
+  SELECT 'push_tokens', 'CASCADE-DELETE', count(*)::bigint
+    FROM push_tokens WHERE user_id = merge_from
+  UNION ALL
+  SELECT 'reactions', 'CASCADE-DELETE', count(*)::bigint
+    FROM reactions WHERE user_id = merge_from
+  UNION ALL
+  SELECT 'trips.priority_friend_ids', 'ARRAY-REWRITE', count(*)::bigint
+    FROM trips WHERE merge_from = ANY(priority_friend_ids)
+  UNION ALL
+  SELECT 'profiles.close_friend_ids', 'ARRAY-REWRITE', count(*)::bigint
+    FROM profiles WHERE merge_from = ANY(close_friend_ids)
+  UNION ALL
+  SELECT 'profiles.allowed_hang_request_friend_ids', 'ARRAY-REWRITE', count(*)::bigint
+    FROM profiles WHERE merge_from = ANY(allowed_hang_request_friend_ids);
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.merge_account(merge_from uuid, merge_into uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_email    text;
+  v_counts   jsonb;
+  v_friends  bigint;
+  v_plans    bigint;
+  v_trips    bigint;
+  v_pods     bigint;
+  v_messages bigint;
+  v_photos   bigint;
+  v_comments bigint;
+BEGIN
+  IF merge_from IS NULL OR merge_into IS NULL THEN
+    RAISE EXCEPTION 'merge_account: merge_from and merge_into are required';
+  END IF;
+  IF merge_from = merge_into THEN
+    RAISE EXCEPTION 'merge_account: merge_from and merge_into must differ';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM auth.users WHERE id = merge_from) THEN
+    RAISE EXCEPTION 'merge_account: source account % does not exist', merge_from;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM auth.users WHERE id = merge_into) THEN
+    RAISE EXCEPTION 'merge_account: target account % does not exist', merge_into;
+  END IF;
+  IF EXISTS (SELECT 1 FROM auth.identities WHERE user_id = merge_from) THEN
+    RAISE EXCEPTION
+      'merge_account: source % is an active account (has an identity); refusing to merge/delete it',
+      merge_from;
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(hashtext(least(merge_from, merge_into)::text));
+  PERFORM pg_advisory_xact_lock(hashtext(greatest(merge_from, merge_into)::text));
+
+  PERFORM set_config('request.jwt.claim.sub', '', true);
+  PERFORM set_config('request.jwt.claims',    '', true);
+
+  SELECT count(*) INTO v_friends
+    FROM friendships
+    WHERE user_id = merge_from
+      AND status = 'connected'
+      AND friend_user_id IS DISTINCT FROM merge_into;
+  SELECT count(*) INTO v_plans
+    FROM plans WHERE user_id = merge_from
+      AND (source IS NULL OR lower(source) NOT IN
+           ('google','gcal','ical','apple','nylas','outlook'));
+  SELECT count(*) INTO v_trips    FROM trips        WHERE user_id = merge_from;
+  SELECT count(*) INTO v_pods     FROM pods         WHERE user_id = merge_from;
+  SELECT count(*) INTO v_messages FROM chat_messages WHERE sender_id = merge_from;
+  SELECT count(*) INTO v_photos   FROM plan_photos  WHERE uploaded_by = merge_from;
+  SELECT count(*) INTO v_comments FROM plan_comments WHERE user_id = merge_from;
+
+  SELECT email INTO v_email FROM auth.users WHERE id = merge_from;
+
+  v_counts := jsonb_build_object(
+    'friends',  v_friends,
+    'plans',    v_plans,
+    'trips',    v_trips,
+    'pods',     v_pods,
+    'messages', v_messages,
+    'photos',   v_photos,
+    'comments', v_comments
+  );
+
+  INSERT INTO account_merge_log (merge_from, merge_into, merged_email, counts)
+  VALUES (merge_from, merge_into, v_email, v_counts);
+
+  DELETE FROM plans
+    WHERE user_id = merge_from
+      AND source IS NOT NULL
+      AND lower(source) IN ('google','gcal','ical','apple','nylas','outlook');
+  UPDATE plans SET user_id = merge_into
+    WHERE user_id = merge_from;
+
+  UPDATE plans SET proposed_by = merge_into WHERE proposed_by = merge_from;
+
+  DELETE FROM plan_participants a
+    WHERE a.friend_id = merge_from
+      AND EXISTS (SELECT 1 FROM plan_participants b
+                    WHERE b.plan_id = a.plan_id AND b.friend_id = merge_into);
+  UPDATE plan_participants SET friend_id = merge_into WHERE friend_id = merge_from;
+
+  DELETE FROM friendships f
+    WHERE f.friend_user_id = merge_from
+      AND (f.user_id = merge_into
+           OR EXISTS (SELECT 1 FROM friendships g
+                        WHERE g.user_id = f.user_id
+                          AND g.friend_user_id = merge_into));
+  UPDATE friendships SET friend_user_id = merge_into WHERE friend_user_id = merge_from;
+  DELETE FROM friendships f
+    WHERE f.user_id = merge_from
+      AND (f.friend_user_id = merge_into
+           OR (f.friend_user_id IS NOT NULL
+               AND EXISTS (SELECT 1 FROM friendships g
+                             WHERE g.user_id = merge_into
+                               AND g.friend_user_id = f.friend_user_id)));
+  UPDATE friendships SET user_id = merge_into WHERE user_id = merge_from;
+
+  DELETE FROM conversation_participants a
+    WHERE a.user_id = merge_from
+      AND EXISTS (SELECT 1 FROM conversation_participants b
+                    WHERE b.conversation_id = a.conversation_id AND b.user_id = merge_into);
+  UPDATE conversation_participants SET user_id = merge_into WHERE user_id = merge_from;
+
+  DELETE FROM plan_participant_requests a
+    WHERE a.friend_user_id = merge_from
+      AND EXISTS (SELECT 1 FROM plan_participant_requests b
+                    WHERE b.plan_id = a.plan_id
+                      AND b.friend_user_id = merge_into
+                      AND b.status = a.status);
+  UPDATE plan_participant_requests SET friend_user_id = merge_into WHERE friend_user_id = merge_from;
+
+  DELETE FROM pod_members a
+    WHERE a.friend_user_id = merge_from
+      AND EXISTS (SELECT 1 FROM pod_members b
+                    WHERE b.pod_id = a.pod_id AND b.friend_user_id = merge_into);
+  UPDATE pod_members SET friend_user_id = merge_into WHERE friend_user_id = merge_from;
+
+  DELETE FROM trip_participants a
+    WHERE a.friend_user_id = merge_from
+      AND EXISTS (SELECT 1 FROM trip_participants b
+                    WHERE b.trip_id = a.trip_id AND b.friend_user_id = merge_into);
+  UPDATE trip_participants SET friend_user_id = merge_into WHERE friend_user_id = merge_from;
+
+  DELETE FROM weekly_intentions a
+    WHERE a.user_id = merge_from
+      AND EXISTS (SELECT 1 FROM weekly_intentions b
+                    WHERE b.week_start = a.week_start AND b.user_id = merge_into);
+  UPDATE weekly_intentions SET user_id = merge_into WHERE user_id = merge_from;
+
+  DELETE FROM plan_proposal_votes a
+    WHERE a.user_id = merge_from
+      AND EXISTS (SELECT 1 FROM plan_proposal_votes b
+                    WHERE b.option_id = a.option_id AND b.user_id = merge_into);
+  UPDATE plan_proposal_votes SET user_id = merge_into WHERE user_id = merge_from;
+
+  DELETE FROM trip_proposal_participants a
+    WHERE a.user_id = merge_from
+      AND EXISTS (SELECT 1 FROM trip_proposal_participants b
+                    WHERE b.proposal_id = a.proposal_id AND b.user_id = merge_into);
+  UPDATE trip_proposal_participants SET user_id = merge_into WHERE user_id = merge_from;
+
+  DELETE FROM trip_proposal_votes a
+    WHERE a.user_id = merge_from
+      AND EXISTS (SELECT 1 FROM trip_proposal_votes b
+                    WHERE b.date_id = a.date_id AND b.user_id = merge_into);
+  UPDATE trip_proposal_votes SET user_id = merge_into WHERE user_id = merge_from;
+
+  DELETE FROM trip_activity_votes a
+    WHERE a.user_id = merge_from
+      AND EXISTS (SELECT 1 FROM trip_activity_votes b
+                    WHERE b.suggestion_id = a.suggestion_id AND b.user_id = merge_into);
+  UPDATE trip_activity_votes SET user_id = merge_into WHERE user_id = merge_from;
+
+  DELETE FROM open_invite_responses a
+    WHERE a.user_id = merge_from
+      AND EXISTS (SELECT 1 FROM open_invite_responses b
+                    WHERE b.open_invite_id = a.open_invite_id AND b.user_id = merge_into);
+  UPDATE open_invite_responses SET user_id = merge_into WHERE user_id = merge_from;
+
+  DELETE FROM message_reactions a
+    WHERE a.user_id = merge_from
+      AND EXISTS (SELECT 1 FROM message_reactions b
+                    WHERE b.message_id = a.message_id
+                      AND b.user_id = merge_into
+                      AND b.emoji = a.emoji);
+  UPDATE message_reactions SET user_id = merge_into WHERE user_id = merge_from;
+
+  DELETE FROM vibe_reactions a
+    WHERE a.user_id = merge_from
+      AND EXISTS (SELECT 1 FROM vibe_reactions b
+                    WHERE b.vibe_send_id = a.vibe_send_id
+                      AND b.user_id = merge_into
+                      AND b.emoji = a.emoji);
+  UPDATE vibe_reactions SET user_id = merge_into WHERE user_id = merge_from;
+
+  DELETE FROM plan_reminders_sent a
+    WHERE a.user_id = merge_from
+      AND EXISTS (SELECT 1 FROM plan_reminders_sent b
+                    WHERE b.plan_id = a.plan_id AND b.user_id = merge_into);
+  UPDATE plan_reminders_sent SET user_id = merge_into WHERE user_id = merge_from;
+
+  UPDATE recurring_plans          SET user_id       = merge_into WHERE user_id       = merge_from;
+  UPDATE pods                     SET user_id       = merge_into WHERE user_id       = merge_from;
+  UPDATE hang_requests            SET user_id       = merge_into WHERE user_id       = merge_from;
+  UPDATE hang_requests            SET sender_id     = merge_into WHERE sender_id     = merge_from;
+  UPDATE feedback                 SET user_id       = merge_into WHERE user_id       = merge_from;
+  UPDATE conversations            SET created_by    = merge_into WHERE created_by    = merge_from;
+  UPDATE chat_messages            SET sender_id     = merge_into WHERE sender_id     = merge_from;
+  UPDATE plan_comments            SET user_id       = merge_into WHERE user_id       = merge_from;
+  UPDATE plan_invites             SET invited_by    = merge_into WHERE invited_by    = merge_from;
+  UPDATE plan_invites             SET accepted_by   = merge_into WHERE accepted_by   = merge_from;
+  UPDATE plan_participant_requests SET requested_by = merge_into WHERE requested_by  = merge_from;
+  UPDATE plan_change_requests     SET proposed_by   = merge_into WHERE proposed_by   = merge_from;
+  DELETE FROM plan_change_responses a WHERE a.participant_id = merge_from
+     AND EXISTS (SELECT 1 FROM plan_change_responses b
+                 WHERE b.participant_id = merge_into AND b.change_request_id = a.change_request_id);
+  UPDATE plan_change_responses    SET participant_id = merge_into WHERE participant_id = merge_from;
+  UPDATE plan_photos              SET uploaded_by   = merge_into WHERE uploaded_by   = merge_from;
+  UPDATE open_invites             SET user_id       = merge_into WHERE user_id       = merge_from;
+  UPDATE trips                    SET user_id       = merge_into WHERE user_id       = merge_from;
+  UPDATE trip_proposals           SET created_by    = merge_into WHERE created_by    = merge_from;
+  UPDATE trip_proposals           SET host_user_id  = merge_into WHERE host_user_id  = merge_from;
+  UPDATE trip_proposal_invites    SET invited_by    = merge_into WHERE invited_by    = merge_from;
+  UPDATE trip_proposal_invites    SET accepted_by   = merge_into WHERE accepted_by   = merge_from;
+  UPDATE trip_activity_suggestions SET suggested_by = merge_into WHERE suggested_by  = merge_from;
+  UPDATE vibe_sends               SET sender_id     = merge_into WHERE sender_id     = merge_from;
+  UPDATE vibe_comments            SET user_id       = merge_into WHERE user_id       = merge_from;
+  DELETE FROM vibe_send_recipients a WHERE a.recipient_id = merge_from
+     AND EXISTS (SELECT 1 FROM vibe_send_recipients b
+                 WHERE b.recipient_id = merge_into AND b.vibe_send_id = a.vibe_send_id);
+  UPDATE vibe_send_recipients     SET recipient_id  = merge_into WHERE recipient_id  = merge_from;
+  UPDATE notifications            SET actor_id      = merge_into WHERE actor_id      = merge_from;
+
+  UPDATE trips
+    SET priority_friend_ids = (
+      SELECT COALESCE(array_agg(DISTINCT x), ARRAY[]::uuid[])
+      FROM unnest(array_replace(priority_friend_ids, merge_from, merge_into)) AS x
+      WHERE x <> user_id)
+    WHERE merge_from = ANY(priority_friend_ids);
+
+  UPDATE profiles
+    SET close_friend_ids = (
+      SELECT COALESCE(array_agg(DISTINCT x), ARRAY[]::uuid[])
+      FROM unnest(array_replace(close_friend_ids, merge_from, merge_into)) AS x
+      WHERE x <> user_id)
+    WHERE merge_from = ANY(close_friend_ids);
+
+  UPDATE profiles
+    SET allowed_hang_request_friend_ids = (
+      SELECT COALESCE(array_agg(DISTINCT x), ARRAY[]::uuid[])
+      FROM unnest(array_replace(allowed_hang_request_friend_ids, merge_from, merge_into)) AS x
+      WHERE x <> user_id)
+    WHERE merge_from = ANY(allowed_hang_request_friend_ids);
+
+  DELETE FROM availability          WHERE user_id = merge_from;
+  DELETE FROM calendar_connections  WHERE user_id = merge_from;
+  DELETE FROM push_subscriptions    WHERE user_id = merge_from;
+  DELETE FROM rate_limit_log        WHERE user_id = merge_from;
+  DELETE FROM last_hung_out_cache   WHERE user_id = merge_from OR friend_user_id = merge_from;
+  DELETE FROM smart_nudges          WHERE user_id = merge_from OR friend_user_id = merge_from;
+
+  DELETE FROM auth.users WHERE id = merge_from;
+
+  RETURN v_counts;
+END;
+$function$
+;
+
 -- ============================================================
 -- Triggers
 CREATE TRIGGER sync_availability_location_to_profile_trigger AFTER INSERT OR UPDATE OF location_status ON availability FOR EACH ROW EXECUTE FUNCTION sync_availability_location_to_profile();
@@ -3072,6 +3528,10 @@ CREATE TRIGGER update_weekly_intentions_updated_at BEFORE UPDATE ON weekly_inten
 
 -- ============================================================
 -- Row Level Security
+-- account_claim_challenges / account_merge_log: RLS on, deliberately NO policies
+-- (service-role only; clients can never read or write these rows).
+ALTER TABLE public.account_claim_challenges ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.account_merge_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.availability ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.calendar_connections ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.chat_messages ENABLE ROW LEVEL SECURITY;
@@ -3541,3 +4001,12 @@ GRANT EXECUTE ON FUNCTION public.user_participated_plan_ids(p_user_id uuid) TO a
 GRANT EXECUTE ON FUNCTION public.user_participated_plan_ids(p_user_id uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.validate_open_invite_anchor() TO anon;
 GRANT EXECUTE ON FUNCTION public.validate_open_invite_anchor() TO authenticated;
+
+-- Account-linking RPCs: revoked from anon/authenticated, granted to service_role
+-- only (edge-function-only surface). See migration 20260719120000_account_linking.sql.
+REVOKE EXECUTE ON FUNCTION public.find_claimable_account(p_email text, p_requester uuid) FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.preview_account_merge(merge_from uuid, merge_into uuid) FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.merge_account(merge_from uuid, merge_into uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.find_claimable_account(p_email text, p_requester uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION public.preview_account_merge(merge_from uuid, merge_into uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION public.merge_account(merge_from uuid, merge_into uuid) TO service_role;
