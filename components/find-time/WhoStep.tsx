@@ -10,6 +10,7 @@ import { Chip } from '@/components/primitives/Chip';
 import { FieldLabel } from '@/components/primitives/FieldLabel';
 import type { Friend } from '@/types/planner';
 import type { Pod } from '@/hooks/usePods';
+import type { FriendPickerMeta } from '@/hooks/useFriendPickerMeta';
 
 interface WhoStepProps {
   guestDraft: string;
@@ -25,6 +26,8 @@ interface WhoStepProps {
   onToggleFriend: (friendUserId: string) => void;
   query: string;
   onQueryChange: (text: string) => void;
+  /** Per-friend city + "available this month" flag, keyed by friendUserId. */
+  friendMeta: Record<string, FriendPickerMeta>;
 }
 
 export function WhoStep({
@@ -41,7 +44,83 @@ export function WhoStep({
   onToggleFriend,
   query,
   onQueryChange,
+  friendMeta,
 }: WhoStepProps) {
+  // Split the (search-filtered) friends into who's reachable in the next month
+  // vs everyone else, so the picker leads with people you can actually plan
+  // with instead of one undifferentiated list. Order within each group is
+  // preserved (find-time already sorts by how often you plan together).
+  const availableFriends = filteredFriends.filter(
+    (f) => friendMeta[f.friendUserId!]?.availableThisMonth,
+  );
+  const otherFriends = filteredFriends.filter(
+    (f) => !friendMeta[f.friendUserId!]?.availableThisMonth,
+  );
+
+  const renderFriend = (f: Friend) => {
+    const checked = selectedFriendIds.has(f.friendUserId!);
+    const firstName = f.name.split(' ')[0];
+    const city = friendMeta[f.friendUserId!]?.city ?? null;
+    return (
+      <Pressable
+        key={f.id}
+        onPress={() => onToggleFriend(f.friendUserId!)}
+        className="items-center active:opacity-70"
+        style={{ width: '31%' }}
+      >
+        <View
+          style={{
+            borderRadius: 999,
+            borderWidth: 2.5,
+            borderColor: checked ? '#23744D' : 'transparent',
+            padding: 2,
+          }}
+        >
+          <Avatar url={f.avatar} displayName={f.name} size="lg" />
+          {checked && (
+            <CheckCircle
+              checked
+              size={22}
+              borderWidth={2}
+              borderColor="#FBF9F4"
+              checkSize={12}
+              checkStrokeWidth={3}
+              style={{ position: 'absolute', bottom: 0, right: 0 }}
+            />
+          )}
+        </View>
+        <Text className="font-sans text-xs text-foreground mt-1.5 text-center" numberOfLines={1}>
+          {firstName}
+        </Text>
+        {city && (
+          <Text
+            className="font-sans text-[10px] text-muted-foreground text-center"
+            numberOfLines={1}
+          >
+            {city}
+          </Text>
+        )}
+      </Pressable>
+    );
+  };
+
+  const renderGrid = (list: Friend[]) => (
+    <View className="flex-row flex-wrap" style={{ rowGap: 16, justifyContent: 'space-between' }}>
+      {list.map(renderFriend)}
+      {/* Keep the last row left-aligned when it isn't full */}
+      {list.length % 3 !== 0 &&
+        Array.from({ length: 3 - (list.length % 3) }).map((_, i) => (
+          <View key={`sp-${i}`} style={{ width: '31%' }} />
+        ))}
+    </View>
+  );
+
+  const sectionLabel = (text: string) => (
+    <Text className="font-sans text-[11px] font-semibold uppercase tracking-widest text-muted-foreground mb-2 mt-1">
+      {text}
+    </Text>
+  );
+
   return (
     <View className="flex-1">
       {/* ── Static top section (does not scroll) ─────────────────── */}
@@ -144,44 +223,20 @@ export function WhoStep({
           {filteredFriends.length === 0 ? (
             <Text className="font-sans text-xs text-muted-foreground px-1">No friends match “{query}”.</Text>
           ) : (
-            <View className="flex-row flex-wrap" style={{ rowGap: 16, justifyContent: 'space-between' }}>
-              {filteredFriends.map((f) => {
-                const checked = selectedFriendIds.has(f.friendUserId!);
-                const firstName = f.name.split(' ')[0];
-                return (
-                  <Pressable
-                    key={f.id}
-                    onPress={() => onToggleFriend(f.friendUserId!)}
-                    className="items-center active:opacity-70"
-                    style={{ width: '31%' }}
-                  >
-                    <View
-                      style={{
-                        borderRadius: 999,
-                        borderWidth: 2.5,
-                        borderColor: checked ? '#23744D' : 'transparent',
-                        padding: 2,
-                      }}
-                    >
-                      <Avatar url={f.avatar} displayName={f.name} size="lg" />
-                      {checked && (
-                        <CheckCircle
-                          checked
-                          size={22}
-                          borderWidth={2}
-                          borderColor="#FBF9F4"
-                          checkSize={12}
-                          checkStrokeWidth={3}
-                          style={{ position: 'absolute', bottom: 0, right: 0 }}
-                        />
-                      )}
-                    </View>
-                    <Text className="font-sans text-xs text-foreground mt-1.5 text-center" numberOfLines={1}>
-                      {firstName}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+            <View>
+              {availableFriends.length > 0 && (
+                <View className="mb-4">
+                  {sectionLabel(`Free in the next month · ${availableFriends.length}`)}
+                  {renderGrid(availableFriends)}
+                </View>
+              )}
+              {otherFriends.length > 0 && (
+                <View>
+                  {/* Only bother with a header when the section above exists */}
+                  {availableFriends.length > 0 && sectionLabel('Everyone else')}
+                  {renderGrid(otherFriends)}
+                </View>
+              )}
             </View>
           )}
         </ScrollView>

@@ -32,6 +32,7 @@ import { usePods } from '@/hooks/usePods';
 import { supabase } from '@/integrations/supabase/client';
 import { StepDots } from '@/components/find-time/StepDots';
 import { WhoStep } from '@/components/find-time/WhoStep';
+import { useFriendPickerMeta } from '@/hooks/useFriendPickerMeta';
 import { WhenStep } from '@/components/find-time/WhenStep';
 import { DetailsStep } from '@/components/find-time/DetailsStep';
 import { OVERLAP_DAYS, slotKey, groupSlotsByMonth, type GroupSlot } from '@/components/find-time/slots';
@@ -47,6 +48,8 @@ export default function FindTimeScreen() {
   const addPlan = usePlannerStore((s) => s.addPlan);
   const forceRefresh = usePlannerStore((s) => s.forceRefresh);
   const { data: pods } = usePods();
+  // Per-friend city + "available this month" flag for the step-1 picker.
+  const { data: friendMeta } = useFriendPickerMeta();
 
   // My social preference settings — rank/emphasize days & slots in step 2.
   const { data: socialPrefs } = useQuery({
@@ -365,6 +368,7 @@ export default function FindTimeScreen() {
             onToggleFriend={toggleFriend}
             query={query}
             onQueryChange={setQuery}
+            friendMeta={friendMeta}
           />
         )}
 
