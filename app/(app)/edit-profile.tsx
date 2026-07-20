@@ -116,6 +116,9 @@ export default function EditProfileScreen() {
   const [emailSaving, setEmailSaving] = useState(false);
   const [emailNotice, setEmailNotice] = useState<string | null>(null);
   const [emailError,  setEmailError]  = useState<string | null>(null);
+  // Set to the entered address when it's already attached to another (legacy)
+  // account — surfaces the "Claim my old account" CTA below the email error.
+  const [claimableEmail, setClaimableEmail] = useState<string | null>(null);
 
   // One-time phone capture — only offered when the account has no phone yet
   // (e.g. Apple / email sign-ups). Once verified, phone becomes the locked
@@ -367,6 +370,7 @@ export default function EditProfileScreen() {
     setEmailSaving(true);
     setEmailError(null);
     setEmailNotice(null);
+    setClaimableEmail(null);
     try {
       // Sends a confirmation link to the new address. Email is updated
       // server-side once the link is tapped; it reflects here after the
@@ -380,11 +384,15 @@ export default function EditProfileScreen() {
         // email-first account created before phone sign-in existed.
         const alreadyTaken =
           err.code === 'email_exists' || /already been registered/i.test(err.message ?? '');
-        setEmailError(
-          alreadyTaken
-            ? "That email is already attached to another Parade account — likely one you created before phone sign-in. Tap the bug button and we'll merge them for you."
-            : err.message,
-        );
+        if (alreadyTaken) {
+          // Offer the self-serve claim flow (verify + merge) instead.
+          setClaimableEmail(next);
+          setEmailError(
+            "That email is already attached to another Parade account — likely one you created before phone sign-in. You can claim it below.",
+          );
+        } else {
+          setEmailError(err.message);
+        }
         return;
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -909,6 +917,23 @@ export default function EditProfileScreen() {
                 <Text className="font-sans text-xs text-destructive mt-1.5 px-0.5">
                   {emailError}
                 </Text>
+              ) : null}
+              {claimableEmail ? (
+                <Pressable
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    router.push({
+                      pathname: '/(app)/claim-account',
+                      params: { email: claimableEmail },
+                    });
+                  }}
+                  hitSlop={4}
+                  className="mt-2.5 self-start rounded-xl px-4 py-2.5 bg-primary active:opacity-80"
+                >
+                  <Text className="font-sans text-sm font-semibold text-white">
+                    Claim my old account
+                  </Text>
+                </Pressable>
               ) : null}
               {emailNotice ? (
                 <Text className="font-sans text-xs text-primary mt-1.5 px-0.5 font-medium">

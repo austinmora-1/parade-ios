@@ -74,6 +74,10 @@ function AppLayoutInner({ route }: { route?: string }) {
         options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
       />
       <Stack.Screen
+        name="claim-account"
+        options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+      />
+      <Stack.Screen
         name="new-trip"
         options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
       />
