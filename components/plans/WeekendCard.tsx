@@ -10,13 +10,12 @@
 import { useState } from 'react';
 import { View, Text, Pressable } from 'react-native';
 import { router } from 'expo-router';
-import { format } from 'date-fns';
+import { format, isToday } from 'date-fns';
 import * as Haptics from 'expo-haptics';
 import { Plane, CalendarCheck, ChevronDown, ChevronRight, Home } from 'lucide-react-native';
 import { Avatar } from '@/components/primitives/Avatar';
+import { DateDial, getDayStatus, dayStatusColor, TOTAL_SLOTS } from '@/components/plans/DateDial';
 import { PARADE_GREEN, EMBER } from '@/lib/colors';
-import type { TimeSlot } from '@/types/planner';
-import { SLOT_ORDER } from '@/lib/planSlotCoverage';
 import type { WeekendSummary, WeekendState } from '@/lib/openWeekends';
 
 const AMBER = '#BA7517';
@@ -40,9 +39,11 @@ function dateRangeLabel(saturday: string, sunday: string): string {
   return `${format(sat, 'MMM d')} – ${sameMonth ? format(sun, 'd') : format(sun, 'MMM d')}`;
 }
 
-function goToQuickPlan(date: string, slot: TimeSlot) {
+/** Open the quick-plan composer for a whole day — the same overlapping-free-
+ *  friends menu the slot chips used, without preselecting a slot. */
+function goToQuickPlanDay(date: string) {
   Haptics.selectionAsync();
-  router.push(`/(app)/quick-plan?date=${date}&slot=${slot}`);
+  router.push(`/(app)/quick-plan?date=${date}`);
 }
 
 export function WeekendCard({ summary }: { summary: WeekendSummary }) {
@@ -130,44 +131,33 @@ export function WeekendCard({ summary }: { summary: WeekendSummary }) {
         </View>
 
         {interactive && expanded && (
-          <View className="mt-2.5 gap-1.5">
-            {([['Sat', summary.saturday], ['Sun', summary.sunday]] as const).map(([dayLabel, date]) => {
-              const openSet = new Set(
-                openSlots.filter((s) => s.date === date).map((s) => s.slot),
-              );
+          <View className="flex-row gap-3 mt-3">
+            {([summary.saturday, summary.sunday] as const).map((date) => {
+              const day = parseLocal(date);
+              const free = openSlots.filter((s) => s.date === date).length;
+              const { status, fill } = getDayStatus(free, true);
               return (
-                <View key={dayLabel} className="flex-row items-center gap-2.5">
-                  <Text
-                    className="font-sans text-[11px] font-medium text-muted-foreground"
-                    style={{ minWidth: 26 }}
-                    numberOfLines={1}
-                  >
-                    {dayLabel}
+                <Pressable
+                  key={date}
+                  onPress={() => goToQuickPlanDay(date)}
+                  hitSlop={4}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${format(day, 'EEEE')} — ${free} of ${TOTAL_SLOTS} slots free, tap to plan`}
+                  className="flex-1 items-center gap-1.5 rounded-xl py-2 active:opacity-70"
+                >
+                  <DateDial
+                    status={status}
+                    fill={fill}
+                    arcColor={dayStatusColor(status)}
+                    dayName={format(day, 'EEE')}
+                    dayNum={format(day, 'd')}
+                    isToday={isToday(day)}
+                    size={56}
+                  />
+                  <Text className="font-sans text-[11px] font-medium text-muted-foreground">
+                    {free > 0 ? `${free} slot${free === 1 ? '' : 's'} free` : 'Booked'}
                   </Text>
-                  <View className="flex-1 flex-row gap-1">
-                    {SLOT_ORDER.map((slot) => {
-                      const isOpen = openSet.has(slot);
-                      return (
-                        <Pressable
-                          key={slot}
-                          disabled={!isOpen}
-                          onPress={isOpen ? () => goToQuickPlan(date, slot) : undefined}
-                          hitSlop={4}
-                          accessibilityLabel={isOpen ? `${dayLabel} ${slot} — open` : undefined}
-                          className="active:opacity-60"
-                          style={{
-                            flex: 1,
-                            height: 16,
-                            borderRadius: 999,
-                            backgroundColor: isOpen ? 'rgba(35,116,77,0.16)' : 'transparent',
-                            borderWidth: 1,
-                            borderColor: isOpen ? 'rgba(35,116,77,0.45)' : 'rgba(0,0,0,0.08)',
-                          }}
-                        />
-                      );
-                    })}
-                  </View>
-                </View>
+                </Pressable>
               );
             })}
           </View>
